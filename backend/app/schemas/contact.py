@@ -31,11 +31,9 @@ class ContactBase(BaseModel):
     lead_source: Optional[str] = Field(None, max_length=100)
     contacted: Optional[bool] = None
     sarson_rep: Optional[str] = Field(None, max_length=255)
-    sales_rep: Optional[str] = Field(None, max_length=255)
     assigned_to: Optional[uuid.UUID] = None
     owner_id: Optional[uuid.UUID] = None
     next_step: Optional[str] = Field(None, max_length=2000)
-    follow_up_date: Optional[date] = None
     last_contacted_at: Optional[datetime] = None
     last_emailed_at: Optional[datetime] = None
     email_open_count: Optional[int] = Field(None, ge=0)
@@ -90,11 +88,9 @@ class ContactPatch(BaseModel):
     lead_source: Optional[str] = Field(None, max_length=100)
     contacted: Optional[bool] = None
     sarson_rep: Optional[str] = Field(None, max_length=255)
-    sales_rep: Optional[str] = Field(None, max_length=255)
     assigned_to: Optional[uuid.UUID] = None
     owner_id: Optional[uuid.UUID] = None
     next_step: Optional[str] = Field(None, max_length=2000)
-    follow_up_date: Optional[date] = None
     last_contacted_at: Optional[datetime] = None
     last_emailed_at: Optional[datetime] = None
     email_open_count: Optional[int] = Field(None, ge=0)

@@ -16,10 +16,8 @@ export interface Contact {
   source: string | null;
   contacted: boolean;
   sarson_rep: string | null;
-  sales_rep: string | null;
   assigned_to: string | null;
   next_step: string | null;
-  follow_up_date: string | null;
   last_contacted_at: string | null;
   notes: string | null;
   tags: { id: string; name: string; color: string; category: string }[];

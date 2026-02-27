@@ -23,7 +23,6 @@ interface ContactDetail {
   contacted: boolean;
   sarson_rep: string | null;
   next_step: string | null;
-  follow_up_date: string | null;
   last_contacted_at: string | null;
   notes: string | null;
   city: string | null;
@@ -189,7 +188,6 @@ export default function ContactDetailPage() {
     title: '',
     company: '',
     next_step: '',
-    follow_up_date: '',
     notes: '',
   });
 
@@ -205,7 +203,6 @@ export default function ContactDetailPage() {
       title: contact.title || '',
       company: contact.company || '',
       next_step: contact.next_step || '',
-      follow_up_date: contact.follow_up_date || '',
       notes: contact.notes || '',
     });
   }

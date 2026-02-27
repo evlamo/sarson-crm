@@ -59,9 +59,6 @@ def list_contacts(
     contacted: Optional[bool] = Query(None),
     assigned_to: Optional[uuid.UUID] = Query(None),
     sarson_rep: Optional[str] = Query(None, max_length=255),
-    sales_rep: Optional[str] = Query(None, max_length=255),
-    follow_up_from: Optional[date] = Query(None),
-    follow_up_to: Optional[date] = Query(None),
     sort: Optional[str] = Query("last_name", max_length=50),
     order: Optional[str] = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
@@ -70,8 +67,7 @@ def list_contacts(
     """
     Paginated contact list with filters:
     - search: full-text via tsvector (falls back to ILIKE on name/email)
-    - status, contacted, assigned_to, sarson_rep/sales_rep filters
-    - follow_up_from/follow_up_to: date range on follow_up_date
+    - status, contacted, assigned_to, sarson_rep filters
     """
     query = (
         db.query(Contact)
@@ -99,19 +95,7 @@ def list_contacts(
     if assigned_to:
         query = query.filter(Contact.assigned_to == assigned_to)
     if sarson_rep:
-        # Search both internal and external rep fields
-        query = query.filter(
-            or_(
-                Contact.sarson_rep.ilike(f"%{sarson_rep}%"),
-                Contact.sales_rep.ilike(f"%{sarson_rep}%"),
-            )
-        )
-    if sales_rep:
-        query = query.filter(Contact.sales_rep.ilike(f"%{sales_rep}%"))
-    if follow_up_from:
-        query = query.filter(Contact.follow_up_date >= follow_up_from)
-    if follow_up_to:
-        query = query.filter(Contact.follow_up_date <= follow_up_to)
+        query = query.filter(Contact.sarson_rep.ilike(f"%{sarson_rep}%"))
 
     # Whitelist of sortable fields → Contact column
     SORTABLE = {
@@ -124,10 +108,8 @@ def list_contacts(
         "status":           Contact.status,
         "contacted":        Contact.contacted,
         "last_contacted_at": Contact.last_contacted_at,
-        "follow_up_date":   Contact.follow_up_date,
         "next_step":        Contact.next_step,
         "sarson_rep":       Contact.sarson_rep,
-        "sales_rep":        Contact.sales_rep,
         "created_at":       Contact.created_at,
         "updated_at":       Contact.updated_at,
     }

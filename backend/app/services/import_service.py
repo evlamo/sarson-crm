@@ -40,11 +40,9 @@ HEADER_MAP = {
     "website": "_company_website",
     "contact url": "profile_url",
     "sf rep": "sarson_rep",
-    "sales rep": "sales_rep",
     "notes": "notes",
     "last contact": "last_contacted_at",
     "next step": "next_step",
-    "flw up date": "follow_up_date",
     "contact type": "_ignore",
     "contacted": "contacted",
     "status": "status",
@@ -216,8 +214,6 @@ def execute_import(db: Session, job: ImportJob,
                             company_website = val
                         elif field == "last_contacted_at":
                             record[field] = _parse_date(val)
-                        elif field == "follow_up_date":
-                            record[field] = _parse_date_only(val)
                         elif field == "contacted":
                             record[field] = _parse_bool(val)
                         elif field == "email":

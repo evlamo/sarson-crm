@@ -17,12 +17,12 @@ ALLOWED_FIELDS = {
     "phone", "phone_secondary",
     # Professional
     "title", "company", "department", "linkedin_url", "website",
-    "email_domain", "profile_url", "sarson_rep", "sales_rep",
+    "email_domain", "profile_url", "sarson_rep",
     # Location
     "city", "state", "country", "timezone",
     # CRM
     "contact_type", "status", "lead_source", "owner_id", "assigned_to",
-    "next_step", "follow_up_date", "contacted",
+    "next_step", "contacted",
     # Engagement
     "last_contacted_at", "last_emailed_at", "email_open_count", "email_click_count",
     # Email deliverability

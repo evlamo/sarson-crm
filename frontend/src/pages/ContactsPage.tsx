@@ -46,16 +46,13 @@ const EMPTY_FORM = {
   last_name: '',
   company: '',
   email: '',
-  // optional
   middle_name: '',
   title: '',
   phone: '',
   status: 'active',
   source: '',
   sarson_rep: '',
-  sales_rep: '',
   next_step: '',
-  follow_up_date: '',
   last_contacted_at: '',
   notes: '',
   linkedin_url: '',
@@ -71,21 +68,34 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [saveError, setSaveError] = useState('');
 
   const set = (field: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
   const mutation = useMutation({
-    mutationFn: async (payload: Partial<FormState>) => {
+    mutationFn: async (payload: Record<string, unknown>) => {
       const res = await api.post('/contacts', payload);
+      // If a note was included, post it as an activity log entry too
+      if (payload.notes && res.data?.id) {
+        await api.post(`/contacts/${res.data.id}/activities`, {
+          activity_type: 'note',
+          body: payload.notes,
+        });
+      }
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       setForm(EMPTY_FORM);
       setErrors({});
+      setSaveError('');
       onClose();
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setSaveError(msg || 'Failed to save — please try again.');
     },
   });
 
@@ -95,25 +105,29 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
     if (!form.last_name.trim()) e.last_name = 'Required';
     if (!form.company.trim()) e.company = 'Required';
     if (!form.email.trim()) e.email = 'Required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Invalid email';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError('');
     if (!validate()) return;
-    const payload: Partial<FormState> = {};
+    const payload: Record<string, unknown> = {};
     (Object.keys(form) as (keyof FormState)[]).forEach((k) => {
-      const v = form[k];
-      if (v !== '') (payload as Record<string, unknown>)[k] = v;
+      const v = form[k].trim();
+      if (v !== '') payload[k] = v;
     });
+    // Always send status even if default
+    payload.status = form.status;
     mutation.mutate(payload);
   };
 
   const handleClose = () => {
     setForm(EMPTY_FORM);
     setErrors({});
+    setSaveError('');
     onClose();
   };
 
@@ -149,7 +163,7 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Required fields */}
+          {/* Required */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Required</p>
             <div className="grid grid-cols-2 gap-4">
@@ -160,7 +174,7 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           </div>
 
-          {/* Contact details */}
+          {/* Contact Details */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Contact Details</p>
             <div className="grid grid-cols-2 gap-4">
@@ -193,15 +207,13 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Assignment</p>
             <div className="grid grid-cols-2 gap-4">
-              {field('Sales Rep', 'sarson_rep', { placeholder: 'Internal team member' })}
-              {field('External Sales Rep', 'sales_rep', { placeholder: 'External partner' })}
+              {field('Sales Rep', 'sarson_rep', { placeholder: 'Assign a rep...' })}
               {field('Next Step', 'next_step', { placeholder: 'Schedule intro call...' })}
-              {field('Follow-up Date', 'follow_up_date', { type: 'date' })}
               {field('Last Contacted', 'last_contacted_at', { type: 'date' })}
             </div>
           </div>
 
-          {/* Online presence */}
+          {/* Online */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Online</p>
             <div className="grid grid-cols-2 gap-4">
@@ -223,16 +235,19 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
           {/* Notes */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Notes</p>
-            <div className="space-y-1">
-              <textarea
-                value={form.notes}
-                onChange={set('notes')}
-                placeholder="Any context, background, how you met..."
-                rows={3}
-                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-              />
-            </div>
+            <textarea
+              value={form.notes}
+              onChange={set('notes')}
+              placeholder="How you met, background context, anything relevant..."
+              rows={3}
+              className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+            />
+            <p className="text-xs text-muted-foreground mt-1">This will appear in the contact's Notes & Activity timeline.</p>
           </div>
+
+          {saveError && (
+            <p className="text-sm text-destructive text-center">{saveError}</p>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
@@ -240,12 +255,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
               {mutation.isPending ? 'Saving...' : 'Add Contact'}
             </Button>
           </DialogFooter>
-
-          {mutation.isError && (
-            <p className="text-sm text-destructive text-center">
-              Failed to save — please check the fields and try again.
-            </p>
-          )}
         </form>
       </DialogContent>
     </Dialog>
@@ -490,7 +499,6 @@ export default function ContactsPage() {
     last_name: 'last_name',
     company_name: 'company',
     last_contacted_at: 'last_contacted_at',
-    follow_up_date: 'follow_up_date',
     title: 'title',
     email: 'email',
     phone: 'phone',
