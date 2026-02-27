@@ -451,20 +451,19 @@ function InlineSalesRep({ contact }: { contact: Contact }) {
 }
 
 const STATUSES = [
-  { value: 'hot',       label: 'Hot',              classes: 'bg-red-100 text-red-800 border-red-200' },
-  { value: 'warm',      label: 'Warm',             classes: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { value: 'prospect',  label: 'Prospect',         classes: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-  { value: 'cold',      label: 'Cold',             classes: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { value: 'poc',       label: 'POC',              classes: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { value: 'active',    label: 'Active',           classes: 'bg-green-100 text-green-800 border-green-200' },
-  { value: 'na',        label: 'N/A',              classes: 'bg-gray-100 text-gray-600 border-gray-200' },
+  { value: 'hot',       label: 'Hot',       dot: 'bg-red-500' },
+  { value: 'warm',      label: 'Warm',      dot: 'bg-orange-400' },
+  { value: 'prospect',  label: 'Prospect',  dot: 'bg-yellow-400' },
+  { value: 'cold',      label: 'Cold',      dot: 'bg-blue-400' },
+  { value: 'poc',       label: 'POC',       dot: 'bg-purple-500' },
+  { value: 'active',    label: 'Active',    dot: 'bg-green-500' },
+  { value: 'na',        label: 'N/A',       dot: 'bg-gray-300' },
 ];
 
 const STATUS_MAP = Object.fromEntries(STATUSES.map((s) => [s.value, s]));
 
-// Fallback for any legacy status values in the DB
 const getStatusMeta = (val: string) =>
-  STATUS_MAP[val] ?? { label: val, classes: 'bg-gray-100 text-gray-600 border-gray-200' };
+  STATUS_MAP[val] ?? { label: val, dot: 'bg-gray-300' };
 
 function InlineStatus({ contact }: { contact: Contact }) {
   const queryClient = useQueryClient();
@@ -481,16 +480,19 @@ function InlineStatus({ contact }: { contact: Contact }) {
   const meta = getStatusMeta(contact.status);
 
   return (
-    <select
-      value={contact.status}
-      onChange={(e) => { e.stopPropagation(); mutation.mutate(e.target.value); }}
-      onClick={(e) => e.stopPropagation()}
-      className={`text-xs font-medium px-2 py-0.5 rounded-full border cursor-pointer appearance-none text-center w-full ${meta.classes} ${mutation.isPending ? 'opacity-60' : ''}`}
-    >
-      {STATUSES.map((s) => (
-        <option key={s.value} value={s.value}>{s.label}</option>
-      ))}
-    </select>
+    <div className="flex items-center gap-1.5">
+      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
+      <select
+        value={contact.status}
+        onChange={(e) => { e.stopPropagation(); mutation.mutate(e.target.value); }}
+        onClick={(e) => e.stopPropagation()}
+        className={`text-xs bg-transparent border-none outline-none cursor-pointer w-full ${mutation.isPending ? 'opacity-60' : ''}`}
+      >
+        {STATUSES.map((s) => (
+          <option key={s.value} value={s.value}>{s.label}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 
