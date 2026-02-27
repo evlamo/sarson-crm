@@ -1,12 +1,21 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Boolean, Integer, Numeric, DateTime, ForeignKey, Text, ARRAY, Date, event
+from datetime import datetime, timezone
+from sqlalchemy import Column, String, Boolean, Integer, Numeric, DateTime, ForeignKey, Text, ARRAY, Date, event, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.orm import relationship
 from app.database import Base
 
+def _utcnow():
+    return datetime.now(timezone.utc)
+
 class Contact(Base):
     __tablename__ = "contacts"
+    __table_args__ = (
+        # Partial unique index on email — allows multiple nulls, but no duplicate non-null emails
+        UniqueConstraint("email", name="uq_contacts_email", deferrable=True),
+        # GIN index for full-text search
+        Index("ix_contacts_search_vector", "search_vector", postgresql_using="gin"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
@@ -14,7 +23,7 @@ class Contact(Base):
     first_name = Column(String)
     middle_name = Column(Text)
     last_name = Column(String)
-    email = Column(String, index=True)
+    email = Column(String, index=True, unique=True)
     email_secondary = Column(String)
     phone = Column(String)
     phone_secondary = Column(String)
@@ -28,7 +37,7 @@ class Contact(Base):
     website = Column(String)
     email_domain = Column(Text)       # stored for fast firm-level filtering
     profile_url = Column(Text)        # LinkedIn, AngelList, etc.
-    sarson_rep = Column(Text)         # Sarson Funds representative name
+    sarson_rep = Column(Text, index=True)  # Sarson Funds representative name
     sales_rep = Column(Text)          # External sales person
 
     # Location
@@ -48,7 +57,7 @@ class Contact(Base):
     contacted = Column(Boolean, default=False)  # has this person officially spoken with the firm?
 
     # Engagement
-    last_contacted_at = Column(DateTime(timezone=True))
+    last_contacted_at = Column(DateTime(timezone=True), index=True)
     last_emailed_at = Column(DateTime(timezone=True))
     email_open_count = Column(Integer, default=0)
     email_click_count = Column(Integer, default=0)
@@ -76,8 +85,8 @@ class Contact(Base):
     notes = Column(Text)
     source_import_id = Column(String)
 
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     deleted_at = Column(DateTime(timezone=True))
 

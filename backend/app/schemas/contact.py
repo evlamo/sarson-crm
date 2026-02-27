@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Optional, List, Any
 from datetime import datetime, date
 from decimal import Decimal
@@ -120,6 +120,15 @@ class ContactResponse(ContactBase):
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
+    # Expose lead_source as 'source' for frontend compatibility
+    source: Optional[str] = None
+
+    @model_validator(mode='after')
+    def populate_source(self) -> 'ContactResponse':
+        # If source wasn't set but lead_source exists on the model, copy it over
+        if not self.source and hasattr(self, 'lead_source') and self.lead_source:
+            self.source = self.lead_source
+        return self
 
     class Config:
         from_attributes = True

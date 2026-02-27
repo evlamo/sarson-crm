@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, text, or_
-from datetime import datetime, date
+from sqlalchemy import func, text, or_, select
+from sqlalchemy.exc import IntegrityError
+from datetime import datetime, date, timezone
 from typing import Optional, List
+from pydantic import BaseModel, Field
 import uuid
 
 from app.database import get_db
@@ -23,6 +25,19 @@ from app.schemas.contact import (
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["contacts"])
+
+# ── Inline schemas ─────────────────────────────────────────────────────────
+
+class ActivityCreate(BaseModel):
+    activity_type: str = Field(default="note", max_length=50)
+    subject: Optional[str] = Field(None, max_length=500)
+    body: Optional[str] = Field(None, max_length=10000)
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[uuid.UUID] = Field(..., min_length=1, max_length=500)
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -78,13 +93,15 @@ def list_contacts(
     # Full-text search
     if search:
         search_clean = search.strip()
+        # Escape ILIKE wildcards to prevent pattern injection
+        search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
         query = query.filter(
             or_(
                 Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_clean)),
-                Contact.first_name.ilike(f"%{search_clean}%"),
-                Contact.last_name.ilike(f"%{search_clean}%"),
-                Contact.email.ilike(f"%{search_clean}%"),
-                Contact.company.ilike(f"%{search_clean}%"),
+                Contact.first_name.ilike(f"%{search_escaped}%"),
+                Contact.last_name.ilike(f"%{search_escaped}%"),
+                Contact.email.ilike(f"%{search_escaped}%"),
+                Contact.company.ilike(f"%{search_escaped}%"),
             )
         )
 
@@ -125,7 +142,21 @@ def list_contacts(
         # For all other sorts, tiebreak by last_name then first_name
         secondary = Contact.last_name.asc().nullslast()
 
-    total = query.count()
+    # Efficient count — no joins, just filter the base query
+    total = db.query(func.count(Contact.id)).filter(
+        Contact.deleted_at.is_(None),
+        *([Contact.status == status] if status else []),
+        *([Contact.contacted == contacted] if contacted is not None else []),
+        *([Contact.assigned_to == assigned_to] if assigned_to else []),
+        *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
+        *([or_(
+            Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
+            Contact.first_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
+            Contact.last_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
+            Contact.email.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
+            Contact.company.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
+        )] if search else []),
+    ).scalar()
     contacts = (
         query.order_by(sort_expr, secondary)
         .offset((page - 1) * per_page)
@@ -171,9 +202,12 @@ def create_contact(
     data = {k: v for k, v in data.items() if k in valid_cols}
     contact = Contact(**data)
     db.add(contact)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A contact with this email already exists")
     db.refresh(contact)
-    # Reload with relationships
     return _build_response(_get_contact_or_404(str(contact.id), db))
 
 
@@ -194,7 +228,7 @@ def update_contact(
         if key in valid_cols:
             setattr(contact, key, value)
 
-    contact.updated_at = datetime.utcnow()
+    contact.updated_at = _utcnow()
     db.commit()
     db.refresh(contact)
     return _build_response(_get_contact_or_404(contact_id, db))
@@ -217,7 +251,7 @@ def patch_contact(
         if key in valid_cols:
             setattr(contact, key, value)
 
-    contact.updated_at = datetime.utcnow()
+    contact.updated_at = _utcnow()
     db.commit()
     return _build_response(_get_contact_or_404(contact_id, db))
 
@@ -232,7 +266,7 @@ def delete_contact(
 ):
     """Soft-delete a contact (sets deleted_at, never hard deletes)."""
     contact = _get_contact_or_404(contact_id, db)
-    contact.deleted_at = datetime.utcnow()
+    contact.deleted_at = _utcnow()
     db.commit()
 
 
@@ -241,7 +275,7 @@ def delete_contact(
 @router.post("/{contact_id}/activities")
 def create_contact_activity(
     contact_id: str,
-    body: dict,
+    body: ActivityCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -250,11 +284,11 @@ def create_contact_activity(
 
     activity = Activity(
         contact_id=contact.id,
-        activity_type=body.get("activity_type", "note"),
-        subject=body.get("subject"),
-        body=body.get("body"),
+        activity_type=body.activity_type,
+        subject=body.subject,
+        body=body.body,
         performed_by=current_user.id,
-        performed_at=datetime.utcnow(),
+        performed_at=_utcnow(),
         source="manual",
     )
     db.add(activity)
@@ -348,7 +382,7 @@ def bulk_update_contacts(
     for contact in contacts:
         for field, value in update_fields.items():
             setattr(contact, field, value)
-        contact.updated_at = datetime.utcnow()
+        contact.updated_at = _utcnow()
 
     # Tag additions
     tags_added = 0
@@ -365,3 +399,31 @@ def bulk_update_contacts(
     db.commit()
 
     return BulkUpdateResponse(updated=len(contacts), tags_added=tags_added)
+
+
+# ── Bulk Delete ────────────────────────────────────────────────────────────
+
+@router.post("/bulk-delete", status_code=status.HTTP_200_OK)
+def bulk_delete_contacts(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Soft-delete multiple contacts in a single DB round-trip."""
+    contacts = (
+        db.query(Contact)
+        .filter(
+            Contact.id.in_(payload.ids),
+            Contact.deleted_at.is_(None),
+        )
+        .all()
+    )
+    if not contacts:
+        raise HTTPException(status_code=404, detail="No matching contacts found")
+
+    now = _utcnow()
+    for contact in contacts:
+        contact.deleted_at = now
+
+    db.commit()
+    return {"deleted": len(contacts)}

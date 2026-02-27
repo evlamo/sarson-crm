@@ -706,10 +706,10 @@ export default function ContactsPage() {
     sarson_rep:       windowWidth >= 768,
   }), [windowWidth]);
 
-  // Bulk delete mutation
+  // Bulk delete mutation — single API call, not N individual requests
   const deleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      await Promise.all(ids.map((id) => api.delete(`/contacts/${id}`)));
+      await api.post('/contacts/bulk-delete', { ids });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
