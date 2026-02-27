@@ -1,4 +1,4 @@
-"""Import router — CSV upload, preview, execute, status."""
+"""Import router — multi-format upload (CSV/TSV/XLSX/ODS/vCard), preview, execute, status."""
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
@@ -13,20 +13,32 @@ from app.schemas.import_schema import (
     ImportExecuteRequest, ImportListResponse,
 )
 from app.services.import_service import (
-    save_upload, preview_csv, build_header_mapping,
-    create_import_record, execute_import,
+    save_upload, create_import_record, execute_import,
 )
+from app.services.file_parser import (
+    parse_file, validate_file, get_filetype_from_extension, MAX_FILE_SIZE,
+)
+from app.services.import_normalizer import map_headers
 
 router = APIRouter(prefix="/api/v1/imports", tags=["imports"])
 
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+ALLOWED_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xls", ".ods", ".vcf"}
 
 
 @router.post("/upload", response_model=ImportUploadResponse)
-async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """Upload a CSV file for import preview."""
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(400, "Only .csv files are accepted")
+async def upload_file(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Upload a file (CSV/TSV/XLSX/ODS/vCard) for import preview."""
+    if not file.filename:
+        raise HTTPException(400, "No filename provided")
+
+    import os
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
@@ -35,10 +47,43 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
         raise HTTPException(400, "Empty file")
 
     file_path = save_upload(content, file.filename)
-    headers, preview_rows, row_count = preview_csv(file_path)
-    header_mapping = build_header_mapping(headers)
 
-    job = create_import_record(db, file.filename, file_path, headers, row_count, header_mapping)
+    # Validate magic bytes
+    try:
+        validate_file(file_path, ext)
+    except ValueError as e:
+        import os as _os
+        _os.unlink(file_path)
+        raise HTTPException(400, str(e))
+
+    # Parse file
+    filetype = get_filetype_from_extension(file.filename)
+    try:
+        rows = parse_file(file_path, filetype)
+    except ValueError as e:
+        import os as _os
+        _os.unlink(file_path)
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        import os as _os
+        _os.unlink(file_path)
+        raise HTTPException(400, f"Failed to parse file: {str(e)[:200]}")
+
+    if not rows:
+        raise HTTPException(400, "No data rows found in file")
+
+    # Extract headers and build mapping
+    headers = list(rows[0].keys()) if rows else []
+    header_mapping = map_headers(headers)
+
+    # Build preview (first 5 rows as list of lists)
+    preview_rows = []
+    for row in rows[:5]:
+        preview_rows.append([row.get(h, "") for h in headers])
+
+    row_count = len(rows)
+
+    job = create_import_record(db, file.filename, file_path, headers, row_count, header_mapping, filetype)
 
     return ImportUploadResponse(
         import_id=job.id,
@@ -50,7 +95,11 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
 
 @router.get("/{import_id}", response_model=ImportStatusResponse)
-def get_import_status(import_id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_import_status(
+    import_id: UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     """Get import job status and progress."""
     job = db.query(ImportJob).filter(ImportJob.id == import_id).first()
     if not job:
@@ -72,8 +121,12 @@ def get_import_status(import_id: UUID, db: Session = Depends(get_db), _: User = 
 
 
 @router.post("/{import_id}/execute", response_model=ImportStatusResponse)
-def execute_import_job(import_id: UUID, body: ImportExecuteRequest = None, _: User = Depends(get_current_user),
-                       db: Session = Depends(get_db)):
+def execute_import_job(
+    import_id: UUID,
+    body: ImportExecuteRequest = None,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Execute a pending import."""
     job = db.query(ImportJob).filter(ImportJob.id == import_id).first()
     if not job:
@@ -102,7 +155,10 @@ def execute_import_job(import_id: UUID, body: ImportExecuteRequest = None, _: Us
 
 
 @router.get("", response_model=list[ImportListResponse])
-def list_imports(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_imports(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     """List all import jobs."""
     jobs = db.query(ImportJob).order_by(ImportJob.created_at.desc()).all()
     return [

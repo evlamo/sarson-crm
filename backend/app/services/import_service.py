@@ -1,7 +1,7 @@
-"""CSV Import Service for Sarson Funds CRM.
+"""Import Service for Sarson Funds CRM.
 
-Handles 30k+ contact imports with batch processing, dedup by email,
-company resolution, tag creation, and robust date parsing.
+Handles multi-format contact imports with batch processing, dedup by email,
+company resolution, tag creation, and robust data normalization.
 """
 
 import csv
@@ -20,12 +20,18 @@ from app.models.contact import Contact
 from app.models.company import Company
 from app.models.tag import Tag, ContactTag
 from app.models.import_job import ImportJob
+from app.services.file_parser import parse_file
+from app.services.import_normalizer import (
+    map_headers, normalize_row, sanitize_value,
+    normalize_email, normalize_phone, normalize_name,
+    normalize_status, normalize_date, normalize_bool, normalize_country,
+)
 
 BATCH_SIZE = 500
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads")
 
-# CSV header → contact field mapping
+# Legacy CSV header → contact field mapping (extended)
 HEADER_MAP = {
     "sheet imported from": "_sheet_tag",
     "tab": "_tab_tag",
@@ -47,70 +53,59 @@ HEADER_MAP = {
     "contacted": "contacted",
     "status": "status",
     "source": "lead_source",
+    # Extended aliases
+    "first name": "first_name",
+    "last name": "last_name",
+    "middle name": "middle_name",
+    "email address": "email",
+    "phone number": "phone",
+    "mobile": "phone",
+    "cell": "phone",
+    "job title": "title",
+    "company": "_company",
+    "organization": "_company",
+    "company name": "_company",
+    "city": "city",
+    "state": "state",
+    "country": "country",
+    "lead source": "lead_source",
+    "sarson rep": "sarson_rep",
+    "linkedin": "linkedin_url",
+    "linkedin url": "linkedin_url",
+    "profile url": "profile_url",
 }
 
-# Fields that are CSV injection vectors — sanitize values starting with these
 _FORMULA_CHARS = {"=", "+", "-", "@", "\t", "\r"}
 
 
-def _sanitize(value: str) -> str:
-    """Strip CSV injection prefixes and whitespace."""
-    v = value.strip()
-    if v and v[0] in _FORMULA_CHARS:
-        v = "'" + v
-    return v
-
-
 def _normalize_header(h: str) -> str:
-    """Normalize a CSV header for matching."""
     return re.sub(r"\s+", " ", h.strip().lower()).rstrip("|").strip()
 
 
-def _parse_date(val: str) -> Optional[datetime]:
-    """Try multiple date formats. Returns None on failure."""
-    if not val or not val.strip():
-        return None
-    val = val.strip()
-    formats = [
-        "%m/%d/%Y", "%Y-%m-%d", "%m/%d/%y", "%m-%d-%Y",
-        "%m-%d-%y", "%d/%m/%Y", "%Y/%m/%d", "%m.%d.%Y",
-        "%B %d, %Y", "%b %d, %Y",
-    ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(val, fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def _parse_date_only(val: str) -> Optional[date]:
-    dt = _parse_date(val)
-    return dt.date() if dt else None
-
-
-def _parse_bool(val: str) -> bool:
-    return val.strip().upper() == "YES" if val else False
-
-
 def build_header_mapping(headers: list[str]) -> dict[str, str]:
-    """Map CSV headers to field names. Returns {csv_header: field_name}."""
+    """Map headers to field names using both legacy HEADER_MAP and new normalizer."""
     mapping = {}
     for h in headers:
         norm = _normalize_header(h)
         if norm in HEADER_MAP:
             mapping[h] = HEADER_MAP[norm]
         else:
-            # Fuzzy: try prefix match
             for key, field in HEADER_MAP.items():
                 if norm.startswith(key) or key.startswith(norm):
                     mapping[h] = field
                     break
+    
+    # Also try the new normalizer for any unmapped headers
+    new_mapping = map_headers(headers)
+    for h, field in new_mapping.items():
+        if h not in mapping:
+            mapping[h] = field
+    
     return mapping
 
 
 def save_upload(file_content: bytes, filename: str) -> str:
-    """Save uploaded CSV, return file path."""
+    """Save uploaded file, return file path."""
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     safe_name = re.sub(r"[^\w.\-]", "_", filename)
     unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
@@ -122,7 +117,6 @@ def save_upload(file_content: bytes, filename: str) -> str:
 
 def preview_csv(file_path: str) -> tuple[list[str], list[list[str]], int]:
     """Read headers, first 5 rows, and total row count."""
-    # Handle BOM
     with open(file_path, "r", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
         headers = next(reader)
@@ -137,13 +131,14 @@ def preview_csv(file_path: str) -> tuple[list[str], list[list[str]], int]:
 
 def create_import_record(db: Session, filename: str, file_path: str,
                          headers: list[str], row_count: int,
-                         header_mapping: dict[str, str]) -> ImportJob:
+                         header_mapping: dict[str, str],
+                         filetype: str = "csv") -> ImportJob:
     """Create an ImportJob record."""
     job = ImportJob(
         id=uuid.uuid4(),
         filename=filename,
         status="pending",
-        column_map={"file_path": file_path, "mapping": header_mapping},
+        column_map={"file_path": file_path, "mapping": header_mapping, "filetype": filetype},
         total_rows=row_count,
     )
     db.add(job)
@@ -154,20 +149,20 @@ def create_import_record(db: Session, filename: str, file_path: str,
 
 def execute_import(db: Session, job: ImportJob,
                    mapping_overrides: Optional[dict[str, str]] = None):
-    """Execute the CSV import with batch processing."""
+    """Execute the import with batch processing — supports all file formats."""
     job.status = "processing"
     job.started_at = datetime.utcnow()
     db.commit()
 
     file_path = job.column_map.get("file_path", "")
     mapping = job.column_map.get("mapping", {})
+    filetype = job.column_map.get("filetype", "csv")
     if mapping_overrides:
         mapping.update(mapping_overrides)
 
-    # Caches to avoid repeated DB queries
-    company_cache: dict[str, uuid.UUID] = {}  # lowercase name → id
-    tag_cache: dict[str, uuid.UUID] = {}      # lowercase name → id
-    email_contact_cache: dict[str, uuid.UUID] = {}  # email → contact id
+    company_cache: dict[str, uuid.UUID] = {}
+    tag_cache: dict[str, uuid.UUID] = {}
+    email_contact_cache: dict[str, uuid.UUID] = {}
 
     # Pre-load existing emails for dedup
     existing = db.query(Contact.email, Contact.id).filter(
@@ -184,148 +179,143 @@ def execute_import(db: Session, job: ImportJob,
     processed = 0
 
     try:
-        with open(file_path, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            batch_contacts_new = []
-            batch_contacts_update = []
-            batch_tag_links = []  # (contact_id, tag_id)
+        # Parse using the multi-format parser
+        rows = parse_file(file_path, filetype)
 
-            for row_num, row in enumerate(reader, start=2):
-                try:
-                    record = {}
-                    company_name = None
-                    company_website = None
-                    sheet_tag = None
-                    tab_tag = None
+        batch_contacts_new = []
+        batch_tag_links = []
 
-                    for csv_col, field in mapping.items():
-                        raw = row.get(csv_col, "")
-                        val = _sanitize(raw) if raw else ""
+        for row_num, raw_row in enumerate(rows, start=2):
+            try:
+                # Map raw headers to CRM fields
+                mapped_row = {}
+                company_name = None
+                company_website = None
+                sheet_tag = None
+                tab_tag = None
 
-                        if field == "_ignore" or not val:
-                            continue
-                        elif field == "_sheet_tag":
-                            sheet_tag = val
-                        elif field == "_tab_tag":
-                            tab_tag = val
-                        elif field == "_company":
-                            company_name = val
-                        elif field == "_company_website":
-                            company_website = val
-                        elif field == "last_contacted_at":
-                            record[field] = _parse_date(val)
-                        elif field == "contacted":
-                            record[field] = _parse_bool(val)
-                        elif field == "email":
-                            record[field] = val.strip().lower()
-                        elif field == "email_domain":
-                            record[field] = val.strip().lower()
-                        else:
-                            record[field] = val
-
-                    # Skip rows without email
-                    email = record.get("email")
-                    if not email:
-                        skipped += 1
-                        processed += 1
+                for raw_col, raw_val in raw_row.items():
+                    field = mapping.get(raw_col)
+                    if not field or not raw_val:
+                        continue
+                    val = sanitize_value(str(raw_val))
+                    if not val:
                         continue
 
-                    # Resolve company
-                    if company_name:
-                        cname_lower = company_name.lower()
-                        if cname_lower not in company_cache:
-                            existing_co = db.query(Company).filter(
-                                func.lower(Company.name) == cname_lower,
-                                Company.deleted_at.is_(None)
-                            ).first()
-                            if existing_co:
-                                company_cache[cname_lower] = existing_co.id
-                                if company_website and not existing_co.website:
-                                    existing_co.website = company_website
-                            else:
-                                new_co = Company(
-                                    id=uuid.uuid4(),
-                                    name=company_name,
-                                    website=company_website or None,
-                                )
-                                db.add(new_co)
-                                db.flush()
-                                company_cache[cname_lower] = new_co.id
-                        record["company_id"] = company_cache[cname_lower]
-                        record["company"] = company_name
-
-                    # Resolve tags
-                    tag_ids = []
-                    for tag_name in [sheet_tag, tab_tag]:
-                        if tag_name:
-                            tname_lower = tag_name.lower()
-                            if tname_lower not in tag_cache:
-                                existing_tag = db.query(Tag).filter(
-                                    func.lower(Tag.name) == tname_lower
-                                ).first()
-                                if existing_tag:
-                                    tag_cache[tname_lower] = existing_tag.id
-                                else:
-                                    new_tag = Tag(
-                                        id=uuid.uuid4(),
-                                        name=tag_name,
-                                        category="import",
-                                    )
-                                    db.add(new_tag)
-                                    db.flush()
-                                    tag_cache[tname_lower] = new_tag.id
-                            tag_ids.append(tag_cache[tname_lower])
-
-                    # Dedup by email
-                    if email in email_contact_cache:
-                        # Update existing — only non-empty values
-                        contact_id = email_contact_cache[email]
-                        update_data = {k: v for k, v in record.items()
-                                       if v is not None and v != "" and k != "email"}
-                        if update_data:
-                            db.query(Contact).filter(Contact.id == contact_id).update(
-                                update_data, synchronize_session=False
-                            )
-                        for tid in tag_ids:
-                            batch_tag_links.append((contact_id, tid))
-                        updated += 1
+                    if field == "_ignore":
+                        continue
+                    elif field == "_sheet_tag":
+                        sheet_tag = val
+                    elif field == "_tab_tag":
+                        tab_tag = val
+                    elif field == "_company":
+                        company_name = val
+                    elif field == "_company_website":
+                        company_website = val
                     else:
-                        # Create new contact
-                        contact_id = uuid.uuid4()
-                        record["id"] = contact_id
-                        record["source_import_id"] = str(job.id)
-                        batch_contacts_new.append(record)
-                        email_contact_cache[email] = contact_id
-                        for tid in tag_ids:
-                            batch_tag_links.append((contact_id, tid))
-                        created += 1
+                        mapped_row[field] = val
 
-                    processed += 1
+                # For vCard files, fields come pre-mapped
+                if filetype == "vcf":
+                    for field in ("first_name", "last_name", "middle_name", "email",
+                                  "phone", "company", "title", "linkedin_url",
+                                  "website", "notes", "city", "state", "country"):
+                        if field in raw_row and field not in mapped_row:
+                            mapped_row[field] = raw_row[field]
+                    if "company" in mapped_row and not company_name:
+                        company_name = mapped_row.pop("company", None)
 
-                    # Batch commit
-                    if processed % BATCH_SIZE == 0:
-                        if batch_contacts_new:
-                            db.bulk_insert_mappings(Contact, batch_contacts_new)
-                            batch_contacts_new = []
-                        _insert_tag_links(db, batch_tag_links)
-                        batch_tag_links = []
-                        db.commit()
-                        # Update progress
-                        job.imported_count = created
-                        job.updated_count = updated
-                        job.skipped_count = skipped
-                        db.commit()
+                # Normalize all fields
+                normalized = normalize_row(mapped_row)
 
-                except Exception as e:
-                    errors.append({"row": row_num, "error": str(e)[:200]})
+                # Skip rows without email
+                email = normalized.get("email")
+                if not email:
                     skipped += 1
                     processed += 1
+                    continue
 
-            # Final batch
-            if batch_contacts_new:
-                db.bulk_insert_mappings(Contact, batch_contacts_new)
-            _insert_tag_links(db, batch_tag_links)
-            db.commit()
+                # Resolve company
+                if company_name:
+                    cname_lower = company_name.lower()
+                    if cname_lower not in company_cache:
+                        existing_co = db.query(Company).filter(
+                            func.lower(Company.name) == cname_lower,
+                            Company.deleted_at.is_(None)
+                        ).first()
+                        if existing_co:
+                            company_cache[cname_lower] = existing_co.id
+                            if company_website and not existing_co.website:
+                                existing_co.website = company_website
+                        else:
+                            new_co = Company(
+                                id=uuid.uuid4(),
+                                name=company_name,
+                                website=company_website or None,
+                            )
+                            db.add(new_co)
+                            db.flush()
+                            company_cache[cname_lower] = new_co.id
+                    normalized["company_id"] = company_cache[cname_lower]
+                    normalized["company"] = company_name
+
+                # Resolve tags
+                tag_ids = []
+                for tag_name in [sheet_tag, tab_tag]:
+                    if tag_name:
+                        tname_lower = tag_name.lower()
+                        if tname_lower not in tag_cache:
+                            existing_tag = db.query(Tag).filter(
+                                func.lower(Tag.name) == tname_lower
+                            ).first()
+                            if existing_tag:
+                                tag_cache[tname_lower] = existing_tag.id
+                            else:
+                                new_tag = Tag(id=uuid.uuid4(), name=tag_name, category="import")
+                                db.add(new_tag)
+                                db.flush()
+                                tag_cache[tname_lower] = new_tag.id
+                        tag_ids.append(tag_cache[tname_lower])
+
+                # Dedup by email
+                if email in email_contact_cache:
+                    # SKIP duplicates (don't overwrite per spec)
+                    skipped += 1
+                else:
+                    contact_id = uuid.uuid4()
+                    normalized["id"] = contact_id
+                    normalized["source_import_id"] = str(job.id)
+                    batch_contacts_new.append(normalized)
+                    email_contact_cache[email] = contact_id
+                    for tid in tag_ids:
+                        batch_tag_links.append((contact_id, tid))
+                    created += 1
+
+                processed += 1
+
+                # Batch commit
+                if processed % BATCH_SIZE == 0:
+                    if batch_contacts_new:
+                        db.bulk_insert_mappings(Contact, batch_contacts_new)
+                        batch_contacts_new = []
+                    _insert_tag_links(db, batch_tag_links)
+                    batch_tag_links = []
+                    db.commit()
+                    job.imported_count = created
+                    job.updated_count = updated
+                    job.skipped_count = skipped
+                    db.commit()
+
+            except Exception as e:
+                errors.append({"row": row_num, "error": str(e)[:200]})
+                skipped += 1
+                processed += 1
+
+        # Final batch
+        if batch_contacts_new:
+            db.bulk_insert_mappings(Contact, batch_contacts_new)
+        _insert_tag_links(db, batch_tag_links)
+        db.commit()
 
         job.status = "complete"
     except Exception as e:
@@ -337,13 +327,12 @@ def execute_import(db: Session, job: ImportJob,
     job.updated_count = updated
     job.skipped_count = skipped
     job.error_count = len(errors)
-    job.errors = errors[:1000]  # Cap stored errors
+    job.errors = errors[:1000]
     job.completed_at = datetime.utcnow()
     db.commit()
 
 
 def _insert_tag_links(db: Session, links: list[tuple]):
-    """Insert contact_tags, ignoring duplicates."""
     if not links:
         return
     for contact_id, tag_id in links:

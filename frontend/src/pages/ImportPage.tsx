@@ -24,6 +24,7 @@ import {
 const CRM_FIELDS = [
   { value: '__skip__', label: '— Skip —' },
   { value: 'first_name', label: 'First Name' },
+  { value: 'middle_name', label: 'Middle Name' },
   { value: 'last_name', label: 'Last Name' },
   { value: 'email', label: 'Email' },
   { value: 'phone', label: 'Phone' },
@@ -33,61 +34,40 @@ const CRM_FIELDS = [
   { value: 'state', label: 'State' },
   { value: 'country', label: 'Country' },
   { value: 'status', label: 'Status' },
-  { value: 'source', label: 'Source' },
+  { value: 'lead_source', label: 'Source' },
   { value: 'sarson_rep', label: 'Sarson Rep' },
   { value: 'next_step', label: 'Next Step' },
+  { value: 'last_contacted_at', label: 'Last Contacted' },
+  { value: 'contacted', label: 'Contacted' },
   { value: 'notes', label: 'Notes' },
   { value: 'website', label: 'Website' },
   { value: 'linkedin_url', label: 'LinkedIn URL' },
-  { value: 'department', label: 'Department' },
+  { value: 'profile_url', label: 'Profile URL' },
 ];
 
-function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text.split('\n').filter((l) => l.trim());
-  if (lines.length === 0) return { headers: [], rows: [] };
-  
-  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  const rows = lines.slice(1).map((line) =>
-    line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''))
-  );
-  return { headers, rows };
-}
+const ACCEPTED_EXTENSIONS = '.csv,.tsv,.xlsx,.xls,.ods,.vcf';
+const ACCEPTED_TYPES = [
+  'text/csv', 'text/tab-separated-values',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'text/vcard', 'text/x-vcard',
+];
 
-function autoMapColumns(headers: string[]): Record<number, string> {
-  const mapping: Record<number, string> = {};
-  const hints: Record<string, string> = {
-    first_name: 'first_name', firstname: 'first_name', first: 'first_name',
-    last_name: 'last_name', lastname: 'last_name', last: 'last_name',
-    email: 'email', email_address: 'email',
-    phone: 'phone', telephone: 'phone', mobile: 'phone',
-    title: 'title', position: 'title', job_title: 'title',
-    company: 'company', organization: 'company', org: 'company', company_name: 'company',
-    city: 'city', state: 'state', country: 'country',
-    status: 'status', source: 'source',
-    notes: 'notes', note: 'notes',
-    website: 'website', url: 'website',
-    linkedin: 'linkedin_url', linkedin_url: 'linkedin_url',
-    rep: 'sarson_rep', sarson_rep: 'sarson_rep', assigned: 'sarson_rep',
-    next_step: 'next_step', nextstep: 'next_step',
-  };
-
-  headers.forEach((header, idx) => {
-    const key = header.toLowerCase().replace(/[\s_-]+/g, '_');
-    if (hints[key]) {
-      mapping[idx] = hints[key];
-    }
-  });
-
-  return mapping;
+interface UploadResult {
+  import_id: string;
+  filename: string;
+  row_count: number;
+  column_preview: string[][];
+  header_mapping: Record<string, string>;
 }
 
 export default function ImportPage() {
   useEffect(() => { document.title = 'Import — Sarson Funds CRM'; }, []);
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<string[][]>([]);
-  const [columnMap, setColumnMap] = useState<Record<number, string>>({});
+  const [uploadData, setUploadData] = useState<UploadResult | null>(null);
+  const [columnMap, setColumnMap] = useState<Record<string, string>>({});
   const [result, setResult] = useState<{
     imported_count: number;
     updated_count: number;
@@ -95,64 +75,57 @@ export default function ImportPage() {
     error_count: number;
   } | null>(null);
   const [progress, setProgress] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async (f: File) => {
+      const formData = new FormData();
+      formData.append('file', f);
+      const res = await api.post('/imports/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data as UploadResult;
+    },
+    onSuccess: (data) => {
+      setUploadData(data);
+      // Build column map from server's header_mapping
+      const map: Record<string, string> = {};
+      Object.entries(data.header_mapping).forEach(([header, field]) => {
+        map[header] = field;
+      });
+      setColumnMap(map);
+      setStep(2);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Upload failed');
+    },
+  });
 
   const handleFile = useCallback((f: File) => {
     setFile(f);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const parsed = parseCSV(text);
-      setHeaders(parsed.headers);
-      setRows(parsed.rows);
-      setColumnMap(autoMapColumns(parsed.headers));
-      setStep(2);
-    };
-    reader.readAsText(f);
+    uploadMutation.mutate(f);
   }, []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      setIsDragging(false);
       const f = e.dataTransfer.files[0];
-      if (f && f.name.endsWith('.csv')) handleFile(f);
+      if (f) handleFile(f);
     },
     [handleFile]
   );
 
-  const importMutation = useMutation({
+  const executeMutation = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error('No file');
-
-      // Step 1: Upload the CSV
-      const formData = new FormData();
-      formData.append('file', file);
-
-      setProgress(10);
-      const uploadRes = await api.post('/imports/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (p) => {
-          if (p.total) setProgress(Math.round((p.loaded / p.total) * 40));
-        },
-      });
-
-      const importId = uploadRes.data.import_id;
+      if (!uploadData) throw new Error('No upload');
       setProgress(50);
-
-      // Step 2: Build column mapping and execute
-      const mapping: Record<string, string> = {};
-      Object.entries(columnMap).forEach(([idx, field]) => {
-        if (field && field !== '__skip__') {
-          mapping[headers[parseInt(idx)]] = field;
-        }
+      const res = await api.post(`/imports/${uploadData.import_id}/execute`, {
+        column_mapping: columnMap,
       });
-
-      const execRes = await api.post(`/imports/${importId}/execute`, {
-        column_mapping: mapping,
-      });
-
       setProgress(100);
-      return execRes.data;
+      return res.data;
     },
     onSuccess: (data) => {
       setResult({
@@ -162,20 +135,40 @@ export default function ImportPage() {
         error_count: (data.errors || []).length,
       });
       setStep(4);
-      toast.success(`Import complete — ${data.created || 0} created, ${data.updated || 0} updated`);
+      toast.success(`Import complete — ${data.created || 0} created`);
     },
     onError: () => {
       toast.error('Import failed. Please check your file and try again.');
     },
   });
 
-  const mappedCount = Object.values(columnMap).filter((v) => v && v !== '__skip__').length;
-  const previewRows = rows.slice(0, 10);
+  const headers = uploadData ? Object.keys(uploadData.header_mapping).length > 0
+    ? [...new Set([...Object.keys(uploadData.header_mapping), ...(uploadData.column_preview[0] ? uploadData.column_preview[0].map((_, i) => {
+      // Reconstruct headers from preview position — fallback
+      return Object.keys(uploadData.header_mapping)[i] || `col_${i}`;
+    }) : [])])]
+    : [] : [];
+  
+  // Better: use column_preview to infer header count, and header_mapping keys as the actual headers
+  const allHeaders = uploadData?.column_preview?.[0]
+    ? Array.from({ length: uploadData.column_preview[0].length }, (_, i) => {
+        const mappingKeys = Object.keys(uploadData.header_mapping);
+        return mappingKeys[i] || `Column ${i + 1}`;
+      })
+    : Object.keys(uploadData?.header_mapping || {});
 
-  // Validation summary
-  const validationErrors: string[] = [];
-  const emailIdx = Object.entries(columnMap).find(([, v]) => v === 'email')?.[0];
-  if (!emailIdx && step >= 2) validationErrors.push('No column mapped to Email');
+  const mappedCount = Object.values(columnMap).filter((v) => v && v !== '__skip__' && !v.startsWith('_')).length;
+  const previewRows = uploadData?.column_preview?.slice(0, 10) || [];
+  const emailMapped = Object.values(columnMap).includes('email');
+
+  const fileTypeLabel = (name: string) => {
+    const ext = name.split('.').pop()?.toLowerCase();
+    const labels: Record<string, string> = {
+      csv: 'CSV', tsv: 'TSV', xlsx: 'Excel', xls: 'Excel',
+      ods: 'OpenDocument', vcf: 'vCard',
+    };
+    return labels[ext || ''] || ext?.toUpperCase() || 'File';
+  };
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -201,17 +194,26 @@ export default function ImportPage() {
         <Card>
           <CardContent className="py-12">
             <div
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer hover:bg-muted/30 transition-colors"
+              className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
+                isDragging ? 'border-primary bg-primary/5' : 'hover:bg-muted/30'
+              }`}
               onClick={() => fileRef.current?.click()}
             >
-              <p className="text-lg font-medium">Drop CSV file here</p>
-              <p className="text-sm text-muted-foreground mt-1">or click to browse</p>
+              <div className="text-4xl mb-3">📁</div>
+              <p className="text-lg font-medium">
+                {uploadMutation.isPending ? 'Uploading...' : 'Drop file here or click to browse'}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Supports CSV, TSV, Excel (.xlsx), OpenDocument (.ods), vCard (.vcf)
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">Max 10MB · Up to 10,000 rows</p>
               <input
                 ref={fileRef}
                 type="file"
-                accept=".csv"
+                accept={ACCEPTED_EXTENSIONS}
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -224,24 +226,29 @@ export default function ImportPage() {
       )}
 
       {/* Step 2: Column Mapping */}
-      {step === 2 && (
+      {step === 2 && uploadData && (
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
-                Map CSV Columns → CRM Fields
-                <Badge variant="secondary" className="ml-2">{mappedCount} of {headers.length} mapped</Badge>
+              <CardTitle className="text-base flex items-center gap-2">
+                Map Columns → CRM Fields
+                <Badge variant="secondary">{fileTypeLabel(uploadData.filename)}</Badge>
+                <Badge variant="secondary">{uploadData.row_count.toLocaleString()} rows</Badge>
+                <Badge variant="outline">{mappedCount} mapped</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {headers.map((header, idx) => (
+                {Object.keys(uploadData.header_mapping).concat(
+                  // Add unmapped headers from preview
+                  allHeaders.filter(h => !uploadData.header_mapping[h] && !Object.keys(uploadData.header_mapping).includes(h))
+                ).filter((h, i, arr) => arr.indexOf(h) === i).map((header, idx) => (
                   <div key={idx} className="flex items-center gap-4">
-                    <span className="w-48 text-sm font-mono truncate">{header}</span>
+                    <span className="w-48 text-sm font-mono truncate" title={header}>{header}</span>
                     <span className="text-muted-foreground">→</span>
                     <Select
-                      value={columnMap[idx] || '__skip__'}
-                      onValueChange={(v) => setColumnMap({ ...columnMap, [idx]: v })}
+                      value={columnMap[header] || '__skip__'}
+                      onValueChange={(v) => setColumnMap({ ...columnMap, [header]: v })}
                     >
                       <SelectTrigger className="w-48">
                         <SelectValue />
@@ -252,9 +259,8 @@ export default function ImportPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {/* Show sample value */}
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                      e.g. {rows[0]?.[idx] || '—'}
+                      e.g. {previewRows[0]?.[Object.keys(uploadData.header_mapping).indexOf(header)] || '—'}
                     </span>
                   </div>
                 ))}
@@ -262,35 +268,35 @@ export default function ImportPage() {
             </CardContent>
           </Card>
 
-          {validationErrors.length > 0 && (
+          {!emailMapped && (
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
-              {validationErrors.map((err, i) => <p key={i}>⚠ {err}</p>)}
+              ⚠ No column mapped to Email — rows without email will be skipped
             </div>
           )}
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep(1)}>← Back</Button>
+            <Button variant="outline" onClick={() => { setStep(1); setFile(null); setUploadData(null); }}>← Back</Button>
             <Button onClick={() => setStep(3)}>Preview Data →</Button>
           </div>
         </div>
       )}
 
       {/* Step 3: Data Preview */}
-      {step === 3 && (
+      {step === 3 && uploadData && (
         <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Preview (first {previewRows.length} of {rows.length} rows)
+                Preview (first {Math.min(previewRows.length, 5)} of {uploadData.row_count.toLocaleString()} rows)
               </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {headers.map((h, i) => {
-                      const mapped = columnMap[i];
-                      if (!mapped || mapped === '__skip__') return null;
+                    {Object.keys(uploadData.header_mapping).map((h, i) => {
+                      const mapped = columnMap[h];
+                      if (!mapped || mapped === '__skip__' || mapped.startsWith('_')) return null;
                       return <TableHead key={i}>{CRM_FIELDS.find((f) => f.value === mapped)?.label || mapped}</TableHead>;
                     })}
                   </TableRow>
@@ -298,9 +304,9 @@ export default function ImportPage() {
                 <TableBody>
                   {previewRows.map((row, ri) => (
                     <TableRow key={ri}>
-                      {headers.map((_, ci) => {
-                        const mapped = columnMap[ci];
-                        if (!mapped || mapped === '__skip__') return null;
+                      {Object.keys(uploadData.header_mapping).map((h, ci) => {
+                        const mapped = columnMap[h];
+                        if (!mapped || mapped === '__skip__' || mapped.startsWith('_')) return null;
                         return <TableCell key={ci} className="text-sm">{row[ci] || '—'}</TableCell>;
                       })}
                     </TableRow>
@@ -310,24 +316,16 @@ export default function ImportPage() {
             </CardContent>
           </Card>
 
-          <div className="text-sm text-muted-foreground">
-            <p>Total rows: <strong>{rows.length.toLocaleString()}</strong></p>
-            <p>Mapped fields: <strong>{mappedCount}</strong></p>
-          </div>
-
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(2)}>← Back</Button>
-            <Button onClick={() => importMutation.mutate()} disabled={importMutation.isPending}>
-              {importMutation.isPending ? 'Importing...' : `Import ${rows.length.toLocaleString()} Contacts`}
+            <Button onClick={() => executeMutation.mutate()} disabled={executeMutation.isPending}>
+              {executeMutation.isPending ? 'Importing...' : `Import ${uploadData.row_count.toLocaleString()} Contacts`}
             </Button>
           </div>
 
-          {importMutation.isPending && (
+          {executeMutation.isPending && (
             <div className="w-full bg-muted rounded-full h-2">
-              <div
-                className="bg-primary h-2 rounded-full transition-all"
-                style={{ width: `${progress}%` }}
-              />
+              <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
             </div>
           )}
         </div>
@@ -337,13 +335,13 @@ export default function ImportPage() {
       {step === 4 && result && (
         <Card>
           <CardHeader>
-            <CardTitle>Import Complete!</CardTitle>
+            <CardTitle>Import Complete! ✅</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-2 gap-4 text-center">
               <div className="p-4 bg-green-50 rounded-lg">
                 <p className="text-2xl font-bold text-green-700">{result.imported_count}</p>
-                <p className="text-sm text-green-600">Imported</p>
+                <p className="text-sm text-green-600">Created</p>
               </div>
               <div className="p-4 bg-blue-50 rounded-lg">
                 <p className="text-2xl font-bold text-blue-700">{result.updated_count}</p>
@@ -351,14 +349,14 @@ export default function ImportPage() {
               </div>
               <div className="p-4 bg-yellow-50 rounded-lg">
                 <p className="text-2xl font-bold text-yellow-700">{result.skipped_count}</p>
-                <p className="text-sm text-yellow-600">Skipped</p>
+                <p className="text-sm text-yellow-600">Skipped (dupes/no email)</p>
               </div>
               <div className="p-4 bg-red-50 rounded-lg">
                 <p className="text-2xl font-bold text-red-700">{result.error_count}</p>
                 <p className="text-sm text-red-600">Errors</p>
               </div>
             </div>
-            <Button onClick={() => { setStep(1); setFile(null); setResult(null); }}>
+            <Button onClick={() => { setStep(1); setFile(null); setResult(null); setUploadData(null); }}>
               Import More
             </Button>
           </CardContent>

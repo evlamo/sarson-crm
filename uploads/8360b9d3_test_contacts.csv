@@ -1,0 +1,6 @@
+First Name,Last Name,Email Address,Mobile,Job Title,Organization,City,State,Country,Status,Last Contacted,Contacted,LinkedIn,Notes
+JOHN,DOE,john.doe@test.com,(312) 555-1234,VP Sales,Acme Corp,Chicago,IL,USA,Hot Lead,01/15/2024,yes,https://linkedin.com/in/johndoe,=SUM() test injection
+jane,SMITH,jane.smith@test.com,555-867-5309,CTO,TechCo,NYC,NY,United States,active,2024-06-15,no,,Regular note
+Bob,Johnson,bob.j@test.com,+44 20 7946 0958,Analyst,FinServ Ltd,London,,UK,cold,Jan 5 2024,true,,
+No Email,Person,,123-456-7890,,,,,,,,,,
+Dupe,Test,john.doe@test.com,,,,,,,,,,,Should be skipped
