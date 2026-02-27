@@ -1,0 +1,11 @@
+Sheet imported from,Tab,VC/Company,First,Last,Middle,Position,Email,email domain,Phone,Website,Contact URL,SF Rep,Sales Rep,Notes,Last Contact,Next Step,Flw Up Date,Contact Type,Contacted,Status,Source
+Investors Sheet,LP Contacts,Acme Capital,John,Doe,M,Managing Director,john.doe@acme.com,acme.com,555-0101,https://acme.com,https://linkedin.com/in/johndoe,Evan,Mike Smith,Met at conference,01/15/2026,Schedule follow-up,02/28/2026,Investor,YES,active,Event
+Investors Sheet,LP Contacts,Acme Capital,Jane,Smith,,Partner,jane.smith@acme.com,acme.com,555-0102,https://acme.com,https://linkedin.com/in/janesmith,Evan,,Initial outreach,2026-01-20,Send deck,3/15/2026,Investor,,active,Referral
+Advisors Sheet,Advisors,Beta Fund,Bob,Johnson,A,Analyst,bob.j@betafund.io,betafund.io,555-0201,https://betafund.io,,Sarah,Tom Jones,Warm intro from Jane,,Call next week,,Advisor,YES,active,Inbound
+Advisors Sheet,Advisors,Beta Fund,Alice,Williams,,VP,alice.w@betafund.io,betafund.io,555-0202,https://betafund.io,https://linkedin.com/in/alicew,Sarah,,,,Send materials,04/01/2026,,,prospect,Event
+Partners Sheet,VC,Gamma Ventures,Charlie,Brown,,CEO,charlie@gamma.vc,,555-0301,https://gamma.vc,,,,,12/01/2025,Intro meeting,01/15/2026,,YES,active,Inbound
+Partners Sheet,VC,Gamma Ventures,Diana,Prince,,COO,diana@gamma.vc,,555-0302,,,Evan,Lisa Park,Key relationship,11/15/2025,,02/01/2026,,,active,Referral
+Investors Sheet,Family Office,Delta Holdings,Eve,Torres,R,Director,eve.torres@delta.co,delta.co,555-0401,https://delta.co,https://linkedin.com/in/evetorres,Evan,,New contact,,,,,YES,prospect,Event
+Investors Sheet,Family Office,,Frank,Garcia,,Consultant,frank.garcia@gmail.com,,555-0501,,,,,,01/05/2026,Email intro,,Consultant,,active,Inbound
+Advisors Sheet,Legal,,,,,,,,,,,,,,,,,,,
+Partners Sheet,VC,Epsilon LP,Grace,Lee,,Managing Partner,grace.lee@epsilon.com,epsilon.com,555-0601,https://epsilon.com,https://linkedin.com/in/gracelee,Sarah,Dan White,Top prospect,02/01/2026,Due diligence,03/01/2026,,YES,active,Referral
