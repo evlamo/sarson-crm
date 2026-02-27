@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, UserPlus, Tag, Download } from 'lucide-react';
+import { Search, UserPlus, Tag, Download, Trash2, X } from 'lucide-react';
 
 // ─── Add Contact Modal ────────────────────────────────────────────────────────
 const EMPTY_FORM = {
@@ -644,8 +644,47 @@ function exportToCSV(contacts: Contact[]) {
   URL.revokeObjectURL(url);
 }
 
+// ─── useWindowWidth ───────────────────────────────────────────────────────────
+function useWindowWidth() {
+  const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
+  useEffect(() => {
+    const handler = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return width;
+}
+
+// ─── Delete Confirmation Dialog ───────────────────────────────────────────────
+function DeleteConfirmDialog({
+  open, count, onConfirm, onCancel, isPending,
+}: { open: boolean; count: number; onConfirm: () => void; onCancel: () => void; isPending: boolean }) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <Trash2 className="h-5 w-5" /> Delete {count} Contact{count !== 1 ? 's' : ''}?
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          This will permanently remove {count === 1 ? 'this contact' : `these ${count} contacts`} from the CRM. This action cannot be undone.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={isPending}>Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
+            {isPending ? 'Deleting...' : `Delete ${count} Contact${count !== 1 ? 's' : ''}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function ContactsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const windowWidth = useWindowWidth();
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
   const [search, setSearch] = useState('');
@@ -656,6 +695,28 @@ export default function ContactsPage() {
   const [salesRepFilter, setSalesRepFilter] = useState<string>('');
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [tagModalOpen, setTagModalOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Responsive column visibility
+  const columnVisibility = useMemo(() => ({
+    title:            windowWidth >= 1280,
+    phone:            windowWidth >= 1280,
+    last_contacted_at: windowWidth >= 1024,
+    next_step:        windowWidth >= 1024,
+    sarson_rep:       windowWidth >= 768,
+  }), [windowWidth]);
+
+  // Bulk delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) => api.delete(`/contacts/${id}`)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      setRowSelection({});
+      setDeleteOpen(false);
+    },
+  });
 
   // Debounced search — 300ms
   useEffect(() => {
@@ -725,25 +786,49 @@ export default function ContactsPage() {
         size: 40,
       },
       {
-        accessorKey: 'first_name',
-        header: 'First Name',
-        size: 130,
-        cell: ({ row }) => (
-          <span className="font-medium">{row.original.first_name || '—'}</span>
+        id: 'full_name',
+        header: 'Name',
+        size: 180,
+        enableSorting: true,
+        cell: ({ row }) => {
+          const first = row.original.first_name || '';
+          const last = row.original.last_name || '';
+          const name = [first, last].filter(Boolean).join(' ') || '—';
+          return <span className="font-medium text-foreground">{name}</span>;
+        },
+      },
+      {
+        accessorKey: 'company_name',
+        header: 'Company',
+        size: 160,
+        cell: ({ getValue }) => (
+          <span className="text-foreground/80">{getValue<string | null>() || '—'}</span>
         ),
       },
       {
-        accessorKey: 'last_name',
-        header: 'Last Name',
-        size: 130,
-        cell: ({ row }) => (
-          <span className="font-medium">{row.original.last_name || '—'}</span>
+        accessorKey: 'title',
+        header: 'Position',
+        size: 150,
+        cell: ({ getValue }) => (
+          <span className="text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
         ),
       },
-      { accessorKey: 'company_name', header: 'Company', size: 150, cell: ({ getValue }) => getValue<string | null>() || '—' },
-      { accessorKey: 'title', header: 'Position', size: 140 },
-      { accessorKey: 'email', header: 'Email', size: 200 },
-      { accessorKey: 'phone', header: 'Phone', size: 120 },
+      {
+        accessorKey: 'email',
+        header: 'Email',
+        size: 210,
+        cell: ({ getValue }) => (
+          <span className="text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
+        ),
+      },
+      {
+        accessorKey: 'phone',
+        header: 'Phone',
+        size: 130,
+        cell: ({ getValue }) => (
+          <span className="text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
+        ),
+      },
       {
         accessorKey: 'last_contacted_at',
         header: 'Last Contact',
@@ -756,17 +841,16 @@ export default function ContactsPage() {
         size: 200,
         cell: ({ row }) => <InlineNextStep contact={row.original} />,
       },
-
       {
         accessorKey: 'sarson_rep',
         header: 'Sales Rep',
-        size: 160,
+        size: 150,
         cell: ({ row }) => <InlineSalesRep contact={row.original} />,
       },
       {
         accessorKey: 'status',
         header: 'Status',
-        size: 120,
+        size: 130,
         cell: ({ row }) => <InlineStatus contact={row.original} />,
       },
     ],
@@ -776,7 +860,7 @@ export default function ContactsPage() {
   const table = useReactTable({
     data: data?.data || [],
     columns,
-    state: { sorting, rowSelection },
+    state: { sorting, rowSelection, columnVisibility },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
@@ -792,39 +876,52 @@ export default function ContactsPage() {
   const startItem = total > 0 ? (page - 1) * limit + 1 : 0;
   const endItem = Math.min(page * limit, total);
 
+  const selectedContacts = table.getSelectedRowModel().rows.map((r) => r.original);
+  const selectedIds = selectedContacts.map((c) => c.id);
+
   return (
     <div className="space-y-4">
       <AddContactModal open={addContactOpen} onClose={() => setAddContactOpen(false)} />
+      <TagModal
+        open={tagModalOpen}
+        onClose={() => { setTagModalOpen(false); setRowSelection({}); }}
+        contactIds={selectedIds}
+      />
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        count={selectedCount}
+        onConfirm={() => deleteMutation.mutate(selectedIds)}
+        onCancel={() => setDeleteOpen(false)}
+        isPending={deleteMutation.isPending}
+      />
 
-      {/* Header */}
+      {/* Header row */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Contacts</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {total > 0 ? `Showing ${startItem}–${endItem} of ${total.toLocaleString()} contacts` : 'No contacts'}
+            {total > 0 ? `${total.toLocaleString()} contacts` : 'No contacts'}
           </p>
         </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Button onClick={() => setAddContactOpen(true)} className="gap-2 shrink-0">
+        <Button onClick={() => setAddContactOpen(true)} className="gap-2">
           <UserPlus className="h-4 w-4" />
           Add Contact
         </Button>
+      </div>
 
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap pb-2 border-b">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search contacts..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-72 pl-9"
+            className="w-64 pl-9"
           />
         </div>
-
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-36 h-9">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -834,104 +931,126 @@ export default function ContactsPage() {
             ))}
           </SelectContent>
         </Select>
-
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            value={salesRepFilter}
-            onChange={(e) => { setSalesRepFilter(e.target.value); setPage(1); }}
-            placeholder="Filter by rep..."
-            className="pl-8 pr-3 h-9 w-40 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
+        <Input
+          value={salesRepFilter}
+          onChange={(e) => { setSalesRepFilter(e.target.value); setPage(1); }}
+          placeholder="Filter by rep..."
+          className="w-36 h-9"
+        />
+        <span className="text-xs text-muted-foreground ml-auto">
+          {total > 0 ? `${startItem}–${endItem} of ${total.toLocaleString()}` : ''}
+        </span>
       </div>
 
-      {/* Bulk actions bar */}
-      {selectedCount > 0 && (() => {
-        const selectedContacts = table.getSelectedRowModel().rows.map((r) => r.original);
-        const selectedIds = selectedContacts.map((c) => c.id);
-        return (
-          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-            <span className="text-sm font-medium">{selectedCount} selected</span>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setTagModalOpen(true)}>
-              <Tag className="h-3.5 w-3.5" /> Add Tag
-            </Button>
-            <Button variant="outline" size="sm">Assign</Button>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => exportToCSV(selectedContacts)}>
-              <Download className="h-3.5 w-3.5" /> Export CSV
-            </Button>
-            <TagModal
-              open={tagModalOpen}
-              onClose={() => { setTagModalOpen(false); setRowSelection({}); }}
-              contactIds={selectedIds}
-            />
-          </div>
-        );
-      })()}
+      {/* Bulk action bar — floats when rows selected */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
+          <span className="text-sm font-medium text-primary">{selectedCount} selected</span>
+          <div className="h-4 w-px bg-border mx-1" />
+          <Button variant="outline" size="sm" className="gap-1.5 h-7" onClick={() => setTagModalOpen(true)}>
+            <Tag className="h-3 w-3" /> Tag
+          </Button>
+          <Button variant="outline" size="sm" className="h-7">Assign</Button>
+          <Button variant="outline" size="sm" className="gap-1.5 h-7" onClick={() => exportToCSV(selectedContacts)}>
+            <Download className="h-3 w-3" /> Export
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            className="gap-1.5 h-7 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="h-3 w-3" /> Delete
+          </Button>
+          <Button
+            variant="ghost" size="sm"
+            className="h-7 w-7 p-0 ml-auto text-muted-foreground"
+            onClick={() => setRowSelection({})}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
 
       {/* Table */}
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id}>
-                {hg.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className={cn(
-                      header.column.getCanSort() ? 'cursor-pointer select-none' : '',
-                      'whitespace-nowrap'
-                    )}
-                    onClick={header.column.getToggleSortingHandler()}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getIsSorted() === 'asc' && <span className="text-primary">↑</span>}
-                      {header.column.getIsSorted() === 'desc' && <span className="text-primary">↓</span>}
-                    </span>
-                  </TableHead>
-                ))}
+              <TableRow key={hg.id} className="bg-muted/40 hover:bg-muted/40">
+                {hg.headers.map((header) => {
+                  const isStatus = header.column.id === 'status';
+                  const isSelect = header.column.id === 'select';
+                  return (
+                    <TableHead
+                      key={header.id}
+                      className={cn(
+                        header.column.getCanSort() ? 'cursor-pointer select-none' : '',
+                        'whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground',
+                        isStatus && 'sticky right-0 z-10 bg-muted/40 border-l',
+                        isSelect && 'sticky left-0 z-10 bg-muted/40',
+                      )}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getIsSorted() === 'asc' && <span className="text-primary">↑</span>}
+                        {header.column.getIsSorted() === 'desc' && <span className="text-primary">↓</span>}
+                      </span>
+                    </TableHead>
+                  );
+                })}
               </TableRow>
             ))}
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
+              Array.from({ length: 10 }).map((_, i) => (
                 <TableRow key={i}>
-                  {columns.map((_, j) => (
-                    <TableCell key={j}>
-                      <div className="h-4 bg-muted rounded animate-pulse" style={{ width: `${50 + Math.random() * 50}%` }} />
+                  {table.getVisibleLeafColumns().map((col) => (
+                    <TableCell key={col.id}>
+                      <div className="h-4 bg-muted rounded animate-pulse" style={{ width: `${50 + (i * 13 % 50)}%` }} />
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : !table.getRowModel().rows.length ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="text-center py-12">
-                  <div className="text-muted-foreground">
-                    <p className="text-base font-medium">
-                      {search ? 'No contacts match your search' : 'No contacts found'}
-                    </p>
-                    <p className="text-sm mt-1">
-                      {search ? 'Try adjusting your search or filters' : 'Import contacts to get started'}
-                    </p>
-                  </div>
+                <TableCell colSpan={table.getVisibleLeafColumns().length} className="text-center py-16">
+                  <p className="text-base font-medium text-muted-foreground">
+                    {search ? 'No contacts match your search' : 'No contacts found'}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {search ? 'Try adjusting your filters' : 'Add a contact to get started'}
+                  </p>
                 </TableCell>
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="cursor-pointer hover:bg-muted/30 transition-colors h-[52px]"
                   onClick={() => navigate({ to: '/contacts/$contactId', params: { contactId: row.original.id } })}
                   data-state={row.getIsSelected() ? 'selected' : undefined}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} onClick={cell.column.id === 'select' ? (e: React.MouseEvent) => e.stopPropagation() : undefined}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const isStatus = cell.column.id === 'status';
+                    const isSelect = cell.column.id === 'select';
+                    const isInteractive = ['select','status','next_step','sarson_rep','last_contacted_at'].includes(cell.column.id);
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          'py-3',
+                          isStatus && 'sticky right-0 z-10 bg-background border-l',
+                          isSelect && 'sticky left-0 z-10 bg-background',
+                          row.getIsSelected() && (isStatus || isSelect) && 'bg-muted',
+                        )}
+                        onClick={isInteractive ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             )}
@@ -940,25 +1059,15 @@ export default function ContactsPage() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-1">
         <span className="text-sm text-muted-foreground">
           {total > 0 ? `Page ${page} of ${totalPages}` : ''}
         </span>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             Previous
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
+          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
             Next
           </Button>
         </div>
