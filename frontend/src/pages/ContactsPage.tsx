@@ -786,16 +786,20 @@ export default function ContactsPage() {
         size: 40,
       },
       {
-        id: 'full_name',
-        header: 'Name',
-        size: 180,
-        enableSorting: true,
-        cell: ({ row }) => {
-          const first = row.original.first_name || '';
-          const last = row.original.last_name || '';
-          const name = [first, last].filter(Boolean).join(' ') || '—';
-          return <span className="font-medium text-foreground">{name}</span>;
-        },
+        accessorKey: 'first_name',
+        header: 'First Name',
+        size: 130,
+        cell: ({ row }) => (
+          <span className="font-medium text-foreground">{row.original.first_name || '—'}</span>
+        ),
+      },
+      {
+        accessorKey: 'last_name',
+        header: 'Last Name',
+        size: 130,
+        cell: ({ row }) => (
+          <span className="font-medium text-foreground">{row.original.last_name || '—'}</span>
+        ),
       },
       {
         accessorKey: 'company_name',
