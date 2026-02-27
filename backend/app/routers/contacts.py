@@ -163,6 +163,12 @@ def create_contact(
 ):
     """Create a contact. email_domain is auto-extracted from email via model event."""
     data = payload.model_dump(exclude_unset=True)
+    # Map schema field names → model column names
+    if 'source' in data:
+        data['lead_source'] = data.pop('source')
+    # Strip any keys that don't exist on the model to prevent TypeError
+    valid_cols = {c.key for c in Contact.__table__.columns}
+    data = {k: v for k, v in data.items() if k in valid_cols}
     contact = Contact(**data)
     db.add(contact)
     db.commit()
@@ -182,9 +188,11 @@ def update_contact(
 ):
     """Full update of a contact."""
     contact = _get_contact_or_404(contact_id, db)
-
+    valid_cols = {c.key for c in Contact.__table__.columns}
     for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(contact, field, value)
+        key = 'lead_source' if field == 'source' else field
+        if key in valid_cols:
+            setattr(contact, key, value)
 
     contact.updated_at = datetime.utcnow()
     db.commit()
@@ -203,9 +211,11 @@ def patch_contact(
 ):
     """Partial update — only provided fields are changed."""
     contact = _get_contact_or_404(contact_id, db)
-
+    valid_cols = {c.key for c in Contact.__table__.columns}
     for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(contact, field, value)
+        key = 'lead_source' if field == 'source' else field
+        if key in valid_cols:
+            setattr(contact, key, value)
 
     contact.updated_at = datetime.utcnow()
     db.commit()
