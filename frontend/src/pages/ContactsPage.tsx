@@ -188,15 +188,9 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
                   onChange={set('status')}
                   className="w-full h-9 px-3 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  <option value="active">Active</option>
-                  <option value="prospect">Prospect</option>
-                  <option value="lead">Lead</option>
-                  <option value="hot">Hot</option>
-                  <option value="cold">Cold</option>
-                  <option value="customer">Customer</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="unsubscribed">Unsubscribed</option>
-                  <option value="do_not_contact">Do Not Contact</option>
+                  {STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
                 </select>
               </div>
               {field('Source', 'source', { placeholder: 'Conference, referral...' })}
@@ -456,17 +450,49 @@ function InlineSalesRep({ contact }: { contact: Contact }) {
   );
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  active: 'bg-green-100 text-green-800',
-  inactive: 'bg-gray-100 text-gray-800',
-  do_not_contact: 'bg-red-100 text-red-800',
-  unsubscribed: 'bg-yellow-100 text-yellow-800',
-  hot: 'bg-orange-100 text-orange-800',
-  cold: 'bg-blue-100 text-blue-800',
-  prospect: 'bg-purple-100 text-purple-800',
-  lead: 'bg-indigo-100 text-indigo-800',
-  customer: 'bg-emerald-100 text-emerald-800',
-};
+const STATUSES = [
+  { value: 'hot',       label: 'Hot',              classes: 'bg-red-100 text-red-800 border-red-200' },
+  { value: 'warm',      label: 'Warm',             classes: 'bg-orange-100 text-orange-800 border-orange-200' },
+  { value: 'prospect',  label: 'Prospect',         classes: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+  { value: 'cold',      label: 'Cold',             classes: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { value: 'poc',       label: 'POC',              classes: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { value: 'active',    label: 'Active',           classes: 'bg-green-100 text-green-800 border-green-200' },
+  { value: 'na',        label: 'N/A',              classes: 'bg-gray-100 text-gray-600 border-gray-200' },
+];
+
+const STATUS_MAP = Object.fromEntries(STATUSES.map((s) => [s.value, s]));
+
+// Fallback for any legacy status values in the DB
+const getStatusMeta = (val: string) =>
+  STATUS_MAP[val] ?? { label: val, classes: 'bg-gray-100 text-gray-600 border-gray-200' };
+
+function InlineStatus({ contact }: { contact: Contact }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: async (value: string) => {
+      await api.patch(`/contacts/${contact.id}`, { status: value });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
+    },
+  });
+
+  const meta = getStatusMeta(contact.status);
+
+  return (
+    <select
+      value={contact.status}
+      onChange={(e) => { e.stopPropagation(); mutation.mutate(e.target.value); }}
+      onClick={(e) => e.stopPropagation()}
+      className={`text-xs font-medium px-2 py-0.5 rounded-full border cursor-pointer appearance-none text-center w-full ${meta.classes} ${mutation.isPending ? 'opacity-60' : ''}`}
+    >
+      {STATUSES.map((s) => (
+        <option key={s.value} value={s.value}>{s.label}</option>
+      ))}
+    </select>
+  );
+}
 
 export default function ContactsPage() {
   const navigate = useNavigate();
@@ -589,15 +615,8 @@ export default function ContactsPage() {
       {
         accessorKey: 'status',
         header: 'Status',
-        size: 100,
-        cell: ({ getValue }) => {
-          const s = getValue<string>();
-          return (
-            <Badge variant="secondary" className={STATUS_COLORS[s] || 'bg-gray-100 text-gray-800'}>
-              {s}
-            </Badge>
-          );
-        },
+        size: 120,
+        cell: ({ row }) => <InlineStatus contact={row.original} />,
       },
     ],
     []
@@ -659,13 +678,9 @@ export default function ContactsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-            <SelectItem value="hot">Hot</SelectItem>
-            <SelectItem value="cold">Cold</SelectItem>
-            <SelectItem value="prospect">Prospect</SelectItem>
-            <SelectItem value="do_not_contact">Do Not Contact</SelectItem>
-            <SelectItem value="unsubscribed">Unsubscribed</SelectItem>
+            {STATUSES.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
