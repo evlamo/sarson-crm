@@ -15,6 +15,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -30,7 +38,219 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search } from 'lucide-react';
+import { Search, UserPlus } from 'lucide-react';
+
+// ─── Add Contact Modal ────────────────────────────────────────────────────────
+const EMPTY_FORM = {
+  first_name: '',
+  last_name: '',
+  company: '',
+  email: '',
+  // optional
+  middle_name: '',
+  title: '',
+  phone: '',
+  status: 'active',
+  source: '',
+  sarson_rep: '',
+  sales_rep: '',
+  next_step: '',
+  follow_up_date: '',
+  last_contacted_at: '',
+  notes: '',
+  linkedin_url: '',
+  website: '',
+  city: '',
+  state: '',
+  country: '',
+};
+
+type FormState = typeof EMPTY_FORM;
+
+function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+
+  const set = (field: keyof FormState) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const mutation = useMutation({
+    mutationFn: async (payload: Partial<FormState>) => {
+      const res = await api.post('/contacts', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      setForm(EMPTY_FORM);
+      setErrors({});
+      onClose();
+    },
+  });
+
+  const validate = () => {
+    const e: Partial<Record<keyof FormState, string>> = {};
+    if (!form.first_name.trim()) e.first_name = 'Required';
+    if (!form.last_name.trim()) e.last_name = 'Required';
+    if (!form.company.trim()) e.company = 'Required';
+    if (!form.email.trim()) e.email = 'Required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+    const payload: Partial<FormState> = {};
+    (Object.keys(form) as (keyof FormState)[]).forEach((k) => {
+      const v = form[k];
+      if (v !== '') (payload as Record<string, unknown>)[k] = v;
+    });
+    mutation.mutate(payload);
+  };
+
+  const handleClose = () => {
+    setForm(EMPTY_FORM);
+    setErrors({});
+    onClose();
+  };
+
+  const field = (
+    label: string,
+    key: keyof FormState,
+    opts?: { required?: boolean; type?: string; placeholder?: string }
+  ) => (
+    <div className="space-y-1">
+      <Label htmlFor={key} className="text-sm font-medium">
+        {label}{opts?.required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <Input
+        id={key}
+        type={opts?.type || 'text'}
+        value={form[key]}
+        onChange={set(key)}
+        placeholder={opts?.placeholder || ''}
+        className={errors[key] ? 'border-destructive focus-visible:ring-destructive' : ''}
+      />
+      {errors[key] && <p className="text-xs text-destructive">{errors[key]}</p>}
+    </div>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5" />
+            Add New Contact
+          </DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Required fields */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Required</p>
+            <div className="grid grid-cols-2 gap-4">
+              {field('First Name', 'first_name', { required: true, placeholder: 'John' })}
+              {field('Last Name', 'last_name', { required: true, placeholder: 'Smith' })}
+              {field('Company', 'company', { required: true, placeholder: 'Acme Capital' })}
+              {field('Email', 'email', { required: true, type: 'email', placeholder: 'john@acme.com' })}
+            </div>
+          </div>
+
+          {/* Contact details */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Contact Details</p>
+            <div className="grid grid-cols-2 gap-4">
+              {field('Middle Name', 'middle_name')}
+              {field('Position / Title', 'title', { placeholder: 'Portfolio Manager' })}
+              {field('Phone', 'phone', { type: 'tel', placeholder: '+1 (312) 555-0100' })}
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Status</Label>
+                <select
+                  value={form.status}
+                  onChange={set('status')}
+                  className="w-full h-9 px-3 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="active">Active</option>
+                  <option value="prospect">Prospect</option>
+                  <option value="lead">Lead</option>
+                  <option value="hot">Hot</option>
+                  <option value="cold">Cold</option>
+                  <option value="customer">Customer</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="unsubscribed">Unsubscribed</option>
+                  <option value="do_not_contact">Do Not Contact</option>
+                </select>
+              </div>
+              {field('Source', 'source', { placeholder: 'Conference, referral...' })}
+            </div>
+          </div>
+
+          {/* Assignment */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Assignment</p>
+            <div className="grid grid-cols-2 gap-4">
+              {field('Sales Rep', 'sarson_rep', { placeholder: 'Internal team member' })}
+              {field('External Sales Rep', 'sales_rep', { placeholder: 'External partner' })}
+              {field('Next Step', 'next_step', { placeholder: 'Schedule intro call...' })}
+              {field('Follow-up Date', 'follow_up_date', { type: 'date' })}
+              {field('Last Contacted', 'last_contacted_at', { type: 'date' })}
+            </div>
+          </div>
+
+          {/* Online presence */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Online</p>
+            <div className="grid grid-cols-2 gap-4">
+              {field('LinkedIn URL', 'linkedin_url', { placeholder: 'https://linkedin.com/in/...' })}
+              {field('Website', 'website', { placeholder: 'https://...' })}
+            </div>
+          </div>
+
+          {/* Location */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Location</p>
+            <div className="grid grid-cols-3 gap-4">
+              {field('City', 'city', { placeholder: 'Chicago' })}
+              {field('State', 'state', { placeholder: 'IL' })}
+              {field('Country', 'country', { placeholder: 'US' })}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Notes</p>
+            <div className="space-y-1">
+              <textarea
+                value={form.notes}
+                onChange={set('notes')}
+                placeholder="Any context, background, how you met..."
+                rows={3}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Saving...' : 'Add Contact'}
+            </Button>
+          </DialogFooter>
+
+          {mutation.isError && (
+            <p className="text-sm text-destructive text-center">
+              Failed to save — please check the fields and try again.
+            </p>
+          )}
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // Inline editable Last Contact cell — date picker
 function InlineLastContact({ contact }: { contact: Contact }) {
@@ -249,6 +469,7 @@ export default function ContactsPage() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [salesRepFilter, setSalesRepFilter] = useState<string>('');
+  const [addContactOpen, setAddContactOpen] = useState(false);
 
   // Debounced search — 300ms
   useEffect(() => {
@@ -395,6 +616,8 @@ export default function ContactsPage() {
 
   return (
     <div className="space-y-4">
+      <AddContactModal open={addContactOpen} onClose={() => setAddContactOpen(false)} />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -407,6 +630,11 @@ export default function ContactsPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
+        <Button onClick={() => setAddContactOpen(true)} className="gap-2 shrink-0">
+          <UserPlus className="h-4 w-4" />
+          Add Contact
+        </Button>
+
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
