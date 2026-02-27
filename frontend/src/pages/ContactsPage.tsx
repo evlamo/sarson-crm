@@ -38,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, UserPlus } from 'lucide-react';
+import { Search, UserPlus, Tag, Download } from 'lucide-react';
 
 // ─── Add Contact Modal ────────────────────────────────────────────────────────
 const EMPTY_FORM = {
@@ -496,6 +496,154 @@ function InlineStatus({ contact }: { contact: Contact }) {
   );
 }
 
+// ─── Tag Modal ────────────────────────────────────────────────────────────────
+function TagModal({ open, onClose, contactIds }: { open: boolean; onClose: () => void; contactIds: string[] }) {
+  const queryClient = useQueryClient();
+  const [newTagName, setNewTagName] = useState('');
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: existingTags = [] } = useQuery<{ id: string; name: string; color: string }[]>({
+    queryKey: ['tags'],
+    queryFn: async () => { const r = await api.get('/tags'); return r.data; },
+    enabled: open,
+  });
+
+  const createTagMutation = useMutation({
+    mutationFn: async (name: string) => { const r = await api.post('/tags', { name }); return r.data; },
+    onSuccess: (tag) => {
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+      setSelectedTagIds((prev) => [...prev, tag.id]);
+      setNewTagName('');
+    },
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: async () => {
+      await api.post('/contacts/bulk', { ids: contactIds, tag_ids: selectedTagIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      setSelectedTagIds([]);
+      setNewTagName('');
+      onClose();
+    },
+  });
+
+  const toggleTag = (id: string) =>
+    setSelectedTagIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+
+  const handleCreateTag = () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    createTagMutation.mutate(name);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            Add Tags — {contactIds.length} contact{contactIds.length !== 1 ? 's' : ''}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Create new tag */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Create New Tag</p>
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateTag(); } }}
+                placeholder="Tag name..."
+                className="flex-1"
+              />
+              <Button size="sm" onClick={handleCreateTag} disabled={!newTagName.trim() || createTagMutation.isPending}>
+                Create
+              </Button>
+            </div>
+          </div>
+
+          {/* Existing tags */}
+          {existingTags.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Add Existing Tag</p>
+              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
+                {existingTags.map((tag) => {
+                  const selected = selectedTagIds.includes(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => toggleTag(tag.id)}
+                      className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                        selected
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background border-border hover:bg-muted'
+                      }`}
+                    >
+                      {tag.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={() => applyMutation.mutate()}
+            disabled={selectedTagIds.length === 0 || applyMutation.isPending}
+          >
+            {applyMutation.isPending ? 'Applying...' : `Apply to ${contactIds.length} contact${contactIds.length !== 1 ? 's' : ''}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+function exportToCSV(contacts: Contact[]) {
+  const headers = [
+    'First Name', 'Last Name', 'Email', 'Phone', 'Company', 'Title',
+    'Status', 'Sales Rep', 'Next Step', 'Last Contacted', 'Source', 'City', 'State', 'Country',
+  ];
+  const rows = contacts.map((c) => [
+    c.first_name || '',
+    c.last_name || '',
+    c.email || '',
+    c.phone || '',
+    c.company_name || c.company || '',
+    c.title || '',
+    c.status || '',
+    c.sarson_rep || '',
+    c.next_step || '',
+    c.last_contacted_at ? new Date(c.last_contacted_at).toLocaleDateString() : '',
+    c.source || '',
+    c.city || '',
+    c.state || '',
+    c.country || '',
+  ]);
+
+  const csv = [headers, ...rows]
+    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `contacts-export-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ContactsPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -507,6 +655,7 @@ export default function ContactsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [salesRepFilter, setSalesRepFilter] = useState<string>('');
   const [addContactOpen, setAddContactOpen] = useState(false);
+  const [tagModalOpen, setTagModalOpen] = useState(false);
 
   // Debounced search — 300ms
   useEffect(() => {
@@ -699,15 +848,27 @@ export default function ContactsPage() {
       </div>
 
       {/* Bulk actions bar */}
-      {selectedCount > 0 && (
-        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-          <span className="text-sm font-medium">{selectedCount} selected</span>
-          <Button variant="outline" size="sm">Add Tag</Button>
-          <Button variant="outline" size="sm">Assign</Button>
-          <Button variant="outline" size="sm">Export</Button>
-          <Button variant="destructive" size="sm">Delete</Button>
-        </div>
-      )}
+      {selectedCount > 0 && (() => {
+        const selectedContacts = table.getSelectedRowModel().rows.map((r) => r.original);
+        const selectedIds = selectedContacts.map((c) => c.id);
+        return (
+          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+            <span className="text-sm font-medium">{selectedCount} selected</span>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setTagModalOpen(true)}>
+              <Tag className="h-3.5 w-3.5" /> Add Tag
+            </Button>
+            <Button variant="outline" size="sm">Assign</Button>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => exportToCSV(selectedContacts)}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </Button>
+            <TagModal
+              open={tagModalOpen}
+              onClose={() => { setTagModalOpen(false); setRowSelection({}); }}
+              contactIds={selectedIds}
+            />
+          </div>
+        );
+      })()}
 
       {/* Table */}
       <div className="rounded-md border">
