@@ -42,11 +42,14 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <aside className="w-56 border-r bg-card flex flex-col shrink-0">
-        <div className="h-14 flex items-center px-4 border-b">
-          <Link to="/" className="font-bold text-lg tracking-tight">
-            Sarson Funds <span className="text-muted-foreground font-normal text-sm">CRM</span>
+      {/* Sidebar — Sarson Navy */}
+      <aside className="w-56 bg-[#253a52] flex flex-col shrink-0">
+        <div className="h-14 flex items-center gap-2.5 px-4 border-b border-white/10">
+          <div className="w-7 h-7 rounded bg-white/15 flex items-center justify-center text-white text-xs font-bold shrink-0">
+            SF
+          </div>
+          <Link to="/" className="font-semibold text-sm text-white tracking-tight leading-tight">
+            Sarson Funds <span className="text-white/60 font-normal text-xs">CRM</span>
           </Link>
         </div>
         <nav className="flex-1 py-3 px-2 space-y-0.5">
@@ -60,8 +63,8 @@ export default function Layout() {
                 className={cn(
                   'flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors',
                   isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    ? 'bg-[#2b5570] text-white'
+                    : 'text-white/70 hover:text-white hover:bg-[#2b5570]/60'
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -71,8 +74,8 @@ export default function Layout() {
           })}
           {isAdmin && (
             <>
-              <div className="my-2 mx-3 border-t" />
-              <p className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin</p>
+              <div className="my-2 mx-3 border-t border-white/10" />
+              <p className="px-3 py-1 text-xs font-semibold text-white/50 uppercase tracking-wider">Admin</p>
               {adminItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.to || location.pathname.startsWith(item.to + '/');
@@ -83,8 +86,8 @@ export default function Layout() {
                     className={cn(
                       'flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors',
                       isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        ? 'bg-[#2b5570] text-white'
+                        : 'text-white/70 hover:text-white hover:bg-[#2b5570]/60'
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -95,10 +98,10 @@ export default function Layout() {
             </>
           )}
         </nav>
-        <div className="border-t p-3">
+        <div className="border-t border-white/10 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground truncate">{user?.name}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={logout} title="Sign Out">
+            <span className="text-sm text-white/60 truncate">{user?.name}</span>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10" onClick={logout} title="Sign Out">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
