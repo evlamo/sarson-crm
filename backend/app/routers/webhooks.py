@@ -328,7 +328,14 @@ async def mailchimp_webhook(request: Request):
     """
     Receives Mailchimp webhook POST events.
     Events: subscribe, unsubscribe, cleaned, campaign (status change).
+    Mailchimp webhooks include a secret key in the URL as a query param for verification.
     """
+    # Optional: verify webhook secret via query param
+    webhook_secret = request.query_params.get("secret", "")
+    expected_secret = settings.mailchimp_api_key[:16] if settings.mailchimp_api_key else ""
+    if settings.environment == "production" and expected_secret and webhook_secret != expected_secret:
+        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+
     try:
         data = await request.json()
     except Exception:

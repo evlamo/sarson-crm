@@ -52,8 +52,11 @@ def me(current_user: User = Depends(get_current_user)):
 users_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 @users_router.get("/", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return db.query(User).filter(User.is_active == True).all()
+def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    query = db.query(User)
+    if current_user.role != "admin":
+        query = query.filter(User.is_active == True)
+    return query.all()
 
 @users_router.post("/", response_model=UserOut)
 def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
