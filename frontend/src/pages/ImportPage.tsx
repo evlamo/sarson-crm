@@ -21,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB — Issue #21
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 10MB — Issue #21
 
 const CRM_FIELDS = [
   { value: '__skip__', label: '— Skip —' },
@@ -119,7 +119,7 @@ export default function ImportPage() {
   const handleFile = useCallback((f: File) => {
     // Issue #21: Frontend file size check before upload
     if (f.size > MAX_FILE_SIZE) {
-      toast.error(`File too large (${(f.size / 1024 / 1024).toFixed(1)}MB). Maximum is 10MB.`);
+      toast.error(`File too large (${(f.size / 1024 / 1024).toFixed(1)}MB). Maximum is 100MB.`);
       return;
     }
     setFile(f);
@@ -269,7 +269,7 @@ export default function ImportPage() {
               <p className="text-sm text-muted-foreground mt-1">
                 Supports CSV, TSV, Excel (.xlsx), OpenDocument (.ods), vCard (.vcf)
               </p>
-              <p className="text-xs text-muted-foreground mt-2">Max 10MB · Up to 10,000 rows</p>
+              <p className="text-xs text-muted-foreground mt-2">Max 100MB · Up to 500,000 rows</p>
               <input
                 ref={fileRef}
                 type="file"

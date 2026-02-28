@@ -20,8 +20,8 @@ ALLOWED_MIMES = {
 # Extensions that are zip-based (for secondary check when mime is application/zip)
 ZIP_BASED_EXTENSIONS = {".xlsx", ".ods"}
 
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-MAX_ROWS = 10_000
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+MAX_ROWS = 500_000
 
 
 def validate_file(filepath: str, claimed_ext: str) -> str:

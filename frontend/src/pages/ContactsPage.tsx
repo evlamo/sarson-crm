@@ -1029,8 +1029,8 @@ export default function ContactsPage() {
                         metaClass,
                         header.column.getCanSort() ? 'cursor-pointer select-none' : '',
                         'whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground',
-                        isStatus && 'sticky right-0 z-10 bg-muted/40 border-l',
-                        isSelect && 'sticky left-0 z-10 bg-muted/40',
+                        isStatus && 'sticky right-0 z-20 bg-muted border-l shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]',
+                        isSelect && 'sticky left-0 z-20 bg-muted',
                       )}
                       onClick={header.column.getToggleSortingHandler()}
                     >
@@ -1086,8 +1086,9 @@ export default function ContactsPage() {
                         className={cn(
                           metaClass,
                           'py-3',
-                          isStatus && 'sticky right-0 z-10 bg-background border-l',
+                          isStatus && 'sticky right-0 z-10 bg-background border-l shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]',
                           isSelect && 'sticky left-0 z-10 bg-background',
+                          row.getIsSelected() && 'bg-muted',
                           row.getIsSelected() && (isStatus || isSelect) && 'bg-muted',
                         )}
                         onClick={isInteractive ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
