@@ -28,6 +28,15 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class UserSummary(BaseModel):
+    id: uuid.UUID
+    email: str
+    name: str
+    role: str
+
+    class Config:
+        from_attributes = True
+
 class UserCreate(BaseModel):
     email: EmailStr
     name: str

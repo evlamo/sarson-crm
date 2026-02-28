@@ -105,10 +105,10 @@ function StatusDot({ status }: { status: string }) {
   return <span className={`inline-block w-2.5 h-2.5 rounded-full ${color} mr-2`} />;
 }
 
-function getInitials(first: string | null, last: string | null): string {
+function getInitials(first: string | null, last: string | null, email?: string | null): string {
   const f = (first || '').trim()[0] || '';
   const l = (last || '').trim()[0] || '';
-  return (f + l).toUpperCase() || '?';
+  return (f + l).toUpperCase() || email?.charAt(0).toUpperCase() || '?';
 }
 
 function truncateUrl(url: string | null): string {
@@ -246,7 +246,7 @@ export default function ContactDetailPage() {
             </Button>
             {/* Avatar */}
             <div className="h-16 w-16 rounded-full bg-[#1e293b] text-white flex items-center justify-center text-xl font-bold shrink-0">
-              {getInitials(contact.first_name, contact.last_name)}
+              {getInitials(contact.first_name, contact.last_name, contact.email)}
             </div>
             <div className="min-w-0">
               <h1 className="text-2xl font-bold leading-tight">{fullName}</h1>

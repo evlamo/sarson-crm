@@ -42,8 +42,17 @@ def _utcnow():
 
 
 def _check_poc_enforcement(db: Session, contact_id, company_id, status_value: str):
-    """Raise 409 if setting status to 'poc' but company already has a POC."""
-    if status_value != "poc" or not company_id:
+    """Raise 409 if setting status to 'poc' but company already has a POC or no company assigned."""
+    if status_value != "poc" and not company_id:
+        return
+    if not company_id:
+        if status_value == "poc":
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot set POC status without assigning a company first.",
+            )
+        return
+    if status_value != "poc":
         return
     existing_poc = (
         db.query(Contact)

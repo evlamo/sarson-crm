@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.user_invite import UserInvite, InviteStatus
 from app.auth.security import verify_password, hash_password, create_access_token, create_refresh_token, decode_token
-from app.auth.schemas import LoginRequest, TokenResponse, RefreshRequest, UserOut, UserCreate, UserUpdate, PasswordResetRequest
+from app.auth.schemas import LoginRequest, TokenResponse, RefreshRequest, UserOut, UserSummary, UserCreate, UserUpdate, PasswordResetRequest
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.config import settings
 from app.utils.time import utcnow
@@ -110,7 +110,7 @@ def register(req: UserCreate, db: Session = Depends(get_db)):
 # Users management
 users_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
-@users_router.get("/", response_model=list[UserOut])
+@users_router.get("/", response_model=list[UserSummary])
 def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(User)
     if current_user.role != "admin":

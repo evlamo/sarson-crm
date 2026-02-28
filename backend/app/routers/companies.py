@@ -152,10 +152,13 @@ def delete_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
+    # Reset POC status for contacts in this company before nulling company_id
+    db.query(Contact).filter(
+        Contact.company_id == company.id,
+        Contact.status == 'poc',
+    ).update({'status': 'prospect'})
     # Null out company_id on contacts but keep company text
-    contacts = db.query(Contact).filter(Contact.company_id == company.id).all()
-    for c in contacts:
-        c.company_id = None
+    db.query(Contact).filter(Contact.company_id == company.id).update({'company_id': None})
     company.deleted_at = utcnow()
     db.commit()
 

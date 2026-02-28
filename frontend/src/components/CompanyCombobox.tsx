@@ -18,9 +18,11 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [blurHint, setBlurHint] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const showDropdownRef = useRef(showDropdown);
+  const selectedFromDropdownRef = useRef(false);
 
   useEffect(() => { showDropdownRef.current = showDropdown; }, [showDropdown]);
 
@@ -78,6 +80,8 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
             onChange={(e) => {
               setSearch(e.target.value);
               setShowDropdown(true);
+              selectedFromDropdownRef.current = false;
+              setBlurHint(false);
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') doSave(search);
@@ -87,9 +91,29 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
               }
             }}
             onBlur={() => {
-              // Delay to allow dropdown click; use ref to avoid stale closure
+              // Delay to allow dropdown click
               setTimeout(() => {
-                if (!showDropdownRef.current) doSave(search);
+                if (showDropdownRef.current) return;
+                // Allow save if: selected from dropdown, empty (clear), or exact match
+                if (selectedFromDropdownRef.current) {
+                  doSave(search);
+                } else if (!search.trim()) {
+                  doSave('');
+                } else {
+                  const exactMatch = companies?.find(
+                    (c) => c.name.toLowerCase() === search.trim().toLowerCase()
+                  );
+                  if (exactMatch) {
+                    doSave(exactMatch.name, exactMatch.id);
+                  } else {
+                    // Revert — don't create on blur
+                    setSearch(companyName || '');
+                    setEditing(false);
+                    setShowDropdown(false);
+                    setBlurHint(true);
+                    setTimeout(() => setBlurHint(false), 3000);
+                  }
+                }
               }, 200);
             }}
             placeholder="Search or create company..."
@@ -108,6 +132,7 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
                 className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent flex items-center gap-2"
                 onMouseDown={(e) => {
                   e.preventDefault();
+                  selectedFromDropdownRef.current = true;
                   setShowDropdown(false);
                   doSave(co.name, co.id);
                 }}
@@ -140,8 +165,9 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
       ) : (
         <span className="text-muted-foreground italic truncate">Add company...</span>
       )}
+      {blurHint && <span className="text-xs text-muted-foreground ml-1">Press Enter to create or select from list</span>}
       {success && <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />}
-      {!success && <Pencil className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-50 transition-opacity" />}
+      {!success && !blurHint && <Pencil className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-50 transition-opacity" />}
     </div>
   );
 }

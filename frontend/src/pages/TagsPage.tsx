@@ -349,6 +349,7 @@ export default function TagsPage() {
   const [editDraft, setEditDraft] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<TagWithCount | null>(null);
   const [selectedTag, setSelectedTag] = useState<TagWithCount | null>(null);
+  const [colorPopoverOpen, setColorPopoverOpen] = useState<string | null>(null);
   const editRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { document.title = 'Tags — Sarson Funds CRM'; }, []);
@@ -467,7 +468,7 @@ export default function TagsPage() {
               {tags.map((tag) => (
                 <div key={tag.id} className="flex items-center justify-between py-3 group">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <Popover>
+                    <Popover open={colorPopoverOpen === tag.id} onOpenChange={(v) => setColorPopoverOpen(v ? tag.id : null)}>
                       <PopoverTrigger asChild>
                         <button
                           className="w-4 h-4 rounded-full shrink-0 ring-offset-background transition-all hover:scale-125 hover:ring-2 hover:ring-offset-2 hover:ring-[#253a52] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#253a52]"
@@ -484,7 +485,8 @@ export default function TagsPage() {
                               className="w-6 h-6 rounded-full transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#253a52]"
                               style={{ backgroundColor: swatch.hex }}
                               title={swatch.label}
-                              onClick={() => colorMutation.mutate({ id: tag.id, color: swatch.hex })}
+                              aria-label={swatch.label}
+                              onClick={() => { colorMutation.mutate({ id: tag.id, color: swatch.hex }); setColorPopoverOpen(null); }}
                             >
                               {tag.color === swatch.hex && (
                                 <Check className="h-3 w-3 text-white mx-auto drop-shadow" />

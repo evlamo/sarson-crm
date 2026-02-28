@@ -300,6 +300,10 @@ def execute_import(db: Session, job: ImportJob,
                                 tag_cache[tname_lower] = new_tag.id
                         tag_ids.append(tag_cache[tname_lower])
 
+                # POC enforcement — no company means no POC status
+                if normalized.get("status") == "poc" and not normalized.get("company_id"):
+                    normalized["status"] = "prospect"
+
                 # POC enforcement — skip if company already has a POC
                 if normalized.get("status") == "poc" and normalized.get("company_id"):
                     existing_poc = db.query(Contact).filter(
