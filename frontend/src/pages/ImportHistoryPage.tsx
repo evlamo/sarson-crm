@@ -10,13 +10,13 @@ interface ImportJob {
   id: string;
   filename: string;
   status: string;
-  created_count: number;
-  skipped_count: number;
+  created: number;
+  updated: number;
+  skipped: number;
   error_count: number;
-  errors: string[] | null;
-  error_details: unknown[] | null;
+  total_rows: number | null;
+  errors: { row?: number; message?: string }[] | null;
   created_at: string;
-  updated_at: string;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -36,7 +36,7 @@ export default function ImportHistoryPage() {
   const { data: imports = [], isLoading } = useQuery<ImportJob[]>({
     queryKey: ['imports'],
     queryFn: async () => {
-      const res = await api.get('/imports/');
+      const res = await api.get('/imports');
       return Array.isArray(res.data) ? res.data : res.data.data || [];
     },
   });
@@ -80,7 +80,7 @@ export default function ImportHistoryPage() {
             <div className="divide-y">
               {imports.map((job) => {
                 const isExpanded = expandedId === job.id;
-                const hasErrors = (job.errors && job.errors.length > 0) || (job.error_details && (job.error_details as unknown[]).length > 0);
+                const hasErrors = job.errors && job.errors.length > 0;
                 const statusStyle = STATUS_STYLES[job.status] || STATUS_STYLES.pending;
 
                 return (
@@ -104,8 +104,8 @@ export default function ImportHistoryPage() {
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-xs text-muted-foreground text-right space-x-3">
-                          {job.created_count > 0 && <span className="text-green-600">{job.created_count} created</span>}
-                          {job.skipped_count > 0 && <span>{job.skipped_count} skipped</span>}
+                          {job.created > 0 && <span className="text-green-600">{job.created} created</span>}
+                          {job.skipped > 0 && <span>{job.skipped} skipped</span>}
                           {job.error_count > 0 && <span className="text-red-600">{job.error_count} errors</span>}
                         </div>
                         <Badge className={`text-xs ${statusStyle}`} variant="secondary">
@@ -124,10 +124,10 @@ export default function ImportHistoryPage() {
                     {isExpanded && hasErrors && (
                       <div className="mt-2 ml-7 p-3 bg-red-50 dark:bg-red-950/20 rounded text-xs space-y-1 max-h-48 overflow-y-auto">
                         {(job.errors || []).map((err, i) => (
-                          <p key={i} className="text-red-700 dark:text-red-300">{err}</p>
-                        ))}
-                        {(job.error_details as unknown[] || []).map((detail, i) => (
-                          <p key={`d${i}`} className="text-red-700 dark:text-red-300">{typeof detail === 'string' ? detail : JSON.stringify(detail)}</p>
+                          <p key={i} className="text-red-700 dark:text-red-300">
+                            {err.row != null && <span className="font-medium">Row {err.row}: </span>}
+                            {err.message || JSON.stringify(err)}
+                          </p>
                         ))}
                       </div>
                     )}
