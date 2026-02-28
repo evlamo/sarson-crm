@@ -23,6 +23,9 @@ from app.schemas.campaign import (
     CampaignListOut,
     EmailSendOut,
     RecipientListOut,
+    TestSendRequest,
+    MailchimpScheduleRequest,
+    MailchimpSyncRequest,
 )
 from app.services.campaign_service import get_campaign_stats
 from app.tasks.send_campaign import send_campaign_task, cancel_campaign_task
@@ -303,17 +306,17 @@ def duplicate_campaign(
 
 # ── Mailchimp Integration ─────────────────────────────────────────────────
 
-from pydantic import BaseModel as _BaseModel
-from typing import List as _List
 from app.services import mailchimp_service
 from app.models.contact import Contact
 from app.models.segment import Segment as SegmentModel
 
 
-class MailchimpSyncRequest(_BaseModel):
-    contact_ids: Optional[_List[str]] = None
-    segment_id: Optional[str] = None
-    tag_ids: Optional[_List[str]] = None
+@router.get("/mailchimp/audiences")
+async def list_mailchimp_audiences(
+    current_user: User = Depends(get_current_user),
+):
+    """List all Mailchimp audiences in the account."""
+    return await mailchimp_service.get_mc_lists()
 
 
 @router.post("/{campaign_id}/sync-mailchimp")
@@ -355,38 +358,39 @@ async def sync_to_mailchimp(
     if not eligible:
         raise HTTPException(status_code=400, detail="No eligible contacts after filtering unsubscribed/bounced.")
 
-    # Step 1: Get or create audience
-    from_name = campaign.from_name or "Sarson Funds"
-    reply_to = campaign.reply_to or campaign.from_email
-    audience_id = await mailchimp_service.get_or_create_audience(
-        name=f"CRM - {campaign.name}",
-        from_name=from_name,
-        reply_to=reply_to,
-    )
+    # Step 1: Get the ONE main audience
+    audience_id = await mailchimp_service.get_main_audience_id()
 
     # Step 2: Batch upsert members
     result = await mailchimp_service.batch_upsert_members(audience_id, eligible)
 
-    # Step 3: Create Mailchimp campaign
-    mc_campaign_id = await mailchimp_service.create_campaign(
+    # Step 3: Create Mailchimp campaign with full settings
+    from_name = campaign.from_name or "Sarson Funds"
+    reply_to = campaign.reply_to or campaign.from_email
+    mc_campaign_id = await mailchimp_service.create_mc_campaign(
         list_id=audience_id,
         subject=campaign.subject,
         from_name=from_name,
         reply_to=reply_to,
         title=campaign.name,
+        preview_text=campaign.preview_text or "",
+        tracking_opens=data.tracking_opens,
+        tracking_html_clicks=data.tracking_html_clicks,
+        google_analytics_tag=data.google_analytics_tag,
     )
 
     # Step 4: Set content
     await mailchimp_service.set_campaign_content(
-        campaign_id=mc_campaign_id,
+        mc_campaign_id=mc_campaign_id,
         html=campaign.body_html,
-        plain_text=campaign.body_text,
+        plain_text=campaign.body_text or "",
     )
 
     # Step 5: Update our record
     campaign.mailchimp_campaign_id = mc_campaign_id
     campaign.mailchimp_audience_id = audience_id
     campaign.mailchimp_status = "draft"
+    campaign.recipient_count = len(eligible)
     db.commit()
 
     return {
@@ -394,7 +398,43 @@ async def sync_to_mailchimp(
         "mailchimp_audience_id": audience_id,
         "synced_count": result["added"] + result["updated"],
         "error_count": result["errors"],
+        "recipient_count": len(eligible),
     }
+
+
+@router.get("/{campaign_id}/mailchimp-checklist")
+async def mailchimp_send_checklist(
+    campaign_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get Mailchimp's send checklist — validates campaign is ready to send."""
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign or not campaign.mailchimp_campaign_id:
+        raise HTTPException(status_code=400, detail="Campaign not synced to Mailchimp yet.")
+    return await mailchimp_service.get_send_checklist(campaign.mailchimp_campaign_id)
+
+
+@router.post("/{campaign_id}/send-test")
+async def send_test_email_endpoint(
+    campaign_id: UUID,
+    data: TestSendRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Send a test version of the campaign to specified email addresses."""
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if not campaign.mailchimp_campaign_id:
+        raise HTTPException(status_code=400, detail="Sync campaign to Mailchimp before sending a test.")
+
+    await mailchimp_service.send_test_email(
+        mc_campaign_id=campaign.mailchimp_campaign_id,
+        test_emails=data.test_emails,
+        send_type=data.send_type or "html",
+    )
+    return {"sent": True, "test_emails": data.test_emails}
 
 
 @router.post("/{campaign_id}/send-mailchimp")
@@ -409,11 +449,36 @@ async def send_via_mailchimp(
     if not campaign.mailchimp_campaign_id:
         raise HTTPException(status_code=400, detail="Campaign has not been synced to Mailchimp yet.")
 
-    await mailchimp_service.send_campaign(campaign.mailchimp_campaign_id)
+    await mailchimp_service.send_mc_campaign(campaign.mailchimp_campaign_id)
     campaign.mailchimp_status = "sending"
+    campaign.status = "sending"
+    campaign.sent_at = datetime.now(timezone.utc)
     db.commit()
 
     return {"sent": True, "mailchimp_campaign_id": campaign.mailchimp_campaign_id}
+
+
+@router.post("/{campaign_id}/schedule-mailchimp")
+async def schedule_via_mailchimp(
+    campaign_id: UUID,
+    data: MailchimpScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Schedule the Mailchimp campaign to send at a specific time."""
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign or not campaign.mailchimp_campaign_id:
+        raise HTTPException(status_code=400, detail="Sync campaign to Mailchimp first.")
+
+    await mailchimp_service.schedule_mc_campaign(
+        mc_campaign_id=campaign.mailchimp_campaign_id,
+        schedule_time=data.schedule_time,
+    )
+    campaign.mailchimp_status = "scheduled"
+    campaign.scheduled_at = datetime.fromisoformat(data.schedule_time)
+    campaign.status = "scheduled"
+    db.commit()
+    return {"scheduled": True, "schedule_time": data.schedule_time}
 
 
 @router.get("/{campaign_id}/mailchimp-stats")
@@ -428,5 +493,5 @@ async def mailchimp_stats(
     if not campaign.mailchimp_campaign_id:
         raise HTTPException(status_code=400, detail="Campaign has no Mailchimp integration.")
 
-    stats = await mailchimp_service.get_campaign_stats(campaign.mailchimp_campaign_id)
+    stats = await mailchimp_service.get_mc_campaign_stats(campaign.mailchimp_campaign_id)
     return stats

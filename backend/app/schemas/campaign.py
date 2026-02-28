@@ -131,3 +131,21 @@ class RecipientListOut(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class TestSendRequest(BaseModel):
+    test_emails: List[str]
+    send_type: str = "html"  # "html" or "plaintext"
+
+
+class MailchimpScheduleRequest(BaseModel):
+    schedule_time: str  # ISO 8601, e.g. "2026-03-01T14:00:00+00:00"
+
+
+class MailchimpSyncRequest(BaseModel):
+    contact_ids: Optional[List[str]] = None
+    segment_id: Optional[str] = None
+    tag_ids: Optional[List[str]] = None
+    tracking_opens: bool = True
+    tracking_html_clicks: bool = True
+    google_analytics_tag: str = ""

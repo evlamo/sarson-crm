@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     mailchimp_server_prefix: str = "us1"
     mailchimp_audience_id: str = ""
     mailchimp_webhook_secret: str = ""
+    mailchimp_from_email: str = "info@sarsonfunds.com"
     max_users: int = 15
     enforce_domain_restriction: bool = False  # Set to true in production to require @sarsonfunds.com or invite
 
