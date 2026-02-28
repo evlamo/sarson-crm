@@ -58,8 +58,11 @@ def _build_response(contact: Contact) -> ContactResponse:
     """Enrich ContactResponse with computed fields."""
     data = ContactResponse.model_validate(contact)
     data.full_name = contact.full_name
+    # Resolve company_name: prefer related Company object, fall back to text field
     if contact.company_obj:
         data.company_name = contact.company_obj.name
+    elif contact.company:
+        data.company_name = contact.company
     return data
 
 
