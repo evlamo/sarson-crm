@@ -9,6 +9,7 @@ Architecture:
 """
 import hashlib
 import logging
+import re
 from typing import List, Optional, Dict, Any
 import httpx
 from fastapi import HTTPException
@@ -37,10 +38,12 @@ def _base_url() -> str:
 
 def get_client() -> httpx.AsyncClient:
     _check_configured()
+    transport = httpx.AsyncHTTPTransport(retries=3)
     return httpx.AsyncClient(
         base_url=_base_url(),
         auth=("anystring", settings.mailchimp_api_key),
         timeout=30.0,
+        transport=transport,
     )
 
 def subscriber_hash(email: str) -> str:
@@ -185,6 +188,77 @@ async def unsubscribe_member(list_id: str, email: str) -> bool:
         )
         return r.status_code in (200, 201)
 
+# ── Tagging & Segmentation ──────────────────────────────────────────────────
+
+async def apply_member_tag(list_id: str, tag_name: str, emails: List[str]) -> bool:
+    """
+    Apply a tag to a set of members in a Mailchimp audience.
+    Uses the batch tag endpoint (POST /lists/{id}/segments with static segment)
+    and individual member tagging via PATCH.
+    Mailchimp tags API: POST /lists/{id}/members/{hash}/tags
+    """
+    _check_configured()
+    clean_tag = tag_name[:50].strip()
+
+    async with get_client() as client:
+        for i in range(0, len(emails), 50):
+            batch_emails = emails[i:i + 50]
+            for email in batch_emails:
+                h = subscriber_hash(email)
+                payload = {
+                    "tags": [{"name": clean_tag, "status": "active"}],
+                }
+                r = await client.post(f"/lists/{list_id}/members/{h}/tags", json=payload)
+                if r.status_code not in (200, 204):
+                    logger.warning(f"Tag apply failed for {email}: {r.status_code} {r.text}")
+    return True
+
+
+def build_tag_segment_opts(tag_name: str) -> dict:
+    """
+    Build segment_opts targeting members with a specific Mailchimp tag.
+    Uses the Tag condition type for campaign recipient filtering.
+    """
+    return {
+        "match": "all",
+        "conditions": [
+            {
+                "condition_type": "Tag",
+                "field": "tag",
+                "op": "is",
+                "value": tag_name,
+            }
+        ],
+    }
+
+
+# ── HTML to Plain Text ──────────────────────────────────────────────────────
+
+def html_to_plain_text(html: str) -> str:
+    """Convert HTML email content to plain text. Basic but effective."""
+    if not html:
+        return ""
+    # Remove style and script blocks
+    text = re.sub(r'<(style|script)[^>]*>.*?</(style|script)>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    # Replace links with [text](url) format
+    text = re.sub(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', r'\2 (\1)', text, flags=re.DOTALL | re.IGNORECASE)
+    # Replace br and p tags with newlines
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<p[^>]*>', '\n\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</p>', '', text, flags=re.IGNORECASE)
+    # Replace heading tags
+    for h in ['h1', 'h2', 'h3', 'h4']:
+        text = re.sub(rf'<{h}[^>]*>(.*?)</{h}>', r'\n\n\1\n', text, flags=re.DOTALL | re.IGNORECASE)
+    # Remove remaining HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Decode common HTML entities
+    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&nbsp;', ' ').replace('&quot;', '"').replace('&#39;', "'")
+    # Clean up whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r' {2,}', ' ', text)
+    return text.strip()
+
+
 # ── Campaigns ────────────────────────────────────────────────────────────────
 
 async def create_mc_campaign(
@@ -199,6 +273,7 @@ async def create_mc_campaign(
     tracking_html_clicks: bool = True,
     google_analytics_tag: str = "",
     segment_opts: Optional[dict] = None,
+    timewarp: bool = False,
 ) -> str:
     """Create a Mailchimp regular campaign. Returns mc_campaign_id."""
     _check_configured()
@@ -206,19 +281,23 @@ async def create_mc_campaign(
     if segment_opts:
         recipients["segment_opts"] = segment_opts
 
+    campaign_settings: dict = {
+        "subject_line": subject,
+        "preview_text": preview_text,
+        "title": title,
+        "from_name": from_name,
+        "reply_to": reply_to,
+        "to_name": to_name,
+        "auto_footer": True,
+        "inline_css": True,
+    }
+    if timewarp:
+        campaign_settings["timewarp"] = True
+
     payload = {
         "type": "regular",
         "recipients": recipients,
-        "settings": {
-            "subject_line": subject,
-            "preview_text": preview_text,
-            "title": title,
-            "from_name": from_name,
-            "reply_to": reply_to,
-            "to_name": to_name,
-            "auto_footer": True,
-            "inline_css": True,
-        },
+        "settings": campaign_settings,
         "tracking": {
             "opens": tracking_opens,
             "html_clicks": tracking_html_clicks,
@@ -242,8 +321,8 @@ async def set_campaign_content(mc_campaign_id: str, html: str, plain_text: str =
     """
     _check_configured()
     payload: dict = {"html": html}
-    if plain_text:
-        payload["plain_text"] = plain_text
+    # Auto-generate plain text if not provided
+    payload["plain_text"] = plain_text.strip() if plain_text.strip() else html_to_plain_text(html)
 
     async with get_client() as client:
         r = await client.put(f"/campaigns/{mc_campaign_id}/content", json=payload)
@@ -355,6 +434,28 @@ async def get_mc_lists() -> List[dict]:
         if r.status_code != 200:
             raise HTTPException(status_code=502, detail=f"Mailchimp error: {r.text}")
         return r.json().get("lists", [])
+
+# ── Templates ────────────────────────────────────────────────────────────────
+
+async def get_mc_templates() -> List[dict]:
+    """Get saved templates from Mailchimp account."""
+    _check_configured()
+    async with get_client() as client:
+        r = await client.get("/templates", params={"count": 50, "type": "user"})
+        if r.status_code != 200:
+            return []
+        templates = r.json().get("templates", [])
+        return [{"id": t["id"], "name": t["name"], "thumbnail": t.get("thumbnail", "")} for t in templates]
+
+async def get_mc_template_content(template_id: int) -> str:
+    """Get the HTML source of a Mailchimp template."""
+    _check_configured()
+    async with get_client() as client:
+        r = await client.get(f"/templates/{template_id}/default-content")
+        if r.status_code != 200:
+            return ""
+        sections = r.json().get("sections", {})
+        return sections.get("body", "") or "\n".join(str(v) for v in sections.values())
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

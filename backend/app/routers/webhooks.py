@@ -373,9 +373,43 @@ async def mailchimp_webhook(request: Request, db: Session = Depends(get_db)):
                     contact.email_valid = False
                     db.commit()
 
+        elif event_type == "subscribe":
+            email = data.get("data", {}).get("email", "") if isinstance(data.get("data"), dict) else data.get("data[email]", "")
+            if email:
+                contact = db.query(Contact).filter(Contact.email == email).first()
+                if contact and contact.email_unsubscribed:
+                    contact.email_unsubscribed = False
+                    contact.unsubscribed_at = None
+                    db.commit()
+                    logger.info(f"Re-subscribed contact: {email}")
+
         elif event_type == "campaign":
-            # Campaign status change — could update our record
-            pass
+            # Campaign status change — update our record
+            mc_campaign_id = None
+            if isinstance(data.get("data"), dict):
+                mc_campaign_id = data["data"].get("id")
+            else:
+                mc_campaign_id = data.get("data[id]", "")
+
+            status = None
+            if isinstance(data.get("data"), dict):
+                status = data["data"].get("status")
+            else:
+                status = data.get("data[status]", "")
+
+            if mc_campaign_id and status:
+                campaign = db.query(EmailCampaign).filter(
+                    EmailCampaign.mailchimp_campaign_id == mc_campaign_id
+                ).first()
+                if campaign:
+                    campaign.mailchimp_status = status
+                    if status == "sent":
+                        campaign.status = "sent"
+                        campaign.sent_at = datetime.now(timezone.utc)
+                    elif status == "paused":
+                        campaign.status = "paused"
+                    db.commit()
+                    logger.info(f"Updated campaign {mc_campaign_id} status to {status}")
 
         return {"received": True}
     except Exception as e:

@@ -319,6 +319,24 @@ async def list_mailchimp_audiences(
     return await mailchimp_service.get_mc_lists()
 
 
+@router.get("/mailchimp/templates")
+async def list_mailchimp_templates(
+    current_user: User = Depends(get_current_user),
+):
+    """List saved Mailchimp templates."""
+    return await mailchimp_service.get_mc_templates()
+
+
+@router.get("/mailchimp/templates/{template_id}/content")
+async def get_mailchimp_template_content(
+    template_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    """Get the HTML content of a Mailchimp template."""
+    html = await mailchimp_service.get_mc_template_content(template_id)
+    return {"html": html}
+
+
 @router.post("/{campaign_id}/sync-mailchimp")
 async def sync_to_mailchimp(
     campaign_id: UUID,
@@ -364,7 +382,15 @@ async def sync_to_mailchimp(
     # Step 2: Batch upsert members
     result = await mailchimp_service.batch_upsert_members(audience_id, eligible)
 
-    # Step 3: Create Mailchimp campaign with full settings
+    # Step 3: Tag synced contacts for segment targeting
+    tag_name = f"crm-{str(campaign.id)[:8]}"
+    synced_emails = [c["email"] for c in eligible]
+    await mailchimp_service.apply_member_tag(audience_id, tag_name, synced_emails)
+
+    # Build segment_opts to target ONLY those tagged members
+    segment_opts = mailchimp_service.build_tag_segment_opts(tag_name)
+
+    # Step 4: Create Mailchimp campaign with segment targeting
     from_name = campaign.from_name or "Sarson Funds"
     reply_to = campaign.reply_to or campaign.from_email
     mc_campaign_id = await mailchimp_service.create_mc_campaign(
@@ -377,16 +403,17 @@ async def sync_to_mailchimp(
         tracking_opens=data.tracking_opens,
         tracking_html_clicks=data.tracking_html_clicks,
         google_analytics_tag=data.google_analytics_tag,
+        segment_opts=segment_opts,
     )
 
-    # Step 4: Set content
+    # Step 5: Set content
     await mailchimp_service.set_campaign_content(
         mc_campaign_id=mc_campaign_id,
         html=campaign.body_html,
         plain_text=campaign.body_text or "",
     )
 
-    # Step 5: Update our record
+    # Step 6: Update our record
     campaign.mailchimp_campaign_id = mc_campaign_id
     campaign.mailchimp_audience_id = audience_id
     campaign.mailchimp_status = "draft"
@@ -399,6 +426,7 @@ async def sync_to_mailchimp(
         "synced_count": result["added"] + result["updated"],
         "error_count": result["errors"],
         "recipient_count": len(eligible),
+        "segment_tag": tag_name,
     }
 
 

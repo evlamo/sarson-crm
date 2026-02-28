@@ -23,6 +23,22 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function stripHtmlToText(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>.*?<\/style>/gis, '')
+    .replace(/<script[^>]*>.*?<\/script>/gis, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<p[^>]*>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -88,6 +104,12 @@ interface ChecklistItem {
 interface SendChecklist {
   is_ready: boolean;
   items: ChecklistItem[];
+}
+
+interface MailchimpTemplate {
+  id: number;
+  name: string;
+  thumbnail: string;
 }
 
 interface MailchimpStats {
@@ -179,10 +201,12 @@ function CampaignStatsView({
   campaign: Campaign;
   onBack: () => void;
 }) {
+  const [lastStatsRefresh, setLastStatsRefresh] = useState<string | null>(null);
   const { data: stats, refetch, isLoading } = useQuery<MailchimpStats>({
     queryKey: ['mailchimp-stats', campaign.id],
     queryFn: async () => {
       const res = await api.get(`/campaigns/${campaign.id}/mailchimp-stats`);
+      setLastStatsRefresh(new Date().toISOString());
       return res.data;
     },
     enabled: !!campaign.mailchimp_campaign_id,
@@ -255,9 +279,15 @@ function CampaignStatsView({
       )}
 
       {campaign.mailchimp_campaign_id && (
-        <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
-          {isLoading ? 'Refreshing...' : 'Refresh Stats from Mailchimp'}
-        </Button>
+        <div>
+          <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+            {isLoading ? 'Refreshing...' : 'Refresh Stats from Mailchimp'}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-2">
+            📊 Mailchimp stats typically update every 15–30 minutes after send.
+            Last refreshed: {lastStatsRefresh ? formatDate(lastStatsRefresh) : 'Never'}
+          </p>
+        </div>
       )}
 
       <Card>
@@ -303,9 +333,10 @@ function CampaignBuilder({
     tracking_opens: true,
     tracking_html_clicks: true,
     google_analytics_tag: '',
+    timewarp: false,
   });
 
-  const [contentTab, setContentTab] = useState<'html' | 'preview'>('html');
+  const [contentTab, setContentTab] = useState<'html' | 'preview' | 'plaintext'>('html');
   const [syncing, setSyncing] = useState(false);
   const [checklist, setChecklist] = useState<SendChecklist | null>(null);
   const [showSendConfirm, setShowSendConfirm] = useState(false);
@@ -334,6 +365,14 @@ function CampaignBuilder({
     queryFn: async () => {
       const res = await api.get('/templates');
       return res.data.data || [];
+    },
+  });
+
+  const { data: mcTemplates = [] } = useQuery<MailchimpTemplate[]>({
+    queryKey: ['mc-templates'],
+    queryFn: async () => {
+      const res = await api.get('/campaigns/mailchimp/templates');
+      return res.data || [];
     },
   });
 
@@ -545,9 +584,22 @@ function CampaignBuilder({
             <div>
               <Label>Subject Line <span className="text-red-500">*</span></Label>
               <Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="Your Monthly Market Update" />
-              <p className={`text-xs mt-1 ${form.subject.length > 60 ? 'text-yellow-600' : 'text-muted-foreground'}`}>
-                {form.subject.length}/60 characters {form.subject.length > 60 && '— shorter subjects get better open rates'}
-              </p>
+              <div className="flex justify-between items-center mt-1">
+                <span className={`text-xs ${
+                  form.subject.length === 0 ? 'text-muted-foreground' :
+                  form.subject.length <= 50 ? 'text-green-600' :
+                  form.subject.length <= 70 ? 'text-yellow-600' :
+                  'text-red-500'
+                }`}>
+                  {form.subject.length === 0 ? 'Aim for 50–70 characters' :
+                   form.subject.length <= 50 ? '✓ Great length' :
+                   form.subject.length <= 70 ? '⚠ Getting long — may clip on mobile' :
+                   '✗ Too long — will be clipped in most inboxes'}
+                </span>
+                <span className={`text-xs font-mono ${form.subject.length > 70 ? 'text-red-500' : form.subject.length > 50 ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                  {form.subject.length}/70
+                </span>
+              </div>
             </div>
             <div>
               <Label>Preview Text</Label>
@@ -669,9 +721,34 @@ function CampaignBuilder({
               </div>
             )}
 
+            {/* Mailchimp Templates */}
+            {mcTemplates.length > 0 && (
+              <div>
+                <Label>Start from Mailchimp Template</Label>
+                <Select onValueChange={async (v) => {
+                  try {
+                    const res = await api.get(`/campaigns/mailchimp/templates/${v}/content`);
+                    if (res.data.html) {
+                      setForm(f => ({ ...f, body_html: res.data.html }));
+                      toast.success('Template loaded');
+                    }
+                  } catch { toast.error('Failed to load template'); }
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a Mailchimp template..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mcTemplates.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Tab bar */}
             <div className="flex border-b">
-              {(['html', 'preview'] as const).map((tab) => (
+              {(['html', 'preview', 'plaintext'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setContentTab(tab)}
@@ -681,7 +758,7 @@ function CampaignBuilder({
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {tab === 'html' ? 'HTML Editor' : 'Preview'}
+                  {tab === 'html' ? 'HTML Editor' : tab === 'preview' ? 'Preview' : 'Plain Text'}
                 </button>
               ))}
             </div>
@@ -702,18 +779,34 @@ function CampaignBuilder({
             {contentTab === 'preview' && (
               <div>
                 {/* Inbox preview bar */}
-                <div className="bg-gray-50 border rounded-t-md p-3">
-                  <p className="font-medium text-sm">{form.subject || '(No subject)'}</p>
-                  <p className="text-xs text-muted-foreground">{form.preview_text || ''}</p>
+                <div className="bg-gray-50 border rounded-t-lg p-3 font-mono text-xs text-gray-600 border-b">
+                  <div><span className="font-bold text-gray-800">From:</span> {form.from_name || 'Sarson Funds'} &lt;{form.from_email || 'info@sarsonfunds.com'}&gt;</div>
+                  <div><span className="font-bold text-gray-800">Subject:</span> {form.subject || '(No subject)'}</div>
+                  <div><span className="font-bold text-gray-800">Preview:</span> <span className="text-gray-400">{form.preview_text || '(No preview text set)'}</span></div>
                 </div>
-                <div className="border border-t-0 rounded-b-md">
-                  <iframe
-                    title="Email Preview"
-                    srcDoc={form.body_html || '<p style="color:#999;padding:20px;">No content yet</p>'}
-                    className="w-full min-h-[350px] bg-white"
-                    sandbox="allow-same-origin"
-                  />
+                {/* 600px standard email width */}
+                <div className="bg-gray-100 p-4 rounded-b-lg flex justify-center overflow-auto">
+                  <div className="w-[600px] min-w-[600px] bg-white shadow-lg">
+                    <iframe
+                      title="Email Preview"
+                      srcDoc={form.body_html || '<p style="color:#999;padding:20px;">No content yet</p>'}
+                      className="w-full border-0"
+                      style={{ height: '500px', minHeight: '500px' }}
+                      sandbox="allow-same-origin"
+                    />
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {contentTab === 'plaintext' && (
+              <div className="border rounded-lg bg-gray-50 p-4 font-mono text-sm text-gray-700 whitespace-pre-wrap min-h-[300px] max-h-[500px] overflow-y-auto">
+                {stripHtmlToText(form.body_html) || (
+                  <span className="text-gray-400 italic">Write your HTML content to see plain text preview</span>
+                )}
+                <p className="text-xs text-muted-foreground mt-4 italic font-sans not-italic border-t pt-2">
+                  Plain text is auto-generated when sending. Mailchimp uses this as fallback for email clients that don't support HTML.
+                </p>
               </div>
             )}
 
@@ -755,6 +848,20 @@ function CampaignBuilder({
                 </div>
               </label>
             </div>
+            <Separator />
+            <div className="flex items-center justify-between p-3 border rounded-lg">
+              <div>
+                <p className="text-sm font-medium">Send Time Optimization</p>
+                <p className="text-xs text-muted-foreground">Let Mailchimp choose the best send time for each recipient based on their past engagement</p>
+              </div>
+              <Switch checked={form.timewarp || false} onCheckedChange={(v) => setForm(f => ({...f, timewarp: v}))} />
+            </div>
+            {form.timewarp && (
+              <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                <span>ℹ️</span>
+                <span>Send Time Optimization requires scheduling — use "Schedule Send" instead of "Send Now".</span>
+              </div>
+            )}
             <Separator />
             <div>
               <Label>Google Analytics Campaign Tag</Label>
@@ -866,7 +973,13 @@ function CampaignBuilder({
             <div className="flex gap-3">
               <Button
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => setShowSendConfirm(true)}
+                onClick={() => {
+                  if (form.timewarp) {
+                    toast.error('Send Time Optimization requires scheduling. Use "Schedule Send" instead.');
+                    return;
+                  }
+                  setShowSendConfirm(true);
+                }}
               >
                 Send Now
               </Button>
