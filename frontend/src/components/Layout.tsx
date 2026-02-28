@@ -12,6 +12,7 @@ import {
   LogOut,
   Tag,
   History,
+  Shield,
 } from 'lucide-react';
 
 const navItems = [
@@ -25,8 +26,13 @@ const navItems = [
   { to: '/imports', label: 'Import History', icon: History },
 ];
 
+const adminItems = [
+  { to: '/admin/users', label: 'Users', icon: Shield },
+];
+
 export default function Layout() {
   const user = useAuth((s) => s.user);
+  const isAdmin = useAuth((s) => s.isAdmin);
   const logout = useAuth((s) => s.logout);
   const location = useLocation();
 
@@ -59,6 +65,31 @@ export default function Layout() {
               </Link>
             );
           })}
+          {isAdmin && (
+            <>
+              <div className="my-2 mx-3 border-t" />
+              <p className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Admin</p>
+              {adminItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.to || location.pathname.startsWith(item.to + '/');
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors',
+                      isActive
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
         <div className="border-t p-3">
           <div className="flex items-center justify-between">

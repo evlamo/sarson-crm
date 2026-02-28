@@ -42,6 +42,11 @@ class EmailCampaign(Base):
     sent_at = Column(DateTime(timezone=True))
     sendgrid_batch_id = Column(String)
 
+    # Mailchimp integration
+    mailchimp_campaign_id = Column(String)
+    mailchimp_audience_id = Column(String)
+    mailchimp_status = Column(String)  # draft/scheduled/sending/sent
+
     # Aggregate stats
     sent_count = Column(Integer, default=0)
     delivered_count = Column(Integer, default=0)

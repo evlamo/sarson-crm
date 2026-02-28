@@ -13,6 +13,7 @@ import CampaignsPage from '@/pages/CampaignsPage';
 import ImportPage from '@/pages/ImportPage';
 import TagsPage from '@/pages/TagsPage';
 import ImportHistoryPage from '@/pages/ImportHistoryPage';
+import UsersPage from '@/pages/UsersPage';
 
 import { useEffect } from 'react';
 
@@ -124,6 +125,12 @@ const importHistoryRoute = createRoute({
   component: ImportHistoryPage,
 });
 
+const usersRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/admin/users',
+  component: UsersPage,
+});
+
 // Build route tree
 const routeTree = rootRoute.addChildren([
   loginRoute,
@@ -138,6 +145,7 @@ const routeTree = rootRoute.addChildren([
     importRoute,
     tagsRoute,
     importHistoryRoute,
+    usersRoute,
   ]),
 ]);
 

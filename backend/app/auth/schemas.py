@@ -34,6 +34,9 @@ class UserCreate(BaseModel):
     password: str
     role: str = "member"
 
+class PasswordResetRequest(BaseModel):
+    new_password: str
+
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None

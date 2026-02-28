@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -334,6 +335,10 @@ function CampaignWizard({ open, onClose }: { open: boolean; onClose: () => void 
                 <Label>From Email</Label>
                 <Input value={form.from_email} onChange={(e) => setForm({ ...form, from_email: e.target.value })} placeholder="team@sarsonfunds.com" />
               </div>
+              <div>
+                <Label>Reply-To Email</Label>
+                <Input value={form.reply_to} onChange={(e) => setForm({ ...form, reply_to: e.target.value })} placeholder="team@sarsonfunds.com" />
+              </div>
             </div>
 
             <Separator />
@@ -370,6 +375,7 @@ function CampaignWizard({ open, onClose }: { open: boolean; onClose: () => void 
 // ── Campaigns List ────────────────────────────────────────────────────────
 
 export default function CampaignsPage() {
+  const isAdmin = useAuth((s) => s.isAdmin);
   const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => { document.title = 'Campaigns — Sarson Funds CRM'; }, []);
@@ -386,7 +392,13 @@ export default function CampaignsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Campaigns</h1>
-        <Button onClick={() => setWizardOpen(true)}>+ New Campaign</Button>
+        {isAdmin ? (
+          <Button onClick={() => setWizardOpen(true)}>+ New Campaign</Button>
+        ) : (
+          <Button disabled title="Admin only">
+            🔒 New Campaign
+          </Button>
+        )}
       </div>
 
       {isLoading ? (

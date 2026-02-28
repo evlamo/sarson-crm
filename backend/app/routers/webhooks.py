@@ -319,3 +319,59 @@ async def sendgrid_webhook(request: Request):
         db.close()
 
     return {"processed": processed, "errors": errors}
+
+
+# ── Mailchimp Webhook ─────────────────────────────────────────────────────
+
+@router.post("/mailchimp")
+async def mailchimp_webhook(request: Request):
+    """
+    Receives Mailchimp webhook POST events.
+    Events: subscribe, unsubscribe, cleaned, campaign (status change).
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        # Mailchimp sends form-encoded data for webhooks
+        form = await request.form()
+        data = dict(form)
+
+    event_type = data.get("type", "")
+
+    db = SessionLocal()
+    try:
+        if event_type == "unsubscribe":
+            email = data.get("data", {}).get("email", "") if isinstance(data.get("data"), dict) else data.get("data[email]", "")
+            if email:
+                contact = db.query(Contact).filter(Contact.email == email).first()
+                if contact:
+                    contact.email_unsubscribed = True
+                    contact.unsubscribed_at = datetime.now(timezone.utc)
+                    db.commit()
+
+        elif event_type == "cleaned":
+            email = data.get("data", {}).get("email", "") if isinstance(data.get("data"), dict) else data.get("data[email]", "")
+            if email:
+                contact = db.query(Contact).filter(Contact.email == email).first()
+                if contact:
+                    contact.email_bounced = True
+                    contact.email_valid = False
+                    db.commit()
+
+        elif event_type == "campaign":
+            # Campaign status change — could update our record
+            pass
+
+        return {"received": True}
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Mailchimp webhook failed: {e}")
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
+    finally:
+        db.close()
+
+
+@router.get("/mailchimp")
+async def mailchimp_webhook_verify(request: Request):
+    """Mailchimp sends a GET to verify the webhook URL."""
+    return {"status": "ok"}

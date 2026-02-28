@@ -10,7 +10,7 @@ from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_admin_user
 from app.models.user import User
 from app.models.campaign import EmailCampaign, EmailSend
 from app.models.segment import Segment
@@ -60,7 +60,7 @@ def list_campaigns(
 def create_campaign(
     data: CampaignCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_admin_user),
 ):
     # Validate segment exists if provided
     if data.segment_id:
@@ -151,7 +151,7 @@ def delete_campaign(
 def send_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_admin_user),
 ):
     campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
     if not campaign:
@@ -299,3 +299,134 @@ def duplicate_campaign(
     db.commit()
     db.refresh(clone)
     return clone
+
+
+# ── Mailchimp Integration ─────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BaseModel
+from typing import List as _List
+from app.services import mailchimp_service
+from app.models.contact import Contact
+from app.models.segment import Segment as SegmentModel
+
+
+class MailchimpSyncRequest(_BaseModel):
+    contact_ids: Optional[_List[str]] = None
+    segment_id: Optional[str] = None
+    tag_ids: Optional[_List[str]] = None
+
+
+@router.post("/{campaign_id}/sync-mailchimp")
+async def sync_to_mailchimp(
+    campaign_id: UUID,
+    data: MailchimpSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Collect contact IDs from various sources
+    contact_ids = set()
+
+    if data.contact_ids:
+        contact_ids.update(data.contact_ids)
+
+    if data.segment_id:
+        from app.services.segment_service import resolve_campaign_targets
+        seg_ids = resolve_campaign_targets("segment", data.segment_id, db)
+        contact_ids.update(str(cid) for cid in seg_ids)
+
+    if data.tag_ids:
+        from app.models.tag import contact_tags
+        from sqlalchemy import select
+        stmt = select(contact_tags.c.contact_id).where(
+            contact_tags.c.tag_id.in_(data.tag_ids)
+        )
+        rows = db.execute(stmt).fetchall()
+        contact_ids.update(str(r[0]) for r in rows)
+
+    if not contact_ids:
+        raise HTTPException(status_code=400, detail="No contacts specified. Provide contact_ids, segment_id, or tag_ids.")
+
+    # Filter out unsubscribed/bounced
+    eligible = mailchimp_service.filter_eligible_contacts(db, list(contact_ids))
+    if not eligible:
+        raise HTTPException(status_code=400, detail="No eligible contacts after filtering unsubscribed/bounced.")
+
+    # Step 1: Get or create audience
+    from_name = campaign.from_name or "Sarson Funds"
+    reply_to = campaign.reply_to or campaign.from_email
+    audience_id = await mailchimp_service.get_or_create_audience(
+        name=f"CRM - {campaign.name}",
+        from_name=from_name,
+        reply_to=reply_to,
+    )
+
+    # Step 2: Batch upsert members
+    result = await mailchimp_service.batch_upsert_members(audience_id, eligible)
+
+    # Step 3: Create Mailchimp campaign
+    mc_campaign_id = await mailchimp_service.create_campaign(
+        list_id=audience_id,
+        subject=campaign.subject,
+        from_name=from_name,
+        reply_to=reply_to,
+        title=campaign.name,
+    )
+
+    # Step 4: Set content
+    await mailchimp_service.set_campaign_content(
+        campaign_id=mc_campaign_id,
+        html=campaign.body_html,
+        plain_text=campaign.body_text,
+    )
+
+    # Step 5: Update our record
+    campaign.mailchimp_campaign_id = mc_campaign_id
+    campaign.mailchimp_audience_id = audience_id
+    campaign.mailchimp_status = "draft"
+    db.commit()
+
+    return {
+        "mailchimp_campaign_id": mc_campaign_id,
+        "mailchimp_audience_id": audience_id,
+        "synced_count": result["added"] + result["updated"],
+        "error_count": result["errors"],
+    }
+
+
+@router.post("/{campaign_id}/send-mailchimp")
+async def send_via_mailchimp(
+    campaign_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if not campaign.mailchimp_campaign_id:
+        raise HTTPException(status_code=400, detail="Campaign has not been synced to Mailchimp yet.")
+
+    await mailchimp_service.send_campaign(campaign.mailchimp_campaign_id)
+    campaign.mailchimp_status = "sending"
+    db.commit()
+
+    return {"sent": True, "mailchimp_campaign_id": campaign.mailchimp_campaign_id}
+
+
+@router.get("/{campaign_id}/mailchimp-stats")
+async def mailchimp_stats(
+    campaign_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if not campaign.mailchimp_campaign_id:
+        raise HTTPException(status_code=400, detail="Campaign has no Mailchimp integration.")
+
+    stats = await mailchimp_service.get_campaign_stats(campaign.mailchimp_campaign_id)
+    return stats

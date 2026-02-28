@@ -12,6 +12,7 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   fetchUser: () => Promise<void>;
@@ -21,6 +22,7 @@ export const useAuth = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
+  isAdmin: false,
 
   login: async (email: string, password: string) => {
     const res = await api.post('/auth/login', { email, password });
@@ -32,7 +34,7 @@ export const useAuth = create<AuthState>((set) => ({
 
     // Fetch user profile
     const userRes = await api.get('/auth/me');
-    set({ user: userRes.data, isAuthenticated: true, isLoading: false });
+    set({ user: userRes.data, isAuthenticated: true, isLoading: false, isAdmin: userRes.data.role === 'admin' });
   },
 
   logout: () => {
@@ -50,9 +52,9 @@ export const useAuth = create<AuthState>((set) => ({
     }
     try {
       const res = await api.get('/auth/me');
-      set({ user: res.data, isAuthenticated: true, isLoading: false });
+      set({ user: res.data, isAuthenticated: true, isLoading: false, isAdmin: res.data.role === 'admin' });
     } catch {
-      set({ user: null, isAuthenticated: false, isLoading: false });
+      set({ user: null, isAuthenticated: false, isLoading: false, isAdmin: false });
     }
   },
 }));

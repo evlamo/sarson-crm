@@ -5,7 +5,7 @@ from jose import JWTError
 from app.database import get_db
 from app.models.user import User
 from app.auth.security import verify_password, hash_password, create_access_token, create_refresh_token, decode_token
-from app.auth.schemas import LoginRequest, TokenResponse, RefreshRequest, UserOut, UserCreate, UserUpdate
+from app.auth.schemas import LoginRequest, TokenResponse, RefreshRequest, UserOut, UserCreate, UserUpdate, PasswordResetRequest
 from app.auth.dependencies import get_current_user, get_admin_user
 import uuid
 
@@ -57,6 +57,9 @@ def list_users(db: Session = Depends(get_db), _: User = Depends(get_current_user
 
 @users_router.post("/", response_model=UserOut)
 def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    # Domain restriction
+    if not req.email.lower().endswith("@sarsonfunds.com"):
+        raise HTTPException(status_code=422, detail="Only @sarsonfunds.com email addresses are permitted")
     existing = db.query(User).filter(User.email == req.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -71,6 +74,25 @@ def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = De
     db.commit()
     db.refresh(user)
     return user
+
+@users_router.patch("/{user_id}/deactivate", response_model=UserOut)
+def deactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_active = False
+    db.commit()
+    db.refresh(user)
+    return user
+
+@users_router.post("/{user_id}/reset-password")
+def admin_reset_password(user_id: uuid.UUID, req: PasswordResetRequest, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.hashed_password = hash_password(req.new_password)
+    db.commit()
+    return {"message": "Password reset successfully"}
 
 @users_router.get("/{user_id}", response_model=UserOut)
 def get_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):

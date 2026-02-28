@@ -50,6 +50,9 @@ class CampaignOut(BaseModel):
     scheduled_at: Optional[datetime]
     sent_at: Optional[datetime]
     sendgrid_batch_id: Optional[str]
+    mailchimp_campaign_id: Optional[str] = None
+    mailchimp_audience_id: Optional[str] = None
+    mailchimp_status: Optional[str] = None
     # Aggregate stats
     sent_count: int
     delivered_count: int
