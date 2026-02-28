@@ -104,6 +104,9 @@ const companiesRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/companies',
   component: CompaniesPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    q: (search.q as string) || undefined,
+  }),
 });
 
 const pipelineRoute = createRoute({

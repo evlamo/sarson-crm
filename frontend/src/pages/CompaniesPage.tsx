@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import api from '@/lib/api';
 import type { Company, PaginatedResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -43,8 +43,9 @@ interface CompanyPOC {
 export default function CompaniesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const searchParams = useSearch({ strict: false }) as { q?: string };
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.q || '');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);

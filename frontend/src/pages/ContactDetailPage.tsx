@@ -268,129 +268,174 @@ function InlineLeadSource({ value, onSave }: { value: string | null; onSave: (v:
   );
 }
 
-function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { contact: ContactDetail; onUpdate: () => void; removeTagMutation: { mutate: (tagId: string) => void; isPending: boolean } }) {
+function TagManager({
+  contact,
+  onUpdate,
+  onRemoveTag,
+}: {
+  contact: ContactDetail;
+  onUpdate: () => void;
+  onRemoveTag: (tagId: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const queryClient = useQueryClient();
-  const ref = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
+  // Close on outside click or Escape
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    if (!open) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
     };
-    if (open) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setOpen(false); setSearch(''); }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [open]);
 
-  const { data: allTags } = useQuery({
+  // Focus search on open
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 50);
+  }, [open]);
+
+  const { data: allTags = [], isLoading: tagsLoading } = useQuery({
     queryKey: ['all-tags'],
     queryFn: async () => {
-      const res = await api.get('/tags');
-      const tags = Array.isArray(res.data) ? res.data : (res.data.data || res.data.items || []);
-      return tags as { id: string; name: string; color: string }[];
+      const res = await api.get<{ id: string; name: string; color: string }[]>('/tags');
+      return Array.isArray(res.data) ? res.data : [];
     },
     enabled: open,
-    staleTime: 30_000,
+    refetchOnMount: true,
+    staleTime: 0,
   });
 
-  const contactTagIds = new Set(contact.tags?.map(t => t.id) || []);
-  const atMax = (contact.tags?.length || 0) >= 8;
+  const contactTagIds = new Set(contact.tags?.map(t => t.id) ?? []);
+  const atMax = (contact.tags?.length ?? 0) >= 8;
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
+    queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    onUpdate();
+  };
 
   const addTag = useMutation({
-    mutationFn: async (tagId: string) => {
-      await api.post(`/contacts/${contact.id}/tags/by-id`, null, { params: { tag_id: tagId } });
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['contact', contact.id] }); queryClient.invalidateQueries({ queryKey: ['contacts'] }); onUpdate(); },
+    mutationFn: (tagId: string) =>
+      api.post(`/contacts/${contact.id}/tags/by-id`, null, { params: { tag_id: tagId } }),
+    onSuccess: () => { invalidate(); toast.success('Tag added'); },
     onError: () => toast.error('Failed to add tag'),
   });
 
-  const removeTag = removeTagExt;
-
-  const createAndAddTag = useMutation({
+  const createAndAdd = useMutation({
     mutationFn: async (name: string) => {
-      const res = await api.post<{ id: string; name: string; color: string }>('/tags', { name: name.trim() });
-      const newTagId = res.data.id;
-      await api.post(`/contacts/${contact.id}/tags/by-id`, null, { params: { tag_id: newTagId } });
+      await api.post(`/contacts/${contact.id}/tags`, { name: name.trim() });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
-      queryClient.invalidateQueries({ queryKey: ['contacts'] });
       queryClient.invalidateQueries({ queryKey: ['all-tags'] });
+      invalidate();
       setSearch('');
       toast.success('Tag created and added');
-      onUpdate();
     },
-    onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : 'Failed to create tag';
-      toast.error(msg);
-    },
+    onError: () => toast.error('Failed to create tag'),
   });
 
-  const isMutating = addTag.isPending || removeTag.isPending || createAndAddTag.isPending;
+  const isMutating = addTag.isPending || createAndAdd.isPending;
 
-  const filtered = (allTags || []).filter(t =>
-    !search || t.name.toLowerCase().includes(search.toLowerCase())
-  );
-  const exactMatch = (allTags || []).some(t => t.name.toLowerCase() === search.toLowerCase());
+  const filtered = search
+    ? allTags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
+    : allTags;
+
+  const exactMatch = allTags.some(t => t.name.toLowerCase() === search.trim().toLowerCase());
 
   return (
-    <div ref={ref} className="relative inline-block shrink-0">
+    <div ref={containerRef} className="relative inline-flex shrink-0">
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="listbox"
-        onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-dashed border-muted-foreground/40 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+        onClick={() => { setOpen(o => !o); if (open) setSearch(''); }}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/30 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
       >
-        <span>+</span> Tag
+        + Tag
       </button>
+
       {open && (
-        <div className="absolute top-8 left-0 z-[100] w-56 bg-card border rounded-lg shadow-lg p-2">
+        <div className="absolute top-7 left-0 z-[100] w-60 bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1">
           <input
-            autoFocus
+            ref={searchRef}
+            type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search or create tag..."
-            className="w-full px-2 py-1.5 text-sm border rounded mb-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="Search tags..."
+            className="w-full h-8 px-3 text-sm rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
-          {atMax && <p className="text-xs text-muted-foreground text-center py-1">Max 8 tags reached</p>}
-          <div className="max-h-48 overflow-y-auto space-y-0.5">
-            {filtered.map(tag => {
-              const isOn = contactTagIds.has(tag.id);
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  disabled={isMutating}
-                  onClick={() => {
-                    if (!isOn && atMax) { toast.error('Maximum 8 tags per contact'); return; }
-                    isOn ? removeTag.mutate(tag.id) : addTag.mutate(tag.id);
-                  }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: tag.color || '#6366f1' }}
-                  />
-                  <span className="flex-1 truncate">{tag.name}</span>
-                  {isOn && <span className="text-primary text-xs">✓</span>}
-                </button>
-              );
-            })}
-            {search && !exactMatch && !atMax && (
-              <button
-                type="button"
-                onClick={() => createAndAddTag.mutate(search.trim())}
-                disabled={isMutating}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left text-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span>+</span> Create &ldquo;{search.trim()}&rdquo;
-              </button>
-            )}
-            {!filtered.length && !search && (
-              <p className="text-xs text-muted-foreground text-center py-2">No tags yet</p>
+
+          <div className="max-h-52 overflow-y-auto space-y-0.5 mt-1">
+            {tagsLoading ? (
+              <div className="flex items-center justify-center py-4 text-xs text-muted-foreground">Loading tags...</div>
+            ) : filtered.length === 0 && !search ? (
+              <p className="text-xs text-muted-foreground text-center py-3">No tags available</p>
+            ) : (
+              <>
+                {filtered.map(tag => {
+                  const isOn = contactTagIds.has(tag.id);
+                  const blocked = !isOn && atMax;
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      disabled={isMutating || blocked}
+                      onClick={() => {
+                        if (blocked) { toast.error('Max 8 tags per contact'); return; }
+                        if (isOn) {
+                          onRemoveTag(tag.id);
+                        } else {
+                          addTag.mutate(tag.id);
+                        }
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-muted transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: tag.color || '#6366f1' }}
+                      />
+                      <span className="flex-1 truncate text-foreground">{tag.name}</span>
+                      {isOn && (
+                        <span className="text-primary text-xs font-medium">✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+
+                {search.trim() && !exactMatch && (
+                  <button
+                    type="button"
+                    disabled={isMutating || atMax}
+                    onClick={() => createAndAdd.mutate(search.trim())}
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm text-primary hover:bg-primary/5 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span className="font-medium">+</span>
+                    <span>Create &ldquo;<strong>{search.trim()}</strong>&rdquo;</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
+
+          {atMax && (
+            <p className="text-xs text-muted-foreground text-center border-t pt-1.5 mt-0.5">
+              Max 8 tags per contact
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -536,30 +581,34 @@ export default function ContactDetailPage() {
                 {companyDisplay && (
                   <button
                     className="text-primary hover:underline"
-                    onClick={() => navigate({ to: '/companies' })}
+                    onClick={() => navigate({ to: '/companies', search: { q: companyDisplay } })}
                   >
                     {companyDisplay}
                   </button>
                 )}
               </p>
               {/* Tags with × and TagManager — horizontal scroll, max 8 */}
-              <div className="flex gap-1.5 mt-2 items-center overflow-x-auto pb-1 max-w-full" style={{ scrollbarWidth: 'thin' }}>
+              <div className="flex gap-1.5 mt-2 items-center overflow-x-auto pb-0.5 flex-nowrap max-w-full" style={{ scrollbarWidth: 'none' }}>
                 {contact.tags?.map((tag) => (
                   <span
                     key={tag.id}
-                    className="inline-flex items-center gap-1 text-white text-xs px-2 py-0.5 rounded-full shrink-0"
-                    style={{ backgroundColor: tag.color || '#6366f1' }}
+                    className="inline-flex items-center gap-1 text-white text-xs px-2.5 py-0.5 rounded-full shrink-0 font-medium"
+                    style={{ backgroundColor: tag.color || getTagColorFromId(tag.id) }}
                   >
                     {tag.name}
                     <button
                       type="button"
                       onClick={() => removeTagMutation.mutate(tag.id)}
-                      className="ml-0.5 hover:opacity-70 transition-opacity leading-none"
+                      className="ml-0.5 opacity-70 hover:opacity-100 transition-opacity leading-none text-white"
                       aria-label={`Remove ${tag.name}`}
                     >×</button>
                   </span>
                 ))}
-                <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} removeTagMutation={removeTagMutation} />
+                <TagManager
+                  contact={contact}
+                  onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })}
+                  onRemoveTag={(tagId) => removeTagMutation.mutate(tagId)}
+                />
               </div>
               {/* Quick-action chips */}
               <div className="flex items-center gap-2 mt-3 flex-wrap">
