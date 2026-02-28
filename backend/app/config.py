@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     mailchimp_api_key: str = ""
     mailchimp_server_prefix: str = "us1"
     mailchimp_audience_id: str = ""
+    max_users: int = 15
 
     class Config:
         env_file = ".env"

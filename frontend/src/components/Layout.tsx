@@ -14,6 +14,7 @@ import {
   History,
   Shield,
   BarChart3,
+  UserPlus,
 } from 'lucide-react';
 
 const navItems = [
@@ -30,6 +31,7 @@ const navItems = [
 
 const adminItems = [
   { to: '/admin/users', label: 'Users', icon: Shield },
+  { to: '/admin/invites', label: 'Team & Invites', icon: UserPlus },
 ];
 
 export default function Layout() {

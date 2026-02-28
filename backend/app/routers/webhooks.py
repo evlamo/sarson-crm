@@ -2,17 +2,17 @@
 SendGrid webhook handler — processes email events (delivered, open, click, bounce, etc.)
 Updates email_sends records and contact-level engagement fields.
 """
-import hashlib
-import hmac
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import and_
+from sqlalchemy.orm import Session
+from sendgrid.helpers.eventwebhook import EventWebhook, EventWebhookHeader
 
-from app.database import SessionLocal
+from app.database import get_db
 from app.models.campaign import EmailCampaign, EmailSend
 from app.models.contact import Contact
 from app.models.activity import Activity
@@ -42,20 +42,27 @@ class SendGridEvent(BaseModel):
 # ── Signature Verification ─────────────────────────────────────────────────
 
 def verify_sendgrid_signature(request_body: bytes, signature: str, timestamp: str) -> bool:
-    """Verify SendGrid webhook signature (v3 signed event webhook)."""
-    verification_key = settings.sendgrid_api_key
+    """Verify SendGrid Event Webhook v3 signature using ECDSA."""
+    verification_key = settings.sendgrid_webhook_verification_key
     if not verification_key:
-        logger.warning("No SendGrid API key configured — skipping signature verification")
-        return True  # Allow in dev mode
+        if settings.environment == "production":
+            logger.error("SENDGRID_WEBHOOK_VERIFICATION_KEY not set in production — rejecting webhook")
+            return False
+        logger.warning("SENDGRID_WEBHOOK_VERIFICATION_KEY not set — skipping signature verification (dev mode)")
+        return True
 
-    payload = timestamp + request_body.decode("utf-8")
-    expected = hmac.new(
-        verification_key.encode("utf-8"),
-        payload.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-    return hmac.compare_digest(expected, signature)
+    try:
+        ew = EventWebhook()
+        ec_public_key = ew.convert_public_key_to_ecdsa(verification_key)
+        return ew.verify_signature(
+            request_body.decode("utf-8"),
+            signature,
+            timestamp,
+            ec_public_key,
+        )
+    except Exception as e:
+        logger.error(f"SendGrid signature verification failed: {e}")
+        return False
 
 
 # ── Event Handlers ─────────────────────────────────────────────────────────
@@ -242,18 +249,18 @@ EVENT_HANDLERS = {
 # ── Webhook Endpoint ──────────────────────────────────────────────────────
 
 @router.post("/sendgrid")
-async def sendgrid_webhook(request: Request):
+async def sendgrid_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Receives SendGrid Event Webhook v3 POST.
     Body is a JSON array of event objects.
     """
     body = await request.body()
 
-    # Signature verification (optional in dev)
-    signature = request.headers.get("X-Twilio-Email-Event-Webhook-Signature", "")
-    timestamp = request.headers.get("X-Twilio-Email-Event-Webhook-Timestamp", "")
+    # Signature verification
+    signature = request.headers.get(EventWebhookHeader.SIGNATURE, "")
+    timestamp = request.headers.get(EventWebhookHeader.TIMESTAMP, "")
 
-    if settings.environment == "production" and signature:
+    if signature or settings.environment == "production":
         if not verify_sendgrid_signature(body, signature, timestamp):
             raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
@@ -265,7 +272,6 @@ async def sendgrid_webhook(request: Request):
     if not isinstance(events, list):
         events = [events]
 
-    db = SessionLocal()
     processed = 0
     errors = 0
 
@@ -315,8 +321,6 @@ async def sendgrid_webhook(request: Request):
         db.rollback()
         logger.exception(f"SendGrid webhook batch failed: {e}")
         raise HTTPException(status_code=500, detail="Webhook processing failed")
-    finally:
-        db.close()
 
     return {"processed": processed, "errors": errors}
 

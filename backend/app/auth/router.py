@@ -7,9 +7,11 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.database import get_db
 from app.models.user import User
+from app.models.user_invite import UserInvite, InviteStatus
 from app.auth.security import verify_password, hash_password, create_access_token, create_refresh_token, decode_token
 from app.auth.schemas import LoginRequest, TokenResponse, RefreshRequest, UserOut, UserCreate, UserUpdate, PasswordResetRequest
 from app.auth.dependencies import get_current_user, get_admin_user
+from app.config import settings
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -69,21 +71,52 @@ def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_c
 
 @users_router.post("/", response_model=UserOut)
 def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
-    # Domain restriction
-    # Domain restriction — disabled for local development, re-enable for MVP
-    # if not req.email.lower().endswith("@sarsonfunds.com"):
-    #     raise HTTPException(status_code=422, detail="Only @sarsonfunds.com email addresses are permitted")
-    existing = db.query(User).filter(User.email == req.email).first()
+    email_lower = req.email.lower().strip()
+
+    # Max users check
+    active_count = db.query(User).filter(User.is_active == True).count()
+    if active_count >= settings.max_users:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Maximum user limit ({settings.max_users}) reached. Contact your administrator.",
+        )
+
+    existing = db.query(User).filter(User.email == email_lower).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Invite check: @sarsonfunds.com emails bypass, others need a valid invite
+    invite = None
+    if not email_lower.endswith("@sarsonfunds.com"):
+        invite = (
+            db.query(UserInvite)
+            .filter(
+                UserInvite.email == email_lower,
+                UserInvite.status == InviteStatus.pending,
+                UserInvite.expires_at > datetime.utcnow(),
+            )
+            .first()
+        )
+        if not invite:
+            raise HTTPException(
+                status_code=403,
+                detail="Registration requires an invitation. Contact your administrator.",
+            )
+
     user = User(
         id=uuid.uuid4(),
-        email=req.email,
+        email=email_lower,
         name=req.name,
         hashed_password=hash_password(req.password),
         role=req.role,
     )
     db.add(user)
+
+    # Mark invite as accepted
+    if invite:
+        invite.status = InviteStatus.accepted
+        invite.accepted_at = datetime.utcnow()
+
     db.commit()
     db.refresh(user)
     return user

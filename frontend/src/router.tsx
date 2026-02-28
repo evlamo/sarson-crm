@@ -15,6 +15,8 @@ import TagsPage from '@/pages/TagsPage';
 import ImportHistoryPage from '@/pages/ImportHistoryPage';
 import UsersPage from '@/pages/UsersPage';
 import CampaignStatsPage from '@/pages/CampaignStatsPage';
+import InvitesPage from '@/pages/InvitesPage';
+import RegisterPage from '@/pages/RegisterPage';
 
 import { useEffect } from 'react';
 
@@ -37,6 +39,12 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
   component: LoginPage,
+});
+
+const registerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/register',
+  component: RegisterPage,
 });
 
 // Auth guard
@@ -138,9 +146,16 @@ const usersRoute = createRoute({
   component: UsersPage,
 });
 
+const invitesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/admin/invites',
+  component: InvitesPage,
+});
+
 // Build route tree
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  registerRoute,
   layoutRoute.addChildren([
     indexRoute,
     contactsRoute,
@@ -154,6 +169,7 @@ const routeTree = rootRoute.addChildren([
     importHistoryRoute,
     campaignStatsRoute,
     usersRoute,
+    invitesRoute,
   ]),
 ]);
 

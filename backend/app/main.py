@@ -17,6 +17,7 @@ from app.routers.webhooks import router as webhooks_router
 from app.routers.templates import router as templates_router
 from app.routers.deals import router as deals_router
 from app.routers.campaign_stats import router as campaign_stats_router
+from app.routers.invites import router as invites_router
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -52,8 +53,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 app.include_router(auth_router)
@@ -69,6 +70,7 @@ app.include_router(webhooks_router)
 app.include_router(templates_router)
 app.include_router(deals_router)
 app.include_router(campaign_stats_router)
+app.include_router(invites_router, prefix="/api/v1")
 
 @app.get("/health")
 def health():
