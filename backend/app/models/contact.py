@@ -92,7 +92,7 @@ class Contact(Base):
 
     # Relationships
     owner = relationship("User", back_populates="owned_contacts", foreign_keys=[owner_id])
-    company_obj = relationship("Company", back_populates="contacts")
+    company_obj = relationship("Company", back_populates="contacts", foreign_keys="Contact.company_id")
     tags = relationship("Tag", secondary="contact_tags", back_populates="contacts")
     activities = relationship("Activity", back_populates="contact", cascade="all, delete-orphan")
     deal_contacts = relationship("DealContact", back_populates="contact")

@@ -68,8 +68,8 @@ class ContactPatch(BaseModel):
     first_name: Optional[str] = Field(None, max_length=100)
     middle_name: Optional[str] = Field(None, max_length=100)
     last_name: Optional[str] = Field(None, max_length=100)
-    email: Optional[str] = Field(None, max_length=255)
-    email_secondary: Optional[str] = Field(None, max_length=255)
+    email: Optional[EmailStr] = None
+    email_secondary: Optional[EmailStr] = None
     phone: Optional[str] = Field(None, max_length=50)
     phone_secondary: Optional[str] = Field(None, max_length=50)
     title: Optional[str] = Field(None, max_length=200)

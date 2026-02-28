@@ -8,7 +8,7 @@ import type { Company, PaginatedResponse } from '@/lib/types';
 interface CompanyComboboxProps {
   companyName: string | null | undefined;
   companyId: string | null | undefined;
-  onSave: (companyName: string) => Promise<void>;
+  onSave: (companyName: string, companyId?: string) => Promise<void>;
   onNavigate?: (companyId: string) => void;
 }
 
@@ -50,10 +50,10 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const doSave = async (name: string) => {
+  const doSave = async (name: string, selectedCompanyId?: string) => {
     setSaving(true);
     try {
-      await onSave(name);
+      await onSave(name, selectedCompanyId);
       setSuccess(true);
       setEditing(false);
       setShowDropdown(false);
@@ -106,7 +106,7 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
                 onMouseDown={(e) => {
                   e.preventDefault();
                   setShowDropdown(false);
-                  doSave(co.name);
+                  doSave(co.name, co.id);
                 }}
               >
                 <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />

@@ -134,8 +134,9 @@ export default function ContactDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Failed to update contact');
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || 'Failed to update contact');
     },
   });
 
@@ -166,8 +167,9 @@ export default function ContactDetailPage() {
     try {
       await patchContact({ [field]: value || null });
       toast.success('Updated');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to update');
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || 'Failed to update');
       throw err;
     }
   };
@@ -278,8 +280,12 @@ export default function ContactDetailPage() {
                 <CompanyCombobox
                   companyName={contact.company_name || contact.company}
                   companyId={contact.company_id}
-                  onSave={async (name) => {
-                    await patchContact({ company: name });
+                  onSave={async (name, selectedCompanyId) => {
+                    const payload: Record<string, unknown> = { company: name };
+                    if (selectedCompanyId) {
+                      payload.company_id = selectedCompanyId;
+                    }
+                    await patchContact(payload);
                     queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
                     toast.success('Company updated');
                   }}

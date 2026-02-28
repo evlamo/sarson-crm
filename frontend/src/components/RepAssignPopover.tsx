@@ -142,7 +142,8 @@ export function RepAssignPopover({ contactId, currentRep, variant = 'table' }: R
               <button
                 key={user.id}
                 onClick={() => handleSelectUser(user.name)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors text-left"
+                disabled={mutation.isPending}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors text-left disabled:opacity-50 disabled:pointer-events-none"
               >
                 <div className="h-7 w-7 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-xs font-medium shrink-0">
                   {getInitials(user.name)}
@@ -191,7 +192,7 @@ export function RepAssignPopover({ contactId, currentRep, variant = 'table' }: R
               variant="secondary"
               className="h-7 px-2 text-xs"
               onClick={handleCustomSet}
-              disabled={!customName.trim()}
+              disabled={!customName.trim() || mutation.isPending}
             >
               Set
             </Button>

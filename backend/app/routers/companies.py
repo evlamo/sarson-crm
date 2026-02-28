@@ -6,7 +6,7 @@ from app.utils.time import utcnow
 from typing import Optional
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_admin_user
 from app.models.company import Company
 from app.models.contact import Contact
 from app.schemas.company import CompanyCreate, CompanyUpdate, CompanyPatch, CompanyResponse, PaginatedCompanies
@@ -16,14 +16,19 @@ from app.models.user import User
 router = APIRouter(prefix="/api/v1/companies", tags=["companies"])
 
 
-def _company_response(company: Company, db: Session) -> CompanyResponse:
-    """Build CompanyResponse with contact_count."""
-    count = db.query(func.count(Contact.id)).filter(
-        Contact.company_id == company.id,
-        Contact.deleted_at.is_(None),
-    ).scalar() or 0
+def _company_response(company: Company, db: Session, contact_count: int | None = None) -> CompanyResponse:
+    """Build CompanyResponse with contact_count.
+    
+    If contact_count is provided (pre-fetched), use it directly.
+    Otherwise query inline (for single-company endpoints).
+    """
+    if contact_count is None:
+        contact_count = db.query(func.count(Contact.id)).filter(
+            Contact.company_id == company.id,
+            Contact.deleted_at.is_(None),
+        ).scalar() or 0
     data = CompanyResponse.model_validate(company)
-    data.contact_count = count
+    data.contact_count = contact_count
     return data
 
 
@@ -49,8 +54,16 @@ def list_companies(
         .all()
     )
 
+    # Pre-fetch contact counts in a single query to avoid N+1
+    contact_counts = dict(
+        db.query(Contact.company_id, func.count(Contact.id))
+        .filter(Contact.company_id.in_([c.id for c in companies]), Contact.deleted_at.is_(None))
+        .group_by(Contact.company_id)
+        .all()
+    ) if companies else {}
+
     return PaginatedCompanies(
-        data=[_company_response(c, db) for c in companies],
+        data=[_company_response(c, db, contact_count=contact_counts.get(c.id, 0)) for c in companies],
         total=total,
         page=page,
         per_page=per_page,
@@ -129,7 +142,7 @@ def update_company(
 def delete_company(
     company_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_admin_user),
 ):
     """Soft-delete a company."""
     company = db.query(Company).filter(

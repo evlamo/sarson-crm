@@ -313,6 +313,10 @@ def execute_import(db: Session, job: ImportJob,
                         errors.append({"row": row_num, "error": f"Skipped: company already has POC ({existing_poc.full_name})"})
                         continue
 
+                # Sync poc_contact_id on company when importing a POC contact
+                _import_poc_company_id = normalized.get("company_id")
+                _import_poc_status = normalized.get("status")
+
                 # Dedup by email against existing DB contacts
                 if email in email_contact_cache:
                     skipped += 1
@@ -323,6 +327,11 @@ def execute_import(db: Session, job: ImportJob,
                     normalized["source_import_id"] = str(job.id)
                     batch_contacts_new.append(normalized)
                     email_contact_cache[email] = contact_id
+                    # If this contact is POC, sync company.poc_contact_id
+                    if _import_poc_status == "poc" and _import_poc_company_id:
+                        company_obj = db.query(Company).filter(Company.id == _import_poc_company_id).first()
+                        if company_obj:
+                            company_obj.poc_contact_id = contact_id
                     for tid in tag_ids:
                         batch_tag_links.append((contact_id, tid))
                     created += 1

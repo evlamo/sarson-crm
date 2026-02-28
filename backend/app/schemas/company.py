@@ -41,13 +41,14 @@ class CompanyUpdate(BaseModel):
     revenue_range: Optional[str] = Field(None, max_length=100)
     description: Optional[str] = Field(None, max_length=2000)
     notes: Optional[str] = Field(None, max_length=10000)
-    poc_contact_id: Optional[uuid.UUID] = None
     custom_fields: Optional[dict] = None
     owner_id: Optional[uuid.UUID] = None
 
 
 class CompanyPatch(BaseModel):
-    """Partial update — all fields optional."""
+    """Partial update — all fields optional.
+    poc_contact_id is intentionally excluded — POC is set via contact status changes only.
+    """
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     domain: Optional[str] = Field(None, max_length=255)
     industry: Optional[str] = Field(None, max_length=100)
@@ -63,7 +64,6 @@ class CompanyPatch(BaseModel):
     notes: Optional[str] = Field(None, max_length=10000)
     custom_fields: Optional[dict] = None
     owner_id: Optional[uuid.UUID] = None
-    poc_contact_id: Optional[uuid.UUID] = None
 
 
 class CompanyResponse(CompanyBase):

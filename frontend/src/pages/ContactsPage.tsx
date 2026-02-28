@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, UserPlus, Tag, Download, Trash2, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { RepAssignPopover } from '@/components/RepAssignPopover';
 
 // Module augmentation for TanStack Table meta
@@ -481,6 +482,10 @@ function InlineStatus({ contact }: { contact: Contact }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail || 'Failed to update status');
     },
   });
 
