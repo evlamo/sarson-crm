@@ -14,6 +14,7 @@ import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle,
 interface ContactDetail {
   id: string;
   first_name: string | null;
+  middle_name: string | null;
   last_name: string | null;
   email: string | null;
   phone: string | null;
@@ -30,6 +31,8 @@ interface ContactDetail {
   country: string | null;
   linkedin_url: string | null;
   website: string | null;
+  profile_url: string | null;
+  email_domain: string | null;
   source: string | null;
   email_open_count: number;
   email_click_count: number;
@@ -281,7 +284,7 @@ export default function ContactDetailPage() {
     );
   }
 
-  const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Unnamed Contact';
+  const fullName = [contact.first_name, contact.middle_name, contact.last_name].filter(Boolean).join(' ') || 'Unnamed Contact';
 
   return (
     <div className="space-y-6">
@@ -424,6 +427,15 @@ export default function ContactDetailPage() {
                     </a>
                   </div>
                 )}
+                {contact.profile_url && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Profile</span>
+                    <a href={contact.profile_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-[60%]">
+                      {contact.profile_url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                    </a>
+                  </div>
+                )}
+                {contact.email_domain && <InfoRow label="Email Domain" value={contact.email_domain} />}
                 <InfoRow label="Location" value={[contact.city, contact.state, contact.country].filter(Boolean).join(', ')} />
                 {contact.source && <InfoRow label="Source" value={contact.source} />}
                 {contact.last_contacted_at && (

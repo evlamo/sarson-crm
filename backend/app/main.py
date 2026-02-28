@@ -12,6 +12,7 @@ from app.routers.campaigns import router as campaigns_router
 from app.routers.webhooks import router as webhooks_router
 from app.routers.templates import router as templates_router
 from app.routers.deals import router as deals_router
+from app.routers.campaign_stats import router as campaign_stats_router
 
 app = FastAPI(
     title="Speranza CRM",
@@ -45,6 +46,7 @@ app.include_router(campaigns_router)
 app.include_router(webhooks_router)
 app.include_router(templates_router)
 app.include_router(deals_router)
+app.include_router(campaign_stats_router)
 
 @app.get("/health")
 def health():

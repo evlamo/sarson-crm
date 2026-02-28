@@ -13,6 +13,7 @@ import {
   Tag,
   History,
   Shield,
+  BarChart3,
 } from 'lucide-react';
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/companies', label: 'Companies', icon: Building2 },
   { to: '/pipeline', label: 'Pipeline', icon: Kanban },
   { to: '/campaigns', label: 'Campaigns', icon: Mail },
+  { to: '/campaign-stats', label: 'Campaign Stats', icon: BarChart3 },
   { to: '/segments', label: 'Segments', icon: Filter },
   { to: '/tags', label: 'Tags', icon: Tag },
   { to: '/import', label: 'Import', icon: Upload },

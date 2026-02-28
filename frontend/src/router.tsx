@@ -14,6 +14,7 @@ import ImportPage from '@/pages/ImportPage';
 import TagsPage from '@/pages/TagsPage';
 import ImportHistoryPage from '@/pages/ImportHistoryPage';
 import UsersPage from '@/pages/UsersPage';
+import CampaignStatsPage from '@/pages/CampaignStatsPage';
 
 import { useEffect } from 'react';
 
@@ -125,6 +126,12 @@ const importHistoryRoute = createRoute({
   component: ImportHistoryPage,
 });
 
+const campaignStatsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/campaign-stats',
+  component: CampaignStatsPage,
+});
+
 const usersRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/admin/users',
@@ -145,6 +152,7 @@ const routeTree = rootRoute.addChildren([
     importRoute,
     tagsRoute,
     importHistoryRoute,
+    campaignStatsRoute,
     usersRoute,
   ]),
 ]);
