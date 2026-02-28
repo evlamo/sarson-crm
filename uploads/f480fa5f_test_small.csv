@@ -1,0 +1,11 @@
+First Name,Last Name,Email,Phone,Company,Title,Status,City,State,Source,Notes
+Alice,Johnson,alice.johnson.test1@acme.com,(312) 555-0101,Acme Capital,Portfolio Manager,hot,Chicago,IL,Conference,Met at SALT
+BOB,SMITH,bob.smith.test1@vanguard.com,312-555-0102,Vanguard,Analyst,warm,New York,NY,Referral,
+Carol,Williams,carol.williams.test1@fidelity.com,+1 (415) 555-0103,Fidelity,CIO,active,San Francisco,CA,LinkedIn,
+David,Brown,david.brown.test1@blackrock.com,555.0104,Blackrock,VP Finance,cold,Boston,MA,,
+eve,jones,eve.jones.test1@jpmorgan.com,(212)5550105,JPMorgan,MD,Hot Lead,New York,NY,Event,
+Frank,Garcia,frank.garcia.test1@gs.com,2125550106,Goldman Sachs,Partner,prospect,New York,NY,,
+Grace,Martinez,grace.martinez.test1@ms.com,,Morgan Stanley,Associate,Cold,Boston,MA,Trade Show,
+Henry,Davis,henry.davis.test1@ubs.com,(617) 555-0108,UBS,Director,POC,Boston,MA,,
+invalid_no_last,,bademail,,,,,,,,
+Dupe,Smith,alice.johnson.test1@acme.com,,,,,,,,

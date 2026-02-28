@@ -1,0 +1,22 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Victor VCard
+N:VCard;Victor;;;
+EMAIL:victor.vcard.test1@vcard.com
+TEL;TYPE=WORK:(555) 555-5001
+ORG:VCard Corp
+TITLE:Chief Contact
+ADR;TYPE=WORK:;;123 Main St;Chicago;IL;60601;USA
+URL:https://victorvcard.com
+X-SOCIALPROFILE;type=linkedin:https://linkedin.com/in/victorvcard
+NOTE:Met at vCard conference
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Vera Vee
+N:Vee;Vera;;;
+EMAIL:vera.vee.test1@test.com
+TEL;TYPE=CELL:5555555002
+ORG:Another Corp
+TITLE:Director
+END:VCARD

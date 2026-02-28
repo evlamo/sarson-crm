@@ -91,15 +91,26 @@ def map_headers(headers: List[str]) -> Dict[str, str]:
 
 # ── Status mapping ──
 STATUS_MAP = {
-    "active": "active", "active client": "active",
-    "hot": "hot", "hot lead": "hot", "warm": "hot",
+    # Active
+    "active": "active", "active client": "active", "client": "active",
+    # Hot
+    "hot": "hot", "hot lead": "hot",
+    # Warm
+    "warm": "warm", "warm lead": "warm",
+    # Prospect
+    "prospect": "prospect", "new": "prospect", "new lead": "prospect", "lead": "prospect",
+    # Cold
     "cold": "cold", "cold lead": "cold",
-    "prospect": "prospect", "new": "prospect", "new lead": "prospect",
-    "qualified": "qualified", "qualified lead": "qualified",
-    "lost": "lost", "dead": "lost", "closed lost": "lost",
-    "won": "won", "closed won": "won", "client": "active",
-    "inactive": "inactive", "churned": "inactive",
-    "do not contact": "do_not_contact", "dnc": "do_not_contact",
+    # POC
+    "poc": "poc", "point of contact": "poc",
+    # N/A
+    "n/a": "na", "na": "na", "none": "na", "n.a.": "na",
+    # Legacy mappings (keep for old data)
+    "qualified": "prospect", "qualified lead": "prospect",
+    "lost": "na", "dead": "na", "closed lost": "na",
+    "won": "active", "closed won": "active",
+    "inactive": "na", "churned": "na",
+    "do not contact": "na", "dnc": "na",
 }
 
 

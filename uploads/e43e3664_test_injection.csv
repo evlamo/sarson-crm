@@ -1,0 +1,6 @@
+First Name,Last Name,Email,Phone,Company,Notes
+=SUM(1+1),Inject,inject.test1@test.com,,Bad Corp,"=HYPERLINK(""evil.com"")"
++Follow,Me,follow.test1@test.com,,,Normal note
+-Minus,Start,minus.test1@test.com,,,
+@AT,Sign,at.test1@test.com,,,
+Normal,Person,normal.inject.test1@test.com,(312) 555-9999,Good Corp,Fine

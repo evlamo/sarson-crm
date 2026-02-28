@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:VCard Fresh
+N:Fresh;VCard;;;
+EMAIL:f.vcf.38417@test.com
+TEL;TYPE=WORK:(555) 555-9001
+ORG:VCard Co
+TITLE:Dir
+END:VCARD
