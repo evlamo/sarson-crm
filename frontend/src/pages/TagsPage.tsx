@@ -4,7 +4,13 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Trash2, Tag, Search, X, Plus, Check, Loader2 } from 'lucide-react';
+import { Trash2, Tag, Search, X, Check, Loader2, UserMinus } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Dialog,
   DialogContent,
@@ -175,147 +181,133 @@ function TagContactsDrawer({
   const contacts = tagContacts?.data || [];
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent side="right" className="w-[380px] sm:w-[420px] flex flex-col p-0 gap-0">
 
-        {/* ── Header ── */}
-        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-base">
+        {/* Header */}
+        <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: tag.color || '#6b7280' }} />
             {tag.name}
             <span className="ml-auto text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
               {tagContacts?.total ?? tag.contact_count} tagged
             </span>
-          </DialogTitle>
-        </DialogHeader>
+          </SheetTitle>
+        </SheetHeader>
 
-        {/* ── Two panels side by side ── */}
-        <div className="flex flex-1 min-h-0 divide-x overflow-hidden">
-
-          {/* LEFT — People in this tag */}
-          <div className="flex flex-col w-1/2 min-h-0">
-            <div className="px-4 pt-4 pb-2 shrink-0">
-              <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wide">In this tag</p>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  value={tagSearch}
-                  onChange={(e) => setTagSearch(e.target.value)}
-                  placeholder="Find someone..."
-                  className="pl-8 h-8 text-sm"
-                />
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-4">
-              {loadingTagContacts ? (
-                <div className="space-y-2 pt-1">
-                  {[1,2,3].map(i => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}
-                </div>
-              ) : contacts.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center pt-8">
-                  {debouncedTagSearch ? 'No matches' : 'No one tagged yet'}
-                </p>
-              ) : (
-                <div className="space-y-0.5 pt-1">
-                  {contacts.map((contact) => (
-                    <div key={contact.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 group hover:bg-muted/50 transition-colors" style={{ minHeight: 40 }}>
-                      <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
-                        {getInitials(contact.first_name, contact.last_name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate leading-tight">{contact.full_name}</p>
-                        <p className="text-xs text-muted-foreground truncate leading-tight">{contact.email}</p>
-                      </div>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity p-1 rounded"
-                        onClick={() => removeMutation.mutate(contact.id)}
-                        disabled={removingIds.has(contact.id)}
-                        title="Remove from tag"
-                      >
-                        {removingIds.has(contact.id)
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <X className="h-3 w-3" />}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT — Add people */}
-          <div className="flex flex-col w-1/2 min-h-0 bg-muted/20">
-            <div className="px-4 pt-4 pb-2 shrink-0">
-              <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wide">Add people</p>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  value={addSearch}
-                  onChange={(e) => setAddSearch(e.target.value)}
-                  placeholder="Search contacts..."
-                  className="pl-8 h-8 text-sm"
-                  autoFocus={false}
-                />
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-4">
-              {loadingSearch ? (
-                <div className="space-y-2 pt-1">
-                  {[1,2,3].map(i => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}
-                </div>
-              ) : addCandidates.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center pt-8">
-                  {debouncedAddSearch ? 'No matches' : 'All contacts tagged'}
-                </p>
-              ) : (
-                <div className="space-y-0.5 pt-1">
-                  {addCandidates.map((contact) => (
-                    <div
-                      key={contact.id}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 group hover:bg-background transition-colors cursor-default"
-                      style={{ minHeight: 40 }}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') addMutation.mutate(contact.id); }}
-                    >
-                      <div className="w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
-                        {getInitials(contact.first_name, contact.last_name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate leading-tight">{contact.full_name}</p>
-                        <p className="text-xs text-muted-foreground truncate leading-tight">{contact.email}</p>
-                      </div>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 shrink-0 text-xs font-medium text-[#253a52] hover:text-[#2b5570] transition-opacity px-2 py-0.5 rounded border border-[#253a52]/30 hover:border-[#253a52] bg-white"
-                        onClick={() => addMutation.mutate(contact.id)}
-                        disabled={addingIds.has(contact.id)}
-                      >
-                        {addingIds.has(contact.id)
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : justAdded === contact.id
-                          ? <Check className="h-3 w-3 text-green-500" />
-                          : '+ Add'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+        {/* ── Section 1: In this tag ── */}
+        <div className="px-5 pt-4 pb-2 shrink-0">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">In this tag</p>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={tagSearch}
+              onChange={(e) => setTagSearch(e.target.value)}
+              placeholder="Find someone..."
+              className="pl-8 h-8 text-sm"
+            />
           </div>
         </div>
 
-        {/* ── Error + Footer ── */}
+        <div className="overflow-y-auto px-5 pb-3" style={{ maxHeight: '35vh' }}>
+          {loadingTagContacts ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-9 bg-muted rounded animate-pulse" />)}
+            </div>
+          ) : contacts.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              {debouncedTagSearch ? 'No matches' : 'Nobody tagged yet'}
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {contacts.map((contact) => (
+                <div key={contact.id} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 group hover:bg-muted/50 transition-colors">
+                  <div className="w-7 h-7 rounded-full bg-[#253a52]/10 text-[#253a52] flex items-center justify-center text-xs font-semibold shrink-0">
+                    {getInitials(contact.first_name, contact.last_name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{contact.full_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{contact.email}</p>
+                  </div>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-1 rounded shrink-0"
+                    onClick={() => removeMutation.mutate(contact.id)}
+                    disabled={removingIds.has(contact.id)}
+                    title="Remove from tag"
+                  >
+                    {removingIds.has(contact.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserMinus className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Separator className="shrink-0" />
+
+        {/* ── Section 2: Add people ── */}
+        <div className="px-5 pt-4 pb-2 shrink-0">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Add people</p>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={addSearch}
+              onChange={(e) => setAddSearch(e.target.value)}
+              placeholder="Search contacts..."
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 pb-5">
+          {loadingSearch ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-9 bg-muted rounded animate-pulse" />)}
+            </div>
+          ) : addCandidates.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              {debouncedAddSearch ? 'No matches' : 'All contacts already tagged'}
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {addCandidates.map((contact) => (
+                <div
+                  key={contact.id}
+                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 group hover:bg-muted/40 transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addMutation.mutate(contact.id); }}
+                >
+                  <div className="w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
+                    {getInitials(contact.first_name, contact.last_name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{contact.full_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{contact.email}</p>
+                  </div>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 shrink-0 text-xs font-medium text-[#253a52] transition-all px-2 py-0.5 rounded border border-[#253a52]/40 hover:bg-[#253a52] hover:text-white"
+                    onClick={() => addMutation.mutate(contact.id)}
+                    disabled={addingIds.has(contact.id)}
+                  >
+                    {addingIds.has(contact.id)
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : justAdded === contact.id
+                      ? <Check className="h-3 w-3 text-green-500" />
+                      : '+ Add'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {mutationError && (
-          <div className="px-6 pb-1 shrink-0">
-            <p className="text-xs text-destructive">{mutationError}</p>
-          </div>
+          <p className="px-5 pb-3 text-xs text-destructive shrink-0">{mutationError}</p>
         )}
-        <div className="px-6 py-3 border-t shrink-0 flex justify-end">
-          <Button size="sm" onClick={onClose}>Done</Button>
-        </div>
 
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 
