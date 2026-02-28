@@ -621,7 +621,7 @@ export default function ContactDetailPage() {
                 {companyDisplay && (
                   <button
                     className="text-primary hover:underline"
-                    onClick={() => navigate({ to: '/companies', search: { q: companyDisplay } })}
+                    onClick={() => navigate({ to: '/companies', search: { q: companyDisplay, ...(contact.company_id ? { openId: contact.company_id } : {}) } })}
                   >
                     {companyDisplay}
                   </button>
@@ -786,7 +786,7 @@ export default function ContactDetailPage() {
                   {(contact.company_name || contact.company) && (
                     <button
                       type="button"
-                      onClick={() => navigate({ to: '/companies' })}
+                      onClick={() => navigate({ to: '/companies', search: { ...(contact.company_id ? { openId: contact.company_id } : { q: contact.company_name || contact.company || '' }) } })}
                       className="text-sm text-primary hover:underline text-left truncate"
                       title="View company"
                     >

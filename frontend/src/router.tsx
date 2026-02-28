@@ -106,6 +106,7 @@ const companiesRoute = createRoute({
   component: CompaniesPage,
   validateSearch: (search: Record<string, unknown>) => ({
     q: (search.q as string) || undefined,
+    openId: (search.openId as string) || undefined,
   }),
 });
 

@@ -43,12 +43,19 @@ interface CompanyPOC {
 export default function CompaniesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const searchParams = useSearch({ strict: false }) as { q?: string };
+  const searchParams = useSearch({ strict: false }) as { q?: string; openId?: string };
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState(searchParams.q || '');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(searchParams.openId || null);
+
+  // If openId changes (e.g. navigated from contact page), open that drawer
+  useEffect(() => {
+    if (searchParams.openId) {
+      setSelectedCompanyId(searchParams.openId);
+    }
+  }, [searchParams.openId]);
 
   useEffect(() => {
     document.title = 'Companies — Sarson Funds CRM';
@@ -316,18 +323,23 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
 
   return (
     <Sheet open onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-[480px] sm:w-[540px] overflow-auto">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            {company?.name || 'Loading...'}
-          </SheetTitle>
-        </SheetHeader>
+      <SheetContent className="w-full sm:w-[680px] lg:w-[760px] overflow-auto p-0">
+        {/* Drawer header */}
+        <div className="px-8 pt-8 pb-5 border-b bg-muted/30">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-3 text-xl">
+              <div className="h-10 w-10 rounded-lg bg-[#253a52]/10 flex items-center justify-center shrink-0">
+                <Building2 className="h-5 w-5 text-[#253a52]" />
+              </div>
+              {company?.name || 'Loading...'}
+            </SheetTitle>
+          </SheetHeader>
+        </div>
 
         {company && (
-          <div className="space-y-6 mt-6">
+          <div className="space-y-8 px-8 py-6">
             {/* Editable fields */}
-            <div className="space-y-3 text-sm">
+            <div className="space-y-4 text-sm">
               <FieldRow label="Name">
                 <EditableField value={company.name} onSave={(v) => patchCompany('name', v)} />
               </FieldRow>
@@ -350,10 +362,10 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
 
             {/* POC */}
             <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Point of Contact</h3>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Point of Contact</h3>
               {poc ? (
                 <div
-                  className="flex items-center gap-3 p-2 border rounded-md cursor-pointer hover:bg-muted/50"
+                  className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={() => { onClose(); navigate({ to: '/contacts/$contactId', params: { contactId: poc.id } }); }}
                 >
                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
@@ -372,8 +384,8 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
 
             {/* Contacts */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Contacts ({contacts.length})</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Contacts ({contacts.length})</h3>
                 <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
                   onClose();
                   navigate({ to: '/contacts', search: { search: company.name } });
@@ -383,10 +395,10 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
                 {contacts.slice(0, 10).map((c) => (
                   <div
                     key={c.id}
-                    className="flex items-center gap-2 p-1.5 rounded hover:bg-muted/50 cursor-pointer"
+                    className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                     onClick={() => { onClose(); navigate({ to: '/contacts/$contactId', params: { contactId: c.id } }); }}
                   >
-                    <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold">
+                    <div className="h-8 w-8 rounded-full bg-[#253a52]/10 text-[#253a52] flex items-center justify-center text-xs font-semibold shrink-0">
                       {(c.first_name?.[0] || '').toUpperCase()}{(c.last_name?.[0] || '').toUpperCase()}
                     </div>
                     <span className="text-sm truncate flex-1">{c.full_name}</span>
@@ -408,9 +420,9 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-between items-center min-h-[24px]">
-      <span className="text-muted-foreground shrink-0 mr-3">{label}</span>
-      <div className="flex-1 text-right">{children}</div>
+    <div className="space-y-0.5 py-1">
+      <span className="text-xs font-medium text-muted-foreground block">{label}</span>
+      <div className="text-sm">{children}</div>
     </div>
   );
 }
