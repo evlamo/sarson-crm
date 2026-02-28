@@ -14,7 +14,6 @@ export interface Contact {
   company_name: string | null;
   company_id: string | null;
   department: string | null;
-  profile_url: string | null;
   linkedin_url: string | null;
   website: string | null;
   city: string | null;

@@ -19,7 +19,6 @@ class ContactBase(BaseModel):
     company: Optional[str] = Field(None, max_length=255)
     company_id: Optional[uuid.UUID] = None
     department: Optional[str] = Field(None, max_length=200)
-    profile_url: Optional[str] = Field(None, max_length=500)
     linkedin_url: Optional[str] = Field(None, max_length=500)
     website: Optional[str] = Field(None, max_length=500)
     city: Optional[str] = Field(None, max_length=100)
@@ -76,7 +75,6 @@ class ContactPatch(BaseModel):
     company: Optional[str] = Field(None, max_length=255)
     company_id: Optional[uuid.UUID] = None
     department: Optional[str] = Field(None, max_length=200)
-    profile_url: Optional[str] = Field(None, max_length=500)
     linkedin_url: Optional[str] = Field(None, max_length=500)
     website: Optional[str] = Field(None, max_length=500)
     city: Optional[str] = Field(None, max_length=100)

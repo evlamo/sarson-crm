@@ -44,7 +44,6 @@ const CRM_FIELDS = [
   { value: 'notes', label: 'Notes' },
   { value: 'website', label: 'Website' },
   { value: 'linkedin_url', label: 'LinkedIn URL' },
-  { value: 'profile_url', label: 'Profile URL' },
 ];
 
 const ACCEPTED_EXTENSIONS = '.csv,.tsv,.xlsx,.xls,.ods,.vcf';

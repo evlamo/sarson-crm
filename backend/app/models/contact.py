@@ -36,7 +36,6 @@ class Contact(Base):
     linkedin_url = Column(String)
     website = Column(String)
     email_domain = Column(Text)       # stored for fast firm-level filtering
-    profile_url = Column(Text)        # LinkedIn, AngelList, etc.
     sarson_rep = Column(Text, index=True)  # Sarson Funds representative name
     sales_rep = Column(Text)          # External sales person
 

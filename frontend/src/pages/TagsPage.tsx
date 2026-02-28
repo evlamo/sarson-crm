@@ -4,7 +4,29 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Trash2, Tag, Search, X, Check, Loader2, UserX } from 'lucide-react';
+
+const TAG_PALETTE = [
+  { label: 'Gray',    hex: '#6b7280' },
+  { label: 'Red',     hex: '#ef4444' },
+  { label: 'Orange',  hex: '#f97316' },
+  { label: 'Amber',   hex: '#f59e0b' },
+  { label: 'Yellow',  hex: '#eab308' },
+  { label: 'Lime',    hex: '#84cc16' },
+  { label: 'Green',   hex: '#22c55e' },
+  { label: 'Teal',    hex: '#14b8a6' },
+  { label: 'Cyan',    hex: '#06b6d4' },
+  { label: 'Sky',     hex: '#0ea5e9' },
+  { label: 'Blue',    hex: '#3b82f6' },
+  { label: 'Indigo',  hex: '#6366f1' },
+  { label: 'Violet',  hex: '#8b5cf6' },
+  { label: 'Purple',  hex: '#a855f7' },
+  { label: 'Pink',    hex: '#ec4899' },
+  { label: 'Rose',    hex: '#f43f5e' },
+  { label: 'Navy',    hex: '#253a52' },
+  { label: 'Black',   hex: '#1a1a1a' },
+];
 import {
   Sheet,
   SheetContent,
@@ -369,6 +391,15 @@ export default function TagsPage() {
     },
   });
 
+  const colorMutation = useMutation({
+    mutationFn: async ({ id, color }: { id: string; color: string }) => {
+      await api.patch(`/tags/${id}`, { color });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+    },
+  });
+
   const startEdit = (tag: TagWithCount) => {
     setEditingId(tag.id);
     setEditDraft(tag.name);
@@ -436,10 +467,33 @@ export default function TagsPage() {
               {tags.map((tag) => (
                 <div key={tag.id} className="flex items-center justify-between py-3 group">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: tag.color || '#6b7280' }}
-                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          className="w-4 h-4 rounded-full shrink-0 ring-offset-background transition-all hover:scale-125 hover:ring-2 hover:ring-offset-2 hover:ring-[#253a52] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#253a52]"
+                          style={{ backgroundColor: tag.color || '#6b7280' }}
+                          title="Change color"
+                        />
+                      </PopoverTrigger>
+                      <PopoverContent className="w-48 p-3" align="start">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Tag color</p>
+                        <div className="grid grid-cols-6 gap-1.5">
+                          {TAG_PALETTE.map((swatch) => (
+                            <button
+                              key={swatch.hex}
+                              className="w-6 h-6 rounded-full transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#253a52]"
+                              style={{ backgroundColor: swatch.hex }}
+                              title={swatch.label}
+                              onClick={() => colorMutation.mutate({ id: tag.id, color: swatch.hex })}
+                            >
+                              {tag.color === swatch.hex && (
+                                <Check className="h-3 w-3 text-white mx-auto drop-shadow" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                     {editingId === tag.id ? (
                       <input
                         ref={editRef}
