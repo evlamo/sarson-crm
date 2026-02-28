@@ -167,7 +167,12 @@ def patch_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Partial update of a company."""
+    """Partial update of a company.
+    
+    Note: updating company.name does NOT retroactively update Contact.company text fields.
+    Display uses the relationship (company_obj.name), so UI is correct.
+    The denormalized Contact.company field is only used for import/legacy compatibility.
+    """
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),

@@ -20,6 +20,9 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
   const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const showDropdownRef = useRef(showDropdown);
+
+  useEffect(() => { showDropdownRef.current = showDropdown; }, [showDropdown]);
 
   const { data: companies } = useQuery({
     queryKey: ['companies-search', search],
@@ -84,9 +87,9 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
               }
             }}
             onBlur={() => {
-              // Delay to allow dropdown click
+              // Delay to allow dropdown click; use ref to avoid stale closure
               setTimeout(() => {
-                if (!showDropdown) doSave(search);
+                if (!showDropdownRef.current) doSave(search);
               }, 200);
             }}
             placeholder="Search or create company..."
