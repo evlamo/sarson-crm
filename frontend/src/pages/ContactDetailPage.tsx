@@ -92,7 +92,7 @@ export default function ContactDetailPage() {
     }
   }, [contact]);
 
-  const { data: activities } = useQuery({
+  const { data: activities, isLoading: activitiesLoading } = useQuery({
     queryKey: ['contact-activities', contactId],
     queryFn: async () => {
       const res = await api.get<{ data: Activity[] }>(`/contacts/${contactId}/activities`);
@@ -534,7 +534,19 @@ export default function ContactDetailPage() {
 
             {/* Timeline */}
             <div className="space-y-3 mt-4">
-              {!activities?.length ? (
+              {activitiesLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="h-7 w-7 rounded-full bg-muted animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 bg-muted rounded animate-pulse w-1/3" />
+                        <div className="h-4 bg-muted rounded animate-pulse w-2/3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : !activities?.length ? (
                 <div className="text-center py-8">
                   <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
                   <p className="text-sm text-muted-foreground">No notes yet</p>

@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import datetime
 from jose import JWTError
+import logging
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.database import get_db
 from app.models.user import User
 from app.auth.security import verify_password, hash_password, create_access_token, create_refresh_token, decode_token
@@ -9,12 +12,18 @@ from app.auth.schemas import LoginRequest, TokenResponse, RefreshRequest, UserOu
 from app.auth.dependencies import get_current_user, get_admin_user
 import uuid
 
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
+
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
+    logger.info("Login attempt for user: %s", req.email)
     user = db.query(User).filter(User.email == req.email, User.is_active == True).first()
     if not user or not verify_password(req.password, user.hashed_password):
+        logger.warning("Failed login attempt for user: %s", req.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     user.last_login = datetime.utcnow()

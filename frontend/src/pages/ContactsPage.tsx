@@ -186,7 +186,10 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
             <div className="grid grid-cols-2 gap-4">
               {field('Middle Name', 'middle_name')}
               {field('Position / Title', 'title', { placeholder: 'Portfolio Manager' })}
-              {field('Phone', 'phone', { type: 'tel', placeholder: '+1 (312) 555-0100' })}
+              <div className="space-y-1">
+                {field('Phone', 'phone', { type: 'tel', placeholder: '+1 (555) 000-0000' })}
+                <p className="text-xs text-muted-foreground">Format: +1XXXXXXXXXX</p>
+              </div>
               <div className="space-y-1">
                 <Label className="text-sm font-medium">Status</Label>
                 <select
@@ -526,6 +529,7 @@ function TagModal({ open, onClose, contactIds }: { open: boolean; onClose: () =>
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
       setSelectedTagIds([]);
       setNewTagName('');
       onClose();
