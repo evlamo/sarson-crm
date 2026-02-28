@@ -14,6 +14,8 @@ interface EditableFieldProps {
   linkHref?: string;
   /** Render custom display instead of plain text */
   renderDisplay?: (value: string | null | undefined) => React.ReactNode;
+  /** Show only a pencil icon button (no display text) — used alongside a separate display element */
+  showPencilOnly?: boolean;
   className?: string;
 }
 
@@ -27,6 +29,7 @@ export function EditableField({
   hint,
   linkHref,
   renderDisplay,
+  showPencilOnly,
   className,
 }: EditableFieldProps) {
   const [editing, setEditing] = useState(false);
@@ -142,6 +145,18 @@ export function EditableField({
 
   const displayValue = value || '';
   const isEmpty = !displayValue;
+
+  if (showPencilOnly) {
+    return (
+      <button
+        className={cn('inline-flex items-center text-muted-foreground hover:text-primary transition-colors shrink-0', className)}
+        onClick={() => setEditing(true)}
+        title="Edit"
+      >
+        {success ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Pencil className="h-3 w-3" />}
+      </button>
+    );
+  }
 
   return (
     <div

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { formatDate, formatTime } from '@/lib/formatDate';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from '@tanstack/react-router';
@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle, Linkedin, Globe, ExternalLink } from 'lucide-react';
@@ -26,7 +25,6 @@ interface ContactDetail {
   company_name: string | null;
   company_id: string | null;
   status: string;
-  contacted: boolean;
   sarson_rep: string | null;
   next_step: string | null;
   last_contacted_at: string | null;
@@ -111,14 +109,175 @@ function getInitials(first: string | null, last: string | null, email?: string |
   return (f + l).toUpperCase() || email?.charAt(0).toUpperCase() || '?';
 }
 
-function truncateUrl(url: string | null): string {
-  if (!url) return '';
-  try {
-    const u = new URL(url);
-    return u.hostname + (u.pathname !== '/' ? u.pathname : '');
-  } catch {
-    return url.replace(/^https?:\/\//, '').slice(0, 40);
+function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-0.5 py-1">
+      <span className="text-xs font-medium text-muted-foreground block">{label}</span>
+      <div className="text-sm">{children}</div>
+    </div>
+  );
+}
+
+function InlineLastContactedDetail({ contact, onSave }: { contact: ContactDetail; onSave: (field: string, value: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const save = async () => {
+    const current = contact.last_contacted_at ? contact.last_contacted_at.slice(0, 10) : '';
+    if (draft !== current) {
+      await onSave('last_contacted_at', draft);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="date"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        className="h-7 px-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+      />
+    );
   }
+
+  const display = contact.last_contacted_at ? formatDate(contact.last_contacted_at) : null;
+  return (
+    <span
+      onClick={() => {
+        const iso = contact.last_contacted_at ? contact.last_contacted_at.slice(0, 10) : '';
+        setDraft(iso);
+        setEditing(true);
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }}
+      className="text-sm cursor-pointer hover:text-primary transition-colors"
+      title="Click to edit"
+    >
+      {display || <span className="text-muted-foreground italic">—</span>}
+    </span>
+  );
+}
+
+function TagManager({ contact, onUpdate }: { contact: ContactDetail; onUpdate: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const queryClient = useQueryClient();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const { data: allTags } = useQuery({
+    queryKey: ['tags'],
+    queryFn: async () => {
+      const res = await api.get<{ data: { id: string; name: string; color: string }[] }>('/tags/');
+      return res.data.data || [];
+    },
+    enabled: open,
+  });
+
+  const contactTagIds = new Set(contact.tags?.map(t => t.id) || []);
+
+  const addTag = useMutation({
+    mutationFn: async (tagId: string) => {
+      await api.post(`/contacts/${contact.id}/tags`, { tag_id: tagId });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['contact', contact.id] }); queryClient.invalidateQueries({ queryKey: ['contacts'] }); onUpdate(); },
+    onError: () => toast.error('Failed to add tag'),
+  });
+
+  const removeTag = useMutation({
+    mutationFn: async (tagId: string) => {
+      await api.delete(`/contacts/${contact.id}/tags/${tagId}`);
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['contact', contact.id] }); queryClient.invalidateQueries({ queryKey: ['contacts'] }); onUpdate(); },
+    onError: () => toast.error('Failed to remove tag'),
+  });
+
+  const createAndAddTag = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await api.post<{ id: string; name: string; color: string }>('/tags/', { name });
+      await api.post(`/contacts/${contact.id}/tags`, { tag_id: res.data.id });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+      setSearch('');
+      onUpdate();
+    },
+    onError: () => toast.error('Failed to create tag'),
+  });
+
+  const filtered = (allTags || []).filter(t =>
+    !search || t.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const exactMatch = (allTags || []).some(t => t.name.toLowerCase() === search.toLowerCase());
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-dashed border-muted-foreground/40 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+      >
+        <span>+</span> Tag
+      </button>
+      {open && (
+        <div className="absolute top-8 left-0 z-50 w-56 bg-card border rounded-lg shadow-lg p-2">
+          <input
+            autoFocus
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search or create tag..."
+            className="w-full px-2 py-1.5 text-sm border rounded mb-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <div className="max-h-48 overflow-y-auto space-y-0.5">
+            {filtered.map(tag => {
+              const isOn = contactTagIds.has(tag.id);
+              return (
+                <button
+                  key={tag.id}
+                  onClick={() => isOn ? removeTag.mutate(tag.id) : addTag.mutate(tag.id)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left"
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: tag.color || '#6366f1' }}
+                  />
+                  <span className="flex-1 truncate">{tag.name}</span>
+                  {isOn && <span className="text-primary text-xs">✓</span>}
+                </button>
+              );
+            })}
+            {search && !exactMatch && (
+              <button
+                onClick={() => createAndAddTag.mutate(search.trim())}
+                disabled={createAndAddTag.isPending}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left text-primary"
+              >
+                <span>+</span> Create &ldquo;{search.trim()}&rdquo;
+              </button>
+            )}
+            {!filtered.length && !search && (
+              <p className="text-xs text-muted-foreground text-center py-2">No tags yet</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function ContactDetailPage() {
@@ -170,6 +329,17 @@ export default function ContactDetailPage() {
     },
   });
 
+  const removeTagMutation = useMutation({
+    mutationFn: async (tagId: string) => {
+      await api.delete(`/contacts/${contactId}/tags/${tagId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+    onError: () => toast.error('Failed to remove tag'),
+  });
+
   const addNoteMutation = useMutation({
     mutationFn: async (body: string) => {
       await api.post(`/contacts/${contactId}/activities`, {
@@ -186,12 +356,6 @@ export default function ContactDetailPage() {
       toast.error('Failed to add note');
     },
   });
-
-  const toggleContacted = () => {
-    if (contact) {
-      updateMutation.mutate({ contacted: !contact.contacted });
-    }
-  };
 
   const savePatch = async (field: string, value: string) => {
     try {
@@ -233,7 +397,6 @@ export default function ContactDetailPage() {
 
   const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Unnamed Contact';
   const companyDisplay = contact.company_name || contact.company;
-  const locationParts = [contact.city, contact.state, contact.country].filter(Boolean);
 
   return (
     <div className="space-y-6">
@@ -262,33 +425,50 @@ export default function ContactDetailPage() {
                   </button>
                 )}
               </p>
-              {/* Tags */}
-              {contact.tags && contact.tags.length > 0 && (
-                <div className="flex gap-1.5 flex-wrap mt-2">
+              {/* Tags with × and TagManager */}
+              {contact.tags && contact.tags.length > 0 ? (
+                <div className="flex gap-1.5 flex-wrap mt-2 items-center">
                   {contact.tags.map((tag, i) => (
-                    <Badge
+                    <span
                       key={tag.id}
-                      className={`${tag.color ? '' : TAG_COLORS[i % TAG_COLORS.length]} text-white text-xs`}
+                      className={`inline-flex items-center gap-1 ${tag.color ? '' : TAG_COLORS[i % TAG_COLORS.length]} text-white text-xs px-2 py-0.5 rounded-full`}
                       style={tag.color ? { backgroundColor: tag.color, color: '#fff' } : undefined}
                     >
                       {tag.name}
-                    </Badge>
+                      <button
+                        onClick={() => removeTagMutation.mutate(tag.id)}
+                        className="ml-0.5 hover:opacity-70 transition-opacity"
+                      >×</button>
+                    </span>
                   ))}
+                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} />
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} />
                 </div>
               )}
               {/* Quick-action chips */}
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 {contact.email && (
-                  <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(contact.email!); toast.success('Email copied!'); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors"
+                    title="Click to copy email"
+                  >
                     <Mail className="h-3.5 w-3.5" />
                     {contact.email}
-                  </a>
+                  </button>
                 )}
                 {contact.phone && (
-                  <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(contact.phone!); toast.success('Phone copied!'); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors"
+                    title="Click to copy phone"
+                  >
                     <Phone className="h-3.5 w-3.5" />
                     {contact.phone}
-                  </a>
+                  </button>
                 )}
                 {contact.linkedin_url && (
                   <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-muted hover:bg-muted/80 transition-colors">
@@ -303,14 +483,6 @@ export default function ContactDetailPage() {
               </div>
             </div>
           </div>
-          <Button
-            variant={contact.contacted ? 'default' : 'outline'}
-            size="sm"
-            onClick={toggleContacted}
-            className="shrink-0"
-          >
-            {contact.contacted ? '✓ Contacted' : 'Mark Contacted'}
-          </Button>
         </div>
       </div>
 
@@ -325,7 +497,7 @@ export default function ContactDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <FieldRow label="Status">
-                <div className="flex items-center justify-end">
+                <div className="flex items-center">
                   <StatusDot status={contact.status} />
                   <EditableField
                     value={contact.status}
@@ -335,16 +507,12 @@ export default function ContactDetailPage() {
                   />
                 </div>
               </FieldRow>
-              <div className="flex justify-between items-center min-h-[24px]">
-                <span className="text-muted-foreground shrink-0 mr-3">Sales Rep</span>
+              <FieldRow label="Sales Rep">
                 <RepAssignPopover
                   contactId={contact.id}
                   currentRep={contact.sarson_rep}
                   variant="detail"
                 />
-              </div>
-              <FieldRow label="Next Step">
-                <EditableField value={contact.next_step} onSave={(v) => savePatch('next_step', v)} placeholder="Add next step..." />
               </FieldRow>
               <FieldRow label="Lead Source">
                 <EditableField
@@ -354,11 +522,9 @@ export default function ContactDetailPage() {
                   onSave={(v) => savePatch('source', v)}
                 />
               </FieldRow>
-              {contact.last_contacted_at && (
-                <FieldRow label="Last Contacted">
-                  <span>{formatDate(contact.last_contacted_at)}</span>
-                </FieldRow>
-              )}
+              <FieldRow label="Last Contacted">
+                <InlineLastContactedDetail contact={contact} onSave={savePatch} />
+              </FieldRow>
               {(contact.email_open_count > 0 || contact.email_click_count > 0) && (
                 <FieldRow label="Email Stats">
                   <span className="text-xs space-x-2">
@@ -392,44 +558,53 @@ export default function ContactDetailPage() {
                 </FieldRow>
               )}
               <FieldRow label="Email">
-                <div className="flex items-center gap-1 justify-end">
-                  <EditableField value={contact.email} type="email" onSave={(v) => savePatch('email', v)} placeholder="—" />
-                  {contact.email && (
-                    <a href={`mailto:${contact.email}`} className="text-muted-foreground hover:text-primary shrink-0"><Mail className="h-3.5 w-3.5" /></a>
+                <div className="flex items-center gap-2">
+                  {contact.email ? (
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(contact.email!); toast.success('Email copied!'); }}
+                      className="text-sm hover:text-primary transition-colors text-left break-all"
+                      title="Click to copy"
+                    >
+                      {contact.email}
+                    </button>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
                   )}
+                  <EditableField value={contact.email} type="email" onSave={(v) => savePatch('email', v)} placeholder="—" showPencilOnly />
                 </div>
               </FieldRow>
               <FieldRow label="Phone">
-                <div className="flex items-center gap-1 justify-end">
-                  <EditableField value={contact.phone} type="tel" onSave={(v) => savePatch('phone', v)} placeholder="—" hint="+1234567890" />
-                  {contact.phone && (
-                    <a href={`tel:${contact.phone}`} className="text-muted-foreground hover:text-primary shrink-0"><Phone className="h-3.5 w-3.5" /></a>
+                <div className="flex items-center gap-2">
+                  {contact.phone ? (
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(contact.phone!); toast.success('Phone copied!'); }}
+                      className="text-sm hover:text-primary transition-colors text-left break-all"
+                      title="Click to copy"
+                    >
+                      {contact.phone}
+                    </button>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
                   )}
+                  <EditableField value={contact.phone} type="tel" onSave={(v) => savePatch('phone', v)} placeholder="—" hint="+1234567890" showPencilOnly />
                 </div>
               </FieldRow>
               <FieldRow label="Title">
                 <EditableField value={contact.title} onSave={(v) => savePatch('title', v)} placeholder="—" />
               </FieldRow>
               <FieldRow label="Company">
-                <div className="flex items-center gap-1 justify-end">
-                  <CompanyCombobox
-                    companyName={contact.company_name || contact.company}
-                    companyId={contact.company_id}
-                    onSave={async (name, selectedCompanyId) => {
-                      const payload: Record<string, unknown> = { company: name };
-                      if (selectedCompanyId) payload.company_id = selectedCompanyId;
-                      await patchContact(payload);
-                      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
-                      toast.success('Company updated');
-                    }}
-                    onNavigate={() => navigate({ to: '/companies' })}
-                  />
-                  {contact.company_id && (
-                    <button onClick={() => navigate({ to: '/companies' })} className="text-muted-foreground hover:text-primary shrink-0">
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                <CompanyCombobox
+                  companyName={contact.company_name || contact.company}
+                  companyId={contact.company_id}
+                  onSave={async (name, selectedCompanyId) => {
+                    const payload: Record<string, unknown> = { company: name };
+                    if (selectedCompanyId) payload.company_id = selectedCompanyId;
+                    await patchContact(payload);
+                    queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+                    toast.success('Company updated');
+                  }}
+                  onNavigate={() => navigate({ to: '/companies' })}
+                />
               </FieldRow>
               <FieldRow label="City">
                 <EditableField value={contact.city} onSave={(v) => savePatch('city', v)} placeholder="—" />
@@ -450,7 +625,7 @@ export default function ContactDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <FieldRow label="LinkedIn">
-                <div className="flex items-center gap-1 justify-end min-w-0">
+                <div className="flex items-center gap-1 min-w-0">
                   <EditableField
                     value={contact.linkedin_url}
                     type="url"
@@ -466,7 +641,7 @@ export default function ContactDetailPage() {
                 </div>
               </FieldRow>
               <FieldRow label="Website">
-                <div className="flex items-center gap-1 justify-end min-w-0">
+                <div className="flex items-center gap-1 min-w-0">
                   <EditableField
                     value={contact.website}
                     type="url"
@@ -565,6 +740,22 @@ export default function ContactDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Next Step */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Next Step</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EditableField
+                value={contact.next_step}
+                type="textarea"
+                onSave={(v) => savePatch('next_step', v)}
+                placeholder="Add next step..."
+                className="w-full"
+              />
+            </CardContent>
+          </Card>
+
           {/* Background Notes */}
           <Card>
             <CardHeader className="pb-3">
@@ -582,15 +773,6 @@ export default function ContactDetailPage() {
           </Card>
         </div>
       </div>
-    </div>
-  );
-}
-
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex justify-between items-center min-h-[24px]">
-      <span className="text-muted-foreground shrink-0 mr-3 text-xs">{label}</span>
-      <div className="flex-1 text-right">{children}</div>
     </div>
   );
 }

@@ -853,17 +853,37 @@ export default function ContactsPage() {
         accessorKey: 'email',
         header: 'Email',
         meta: { className: 'min-w-[180px]', truncate: true },
-        cell: ({ getValue }) => (
-          <span className="block truncate text-muted-foreground text-sm max-w-[220px]">{getValue<string | null>() || '—'}</span>
-        ),
+        cell: ({ getValue }) => {
+          const val = getValue<string | null>();
+          if (!val) return <span className="text-muted-foreground text-sm">—</span>;
+          return (
+            <button
+              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(val); toast.success('Email copied!'); }}
+              className="block truncate text-muted-foreground text-sm max-w-[220px] hover:text-primary transition-colors text-left"
+              title="Click to copy"
+            >
+              {val}
+            </button>
+          );
+        },
       },
       {
         accessorKey: 'phone',
         header: 'Phone',
         meta: { className: 'min-w-[120px]' },
-        cell: ({ getValue }) => (
-          <span className="block truncate text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
-        ),
+        cell: ({ getValue }) => {
+          const val = getValue<string | null>();
+          if (!val) return <span className="text-muted-foreground text-sm">—</span>;
+          return (
+            <button
+              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(val); toast.success('Phone copied!'); }}
+              className="block truncate text-muted-foreground text-sm hover:text-primary transition-colors text-left"
+              title="Click to copy"
+            >
+              {val}
+            </button>
+          );
+        },
       },
       {
         accessorKey: 'last_contacted_at',
