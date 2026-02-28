@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import {
   useReactTable,
   getCoreRowModel,
@@ -59,7 +59,7 @@ const EMPTY_FORM = {
   middle_name: '',
   title: '',
   phone: '',
-  status: 'active',
+  status: 'prospect',
   source: '',
   sarson_rep: '',
   next_step: '',
@@ -685,17 +685,40 @@ export default function ContactsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const windowWidth = useWindowWidth();
-  const [page, setPage] = useState(1);
+  const searchParams = useSearch({ strict: false }) as {
+    page?: number; sort?: string; order?: string; status?: string; search?: string; rep?: string;
+  };
+  const [page, setPageRaw] = useState(searchParams.page || 1);
   const [limit] = useState(50);
-  const [search, setSearch] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [search, setSearch] = useState(searchParams.search || '');
+  const [searchInput, setSearchInput] = useState(searchParams.search || '');
+  const [sorting, setSorting] = useState<SortingState>(
+    searchParams.sort ? [{ id: searchParams.sort, desc: searchParams.order === 'desc' }] : []
+  );
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [salesRepFilter, setSalesRepFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.status || 'all');
+  const [salesRepFilter, setSalesRepFilter] = useState<string>(searchParams.rep || '');
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Sync state to URL params
+  const setPage = useCallback((v: number | ((p: number) => number)) => {
+    setPageRaw((prev) => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const params: Record<string, unknown> = {};
+    if (page > 1) params.page = page;
+    if (sorting[0]) { params.sort = sorting[0].id; params.order = sorting[0].desc ? 'desc' : 'asc'; }
+    if (statusFilter !== 'all') params.status = statusFilter;
+    if (search) params.search = search;
+    if (salesRepFilter) params.rep = salesRepFilter;
+    navigate({ to: '/contacts', search: params, replace: true });
+  }, [page, sorting, statusFilter, search, salesRepFilter, navigate]);
 
   // Responsive column visibility
   const columnVisibility = useMemo(() => ({
@@ -939,6 +962,22 @@ export default function ContactsPage() {
           placeholder="Filter by rep..."
           className="w-36 h-9"
         />
+        {(searchInput || search || statusFilter !== 'all' || salesRepFilter) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 gap-1 text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              setSearchInput('');
+              setSearch('');
+              setStatusFilter('all');
+              setSalesRepFilter('');
+              setPage(1);
+            }}
+          >
+            <X className="h-3.5 w-3.5" /> Clear filters
+          </Button>
+        )}
         <span className="text-xs text-muted-foreground ml-auto">
           {total > 0 ? `${startItem}–${endItem} of ${total.toLocaleString()}` : ''}
         </span>
@@ -1065,17 +1104,68 @@ export default function ContactsPage() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
         <span className="text-sm text-muted-foreground">
-          {total > 0 ? `Page ${page} of ${totalPages}` : ''}
+          {total > 0 ? `${total.toLocaleString()} contacts · Page ${page} of ${totalPages}` : ''}
         </span>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1">
           <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             Previous
           </Button>
+          {(() => {
+            if (totalPages <= 1) return null;
+            const pages: (number | 'ellipsis')[] = [];
+            if (totalPages <= 7) {
+              for (let i = 1; i <= totalPages; i++) pages.push(i);
+            } else {
+              pages.push(1);
+              const start = Math.max(2, page - 1);
+              const end = Math.min(totalPages - 1, page + 1);
+              if (start > 2) pages.push('ellipsis');
+              for (let i = start; i <= end; i++) pages.push(i);
+              if (end < totalPages - 1) pages.push('ellipsis');
+              pages.push(totalPages);
+            }
+            return pages.map((p, i) =>
+              p === 'ellipsis' ? (
+                <span key={`e${i}`} className="px-1 text-muted-foreground">…</span>
+              ) : (
+                <Button
+                  key={p}
+                  variant={p === page ? 'default' : 'outline'}
+                  size="sm"
+                  className="min-w-[36px]"
+                  onClick={() => setPage(p)}
+                >
+                  {p}
+                </Button>
+              )
+            );
+          })()}
           <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
             Next
           </Button>
+          {totalPages > 7 && (
+            <form
+              className="flex items-center gap-1 ml-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const input = (e.currentTarget.elements.namedItem('goPage') as HTMLInputElement);
+                const val = parseInt(input.value, 10);
+                if (val >= 1 && val <= totalPages) { setPage(val); input.value = ''; }
+              }}
+            >
+              <span className="text-xs text-muted-foreground">Go to</span>
+              <input
+                name="goPage"
+                type="number"
+                min={1}
+                max={totalPages}
+                className="w-14 h-8 px-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="#"
+              />
+            </form>
+          )}
         </div>
       </div>
     </div>

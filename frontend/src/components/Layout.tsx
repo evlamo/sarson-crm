@@ -10,6 +10,8 @@ import {
   Filter,
   Upload,
   LogOut,
+  Tag,
+  History,
 } from 'lucide-react';
 
 const navItems = [
@@ -18,7 +20,9 @@ const navItems = [
   { to: '/pipeline', label: 'Pipeline', icon: Kanban },
   { to: '/campaigns', label: 'Campaigns', icon: Mail },
   { to: '/segments', label: 'Segments', icon: Filter },
+  { to: '/tags', label: 'Tags', icon: Tag },
   { to: '/import', label: 'Import', icon: Upload },
+  { to: '/imports', label: 'Import History', icon: History },
 ];
 
 export default function Layout() {

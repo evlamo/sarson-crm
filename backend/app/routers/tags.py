@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func
+from typing import List, Optional
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
@@ -13,12 +14,31 @@ from app.models.user import User
 router = APIRouter(prefix="/api/v1", tags=["tags"])
 
 
-@router.get("/tags", response_model=List[TagResponse])
+@router.get("/tags")
 def list_tags(
+    with_counts: Optional[bool] = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List all tags."""
+    """List all tags, optionally with contact counts."""
+    if with_counts:
+        results = (
+            db.query(Tag, func.count(ContactTag.c.contact_id).label("contact_count"))
+            .outerjoin(ContactTag, Tag.id == ContactTag.c.tag_id)
+            .group_by(Tag.id)
+            .order_by(Tag.name)
+            .all()
+        )
+        return [
+            {
+                "id": str(tag.id),
+                "name": tag.name,
+                "color": tag.color,
+                "category": getattr(tag, "category", None),
+                "contact_count": count,
+            }
+            for tag, count in results
+        ]
     return db.query(Tag).order_by(Tag.name).all()
 
 
@@ -35,6 +55,24 @@ def create_tag(
 
     tag = Tag(**payload.model_dump())
     db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    return tag
+
+
+@router.patch("/tags/{tag_id}", response_model=TagResponse)
+def update_tag(
+    tag_id: str,
+    payload: TagUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update a tag (rename, change color)."""
+    tag = db.query(Tag).filter(Tag.id == tag_id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(tag, key, value)
     db.commit()
     db.refresh(tag)
     return tag

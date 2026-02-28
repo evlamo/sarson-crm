@@ -27,6 +27,12 @@ interface ContactDetail {
   notes: string | null;
   city: string | null;
   state: string | null;
+  country: string | null;
+  linkedin_url: string | null;
+  website: string | null;
+  source: string | null;
+  email_open_count: number;
+  email_click_count: number;
   tags?: { id: string; name: string; color: string }[];
   created_at: string;
   updated_at: string;
@@ -189,7 +195,41 @@ export default function ContactDetailPage() {
     company: '',
     next_step: '',
     notes: '',
+    linkedin_url: '',
+    website: '',
+    city: '',
+    state: '',
+    country: '',
+    source: '',
   });
+
+  // Background Notes inline editing
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  const notesMutation = useMutation({
+    mutationFn: async (value: string) => {
+      await api.patch(`/contacts/${contactId}`, { notes: value || null });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+      setEditingNotes(false);
+      toast.success('Background notes updated');
+    },
+    onError: () => toast.error('Failed to update notes'),
+  });
+
+  const startEditingNotes = () => {
+    setNotesDraft(contact?.notes || '');
+    setEditingNotes(true);
+    setTimeout(() => notesRef.current?.focus(), 0);
+  };
+
+  const saveNotes = () => {
+    if (notesDraft !== (contact?.notes || '')) notesMutation.mutate(notesDraft);
+    else setEditingNotes(false);
+  };
 
   const contactId_str = contact?.id;
   const [lastSyncedId, setLastSyncedId] = useState<string | null>(null);
@@ -204,6 +244,12 @@ export default function ContactDetailPage() {
       company: contact.company || '',
       next_step: contact.next_step || '',
       notes: contact.notes || '',
+      linkedin_url: contact.linkedin_url || '',
+      website: contact.website || '',
+      city: contact.city || '',
+      state: contact.state || '',
+      country: contact.country || '',
+      source: contact.source || '',
     });
   }
 
@@ -322,6 +368,30 @@ export default function ContactDetailPage() {
                   <Label>Next Step</Label>
                   <Input value={editForm.next_step} onChange={(e) => setEditForm({ ...editForm, next_step: e.target.value })} />
                 </div>
+                <div>
+                  <Label>LinkedIn URL</Label>
+                  <Input value={editForm.linkedin_url} onChange={(e) => setEditForm({ ...editForm, linkedin_url: e.target.value })} placeholder="https://linkedin.com/in/..." />
+                </div>
+                <div>
+                  <Label>Website</Label>
+                  <Input value={editForm.website} onChange={(e) => setEditForm({ ...editForm, website: e.target.value })} placeholder="https://..." />
+                </div>
+                <div>
+                  <Label>City</Label>
+                  <Input value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} />
+                </div>
+                <div>
+                  <Label>State</Label>
+                  <Input value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Country</Label>
+                  <Input value={editForm.country} onChange={(e) => setEditForm({ ...editForm, country: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Source</Label>
+                  <Input value={editForm.source} onChange={(e) => setEditForm({ ...editForm, source: e.target.value })} />
+                </div>
                 <div className="flex gap-2">
                   <Button type="submit" size="sm" disabled={updateMutation.isPending}>
                     {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
@@ -338,6 +408,36 @@ export default function ContactDetailPage() {
                 <InfoRow label="Title" value={contact.title} />
                 <InfoRow label="Company" value={contact.company} />
                 <InfoRow label="Status" value={contact.status} />
+                {contact.linkedin_url && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">LinkedIn</span>
+                    <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-[60%]">
+                      {contact.linkedin_url.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, '').replace(/\/$/, '') || 'Profile'}
+                    </a>
+                  </div>
+                )}
+                {contact.website && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Website</span>
+                    <a href={contact.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate max-w-[60%]">
+                      {contact.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
+                    </a>
+                  </div>
+                )}
+                <InfoRow label="Location" value={[contact.city, contact.state, contact.country].filter(Boolean).join(', ')} />
+                {contact.source && <InfoRow label="Source" value={contact.source} />}
+                {contact.last_contacted_at && (
+                  <InfoRow label="Last Contacted" value={new Date(contact.last_contacted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} />
+                )}
+                {(contact.email_open_count > 0 || contact.email_click_count > 0) && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Email Stats</span>
+                    <span className="text-xs space-x-2">
+                      {contact.email_open_count > 0 && <span>{contact.email_open_count} opens</span>}
+                      {contact.email_click_count > 0 && <span>{contact.email_click_count} clicks</span>}
+                    </span>
+                  </div>
+                )}
                 {/* Sales Rep — inline editable */}
                 <div className="flex justify-between items-center min-h-[24px]">
                   <span className="text-muted-foreground shrink-0">Sales Rep</span>
@@ -361,8 +461,6 @@ export default function ContactDetailPage() {
                     </div>
                   )}
                 </div>
-                <InfoRow label="Location" value={[contact.city, contact.state].filter(Boolean).join(', ')} />
-
                 <Separator />
                 {/* Next Step — inline editable, nested at bottom */}
                 <div className="flex justify-between items-center min-h-[24px]">
@@ -468,6 +566,56 @@ export default function ContactDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Background Notes — Item 1 & 8 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Background Notes</span>
+            {!editingNotes && (
+              <Button variant="ghost" size="sm" onClick={startEditingNotes}>
+                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {editingNotes ? (
+            <div className="space-y-2">
+              <textarea
+                ref={notesRef}
+                value={notesDraft}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveNotes();
+                  if (e.key === 'Escape') setEditingNotes(false);
+                }}
+                rows={4}
+                className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                placeholder="Background context, how you met, relevant details..."
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={saveNotes} disabled={notesMutation.isPending}>
+                  {notesMutation.isPending ? 'Saving...' : 'Save'}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditingNotes(false)}>Cancel</Button>
+                <span className="text-xs text-muted-foreground self-center ml-auto">⌘+Enter to save</span>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="cursor-pointer group min-h-[40px]"
+              onClick={startEditingNotes}
+            >
+              {contact.notes ? (
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{contact.notes}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No background notes yet. Click to add.</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

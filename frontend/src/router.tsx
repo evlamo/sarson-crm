@@ -11,6 +11,8 @@ import ContactDetailPage from '@/pages/ContactDetailPage';
 import PipelinePage from '@/pages/PipelinePage';
 import CampaignsPage from '@/pages/CampaignsPage';
 import ImportPage from '@/pages/ImportPage';
+import TagsPage from '@/pages/TagsPage';
+import ImportHistoryPage from '@/pages/ImportHistoryPage';
 
 import { useEffect } from 'react';
 
@@ -64,6 +66,14 @@ const contactsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/contacts',
   component: ContactsPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    page: Number(search.page) || undefined,
+    sort: (search.sort as string) || undefined,
+    order: (search.order as string) || undefined,
+    status: (search.status as string) || undefined,
+    search: (search.search as string) || undefined,
+    rep: (search.rep as string) || undefined,
+  }),
 });
 
 const contactDetailRoute = createRoute({
@@ -102,6 +112,18 @@ const importRoute = createRoute({
   component: ImportPage,
 });
 
+const tagsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/tags',
+  component: TagsPage,
+});
+
+const importHistoryRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/imports',
+  component: ImportHistoryPage,
+});
+
 // Build route tree
 const routeTree = rootRoute.addChildren([
   loginRoute,
@@ -114,6 +136,8 @@ const routeTree = rootRoute.addChildren([
     campaignsRoute,
     segmentsRoute,
     importRoute,
+    tagsRoute,
+    importHistoryRoute,
   ]),
 ]);
 
