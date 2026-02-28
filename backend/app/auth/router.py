@@ -61,8 +61,9 @@ def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_c
 @users_router.post("/", response_model=UserOut)
 def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     # Domain restriction
-    if not req.email.lower().endswith("@sarsonfunds.com"):
-        raise HTTPException(status_code=422, detail="Only @sarsonfunds.com email addresses are permitted")
+    # Domain restriction — disabled for local development, re-enable for MVP
+    # if not req.email.lower().endswith("@sarsonfunds.com"):
+    #     raise HTTPException(status_code=422, detail="Only @sarsonfunds.com email addresses are permitted")
     existing = db.query(User).filter(User.email == req.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
