@@ -101,7 +101,7 @@ const companiesRoute = createRoute({
 const pipelineRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/pipeline',
-  component: PipelinePage,
+  component: () => <PlaceholderPage title="Pipeline" />,
 });
 
 const campaignsRoute = createRoute({

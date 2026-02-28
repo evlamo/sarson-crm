@@ -41,9 +41,9 @@ export default function Layout() {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="h-screen bg-background flex overflow-hidden">
       {/* Sidebar — Sarson Navy */}
-      <aside className="w-56 bg-[#253a52] flex flex-col shrink-0">
+      <aside className="w-56 bg-[#253a52] flex flex-col shrink-0 sticky top-0 h-screen">
         <div className="h-14 flex items-center gap-2.5 px-4 border-b border-white/10">
           <div className="w-7 h-7 rounded bg-white/15 flex items-center justify-center text-white text-xs font-bold shrink-0">
             SF
