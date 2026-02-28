@@ -268,3 +268,92 @@ def get_company_poc(
         "email": poc.email,
         "status": poc.status,
     }
+
+
+@router.post("/{company_id}/poc/{contact_id}", status_code=200)
+def assign_company_poc(
+    company_id: str,
+    contact_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Assign a contact as POC for a company.
+    If the company already has a POC, that contact's status is automatically
+    demoted to 'active'. The new contact's status is set to 'poc'.
+    Only contacts belonging to this company can be assigned as POC.
+    """
+    company = db.query(Company).filter(
+        Company.id == company_id,
+        Company.deleted_at.is_(None),
+    ).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    new_poc = db.query(Contact).filter(
+        Contact.id == contact_id,
+        Contact.deleted_at.is_(None),
+    ).first()
+    if not new_poc:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    if str(new_poc.company_id) != company_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Contact does not belong to this company",
+        )
+
+    # Demote existing POC → active
+    if company.poc_contact_id and str(company.poc_contact_id) != contact_id:
+        existing_poc = db.query(Contact).filter(
+            Contact.id == company.poc_contact_id,
+            Contact.deleted_at.is_(None),
+        ).first()
+        if existing_poc:
+            existing_poc.status = "active"
+
+    # Promote new contact → poc
+    new_poc.status = "poc"
+    company.poc_contact_id = new_poc.id
+
+    db.commit()
+    db.refresh(new_poc)
+
+    return {
+        "id": str(new_poc.id),
+        "first_name": new_poc.first_name,
+        "last_name": new_poc.last_name,
+        "full_name": new_poc.full_name,
+        "email": new_poc.email,
+        "status": new_poc.status,
+    }
+
+
+@router.delete("/{company_id}/poc", status_code=200)
+def remove_company_poc(
+    company_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Remove the current POC from a company.
+    The contact's status is demoted to 'active'.
+    """
+    company = db.query(Company).filter(
+        Company.id == company_id,
+        Company.deleted_at.is_(None),
+    ).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    if company.poc_contact_id:
+        existing_poc = db.query(Contact).filter(
+            Contact.id == company.poc_contact_id,
+            Contact.deleted_at.is_(None),
+        ).first()
+        if existing_poc:
+            existing_poc.status = "active"
+        company.poc_contact_id = None
+
+    db.commit()
+    return {"detail": "POC removed"}

@@ -307,6 +307,29 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
     },
   });
 
+  const assignPocMutation = useMutation({
+    mutationFn: (contactId: string) =>
+      api.post(`/companies/${companyId}/poc/${contactId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['company-poc', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['company-contacts', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      toast.success('POC assigned');
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.detail || 'Failed to assign POC'),
+  });
+
+  const removePocMutation = useMutation({
+    mutationFn: () => api.delete(`/companies/${companyId}/poc`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['company-poc', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['company-contacts', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
+      toast.success('POC removed');
+    },
+    onError: () => toast.error('Failed to remove POC'),
+  });
+
   const patchCompany = async (field: string, value: string) => {
     try {
       await api.patch(`/companies/${companyId}`, { [field]: value || null });
@@ -323,7 +346,7 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
 
   return (
     <Sheet open onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-full sm:w-[680px] lg:w-[760px] overflow-auto p-0">
+      <SheetContent className="w-full sm:w-[min(1330px,88vw)] overflow-auto p-0">
         {/* Drawer header */}
         <div className="px-8 pt-8 pb-5 border-b bg-muted/30">
           <SheetHeader>
@@ -362,23 +385,41 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
 
             {/* POC */}
             <div>
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Point of Contact</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Point of Contact</h3>
+                {poc && (
+                  <button
+                    type="button"
+                    onClick={() => removePocMutation.mutate()}
+                    disabled={removePocMutation.isPending}
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Remove POC
+                  </button>
+                )}
+              </div>
               {poc ? (
-                <div
-                  className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => { onClose(); navigate({ to: '/contacts/$contactId', params: { contactId: poc.id } }); }}
-                >
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                <div className="flex items-center gap-3 p-3 border rounded-lg bg-[#253a52]/5 border-[#253a52]/20">
+                  <div className="h-9 w-9 rounded-full bg-[#253a52] text-white flex items-center justify-center text-xs font-bold shrink-0">
                     {(poc.first_name?.[0] || '').toUpperCase()}{(poc.last_name?.[0] || '').toUpperCase()}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">{poc.full_name}</p>
-                    {poc.email && <p className="text-xs text-muted-foreground">{poc.email}</p>}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">{poc.full_name}</p>
+                    {poc.email && <p className="text-xs text-muted-foreground truncate">{poc.email}</p>}
                   </div>
-                  <Badge variant="secondary" className="ml-auto text-xs">{poc.status}</Badge>
+                  <Badge className="bg-[#253a52] text-white text-xs shrink-0">POC</Badge>
+                  <button
+                    type="button"
+                    onClick={() => { onClose(); navigate({ to: '/contacts/$contactId', params: { contactId: poc.id } }); }}
+                    className="text-xs text-[#253a52] hover:underline shrink-0"
+                  >
+                    View →
+                  </button>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground italic">No POC assigned. Set a contact's status to "POC" to assign.</p>
+                <div className="flex items-center gap-2 p-3 border border-dashed rounded-lg text-muted-foreground">
+                  <span className="text-sm italic">No POC assigned — click "Make POC" on any contact below.</span>
+                </div>
               )}
             </div>
 
@@ -392,20 +433,44 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
                 }}>View all</Button>
               </div>
               <div className="space-y-1">
-                {contacts.slice(0, 10).map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                    onClick={() => { onClose(); navigate({ to: '/contacts/$contactId', params: { contactId: c.id } }); }}
-                  >
-                    <div className="h-8 w-8 rounded-full bg-[#253a52]/10 text-[#253a52] flex items-center justify-center text-xs font-semibold shrink-0">
-                      {(c.first_name?.[0] || '').toUpperCase()}{(c.last_name?.[0] || '').toUpperCase()}
+                {contacts.slice(0, 20).map((c) => {
+                  const isPoc = poc?.id === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
+                    >
+                      <div
+                        className="h-8 w-8 rounded-full bg-[#253a52]/10 text-[#253a52] flex items-center justify-center text-xs font-semibold shrink-0 cursor-pointer"
+                        onClick={() => { onClose(); navigate({ to: '/contacts/$contactId', params: { contactId: c.id } }); }}
+                      >
+                        {(c.first_name?.[0] || '').toUpperCase()}{(c.last_name?.[0] || '').toUpperCase()}
+                      </div>
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() => { onClose(); navigate({ to: '/contacts/$contactId', params: { contactId: c.id } }); }}
+                      >
+                        <span className="text-sm font-medium truncate block">{c.full_name}</span>
+                        {c.email && <span className="text-xs text-muted-foreground truncate block">{c.email}</span>}
+                      </div>
+                      {isPoc ? (
+                        <Badge className="bg-[#253a52] text-white text-[10px] shrink-0">POC</Badge>
+                      ) : (
+                        <>
+                          <Badge variant="outline" className="text-[10px] shrink-0">{c.status}</Badge>
+                          <button
+                            type="button"
+                            onClick={() => assignPocMutation.mutate(c.id)}
+                            disabled={assignPocMutation.isPending}
+                            className="opacity-0 group-hover:opacity-100 text-[10px] font-medium text-[#253a52] border border-[#253a52]/40 rounded px-1.5 py-0.5 hover:bg-[#253a52] hover:text-white transition-all shrink-0 disabled:opacity-40"
+                          >
+                            Make POC
+                          </button>
+                        </>
+                      )}
                     </div>
-                    <span className="text-sm truncate flex-1">{c.full_name}</span>
-                    {c.email && <span className="text-xs text-muted-foreground truncate max-w-[140px]">{c.email}</span>}
-                    <Badge variant="outline" className="text-[10px] shrink-0">{c.status}</Badge>
-                  </div>
-                ))}
+                  );
+                })}
                 {contacts.length === 0 && (
                   <p className="text-sm text-muted-foreground italic py-2">No contacts at this company</p>
                 )}
