@@ -63,18 +63,14 @@ const ACTIVITY_ICONS: Record<string, typeof Mail> = {
   document: FileText,
 };
 
-const TAG_COLORS = [
-  'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500',
-  'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-rose-500',
-];
-
 function getTagColorFromId(id: string): string {
+  const COLORS = ['#3b82f6','#22c55e','#a855f7','#f97316','#ec4899','#14b8a6','#6366f1','#f43f5e'];
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = ((hash << 5) - hash) + id.charCodeAt(i);
     hash |= 0;
   }
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+  return COLORS[Math.abs(hash) % COLORS.length];
 }
 
 const STATUS_OPTIONS = [
@@ -320,7 +316,7 @@ function TagInput({
   const addByIdMutation = useMutation({
     mutationFn: (tagId: string) =>
       api.post(`/contacts/${contact.id}/tags/by-id`, null, { params: { tag_id: tagId } }),
-    onSuccess: () => { invalidate(); setValue(''); toast.success('Tag added'); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tags'] }); invalidate(); setValue(''); toast.success('Tag added'); },
     onError: () => toast.error('Failed to add tag'),
   });
 
@@ -387,7 +383,9 @@ function TagInput({
     <div className="relative">
       <div
         className={`flex flex-wrap items-center gap-1.5 min-h-[32px] px-2 py-1 rounded-lg border transition-colors cursor-text ${
-          focused ? 'border-primary/50 bg-background' : 'border-transparent bg-transparent hover:border-border'
+          focused
+            ? 'border-primary/50 bg-background shadow-sm'
+            : 'border-dashed border-muted-foreground/20 hover:border-muted-foreground/40'
         }`}
         onClick={() => inputRef.current?.focus()}
       >
@@ -416,9 +414,9 @@ function TagInput({
             value={value}
             onChange={e => setValue(e.target.value)}
             onFocus={() => setFocused(true)}
-            onBlur={() => setTimeout(() => setFocused(false), 150)}
+            onBlur={() => setTimeout(() => setFocused(false), 200)}
             onKeyDown={handleKeyDown}
-            placeholder={contact.tags?.length ? '' : 'Add tags...'}
+            placeholder={contact.tags?.length ? '+ tag' : 'Add tags...'}
             className="flex-1 min-w-[80px] bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
             disabled={isMutating}
           />
@@ -525,6 +523,7 @@ export default function ContactDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
     },
     onError: () => toast.error('Failed to remove tag'),
   });
