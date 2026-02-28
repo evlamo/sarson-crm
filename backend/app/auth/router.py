@@ -85,23 +85,25 @@ def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = De
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Invite check: @sarsonfunds.com emails bypass, others need a valid invite
+    # Invite check: only enforced when ENFORCE_DOMAIN_RESTRICTION=true (production)
+    # In dev/testing, any email can register freely.
     invite = None
-    if not email_lower.endswith("@sarsonfunds.com"):
-        invite = (
-            db.query(UserInvite)
-            .filter(
-                UserInvite.email == email_lower,
-                UserInvite.status == InviteStatus.pending,
-                UserInvite.expires_at > utcnow(),
+    if settings.enforce_domain_restriction:
+        if not email_lower.endswith("@sarsonfunds.com"):
+            invite = (
+                db.query(UserInvite)
+                .filter(
+                    UserInvite.email == email_lower,
+                    UserInvite.status == InviteStatus.pending,
+                    UserInvite.expires_at > utcnow(),
+                )
+                .first()
             )
-            .first()
-        )
-        if not invite:
-            raise HTTPException(
-                status_code=403,
-                detail="Registration requires an invitation. Contact your administrator.",
-            )
+            if not invite:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Registration requires an invitation. Contact your administrator.",
+                )
 
     user = User(
         id=uuid.uuid4(),

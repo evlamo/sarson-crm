@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     mailchimp_audience_id: str = ""
     mailchimp_webhook_secret: str = ""
     max_users: int = 15
+    enforce_domain_restriction: bool = False  # Set to true in production to require @sarsonfunds.com or invite
 
     class Config:
         env_file = ".env"
