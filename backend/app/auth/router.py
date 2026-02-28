@@ -76,11 +76,13 @@ def register(req: UserCreate, db: Session = Depends(get_db)):
     invite = None
     if settings.enforce_domain_restriction:
         if not any(email_lower.endswith(d) for d in TRUSTED_DOMAINS):
-            invite_token = getattr(req, 'invite_token', None)
+            if not req.invite_token:
+                raise HTTPException(status_code=403, detail="Registration requires an invitation.")
             invite = (
                 db.query(UserInvite)
                 .filter(
                     UserInvite.email == email_lower,
+                    UserInvite.token == req.invite_token,
                     UserInvite.status == InviteStatus.pending,
                     UserInvite.expires_at > utcnow(),
                 )

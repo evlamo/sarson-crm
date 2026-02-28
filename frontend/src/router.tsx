@@ -8,7 +8,6 @@ import Layout from '@/components/Layout';
 import LoginPage from '@/pages/LoginPage';
 import ContactsPage from '@/pages/ContactsPage';
 import ContactDetailPage from '@/pages/ContactDetailPage';
-import PipelinePage from '@/pages/PipelinePage';
 import CampaignsPage from '@/pages/CampaignsPage';
 import ImportPage from '@/pages/ImportPage';
 import TagsPage from '@/pages/TagsPage';
@@ -34,24 +33,32 @@ function PlaceholderPage({ title }: { title: string }) {
 // Root route
 const rootRoute = createRootRoute();
 
-// Login route (public)
+// Login route (public — redirect away if already authenticated)
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
   component: LoginPage,
+  beforeLoad: () => {
+    const token = localStorage.getItem('access_token');
+    if (token) throw redirect({ to: '/' });
+  },
 });
 
 const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/register',
   component: RegisterPage,
+  beforeLoad: () => {
+    const token = localStorage.getItem('access_token');
+    if (token) throw redirect({ to: '/' });
+  },
 });
 
 // Auth guard
 function requireAuth() {
   const token = localStorage.getItem('access_token');
   if (!token) {
-    throw redirect({ to: '/register' });
+    throw redirect({ to: '/login' });
   }
 }
 

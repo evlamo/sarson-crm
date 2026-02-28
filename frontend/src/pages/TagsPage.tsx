@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type RefObject } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Trash2, Tag, Search, X, Check, Loader2, UserMinus } from 'lucide-react';
+import { Trash2, Tag, Search, X, Check, Loader2, UserX } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -80,6 +80,7 @@ function TagContactsDrawer({
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const justAddedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const debouncedTagSearch = useDebounce(tagSearch, 300);
   const debouncedAddSearch = useDebounce(addSearch, 300);
@@ -104,6 +105,11 @@ function TagContactsDrawer({
       setAddingIds(new Set());
     }
   }, [open]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => { if (justAddedTimer.current) clearTimeout(justAddedTimer.current); };
+  }, []);
 
   // Contacts with this tag (H1: per_page 500)
   const { data: tagContacts, isLoading: loadingTagContacts } = useQuery<PaginatedContacts>({
@@ -151,7 +157,8 @@ function TagContactsDrawer({
       setAddingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
       setJustAdded(contactId);
       setAddSearch('');
-      setTimeout(() => setJustAdded(null), 1000);
+      if (justAddedTimer.current) clearTimeout(justAddedTimer.current);
+      justAddedTimer.current = setTimeout(() => setJustAdded(null), 1000);
       queryClient.invalidateQueries({ queryKey: ['tag-contacts', tag.id] });
       queryClient.invalidateQueries({ queryKey: ['tags', 'with-counts'] });
     },
@@ -182,7 +189,7 @@ function TagContactsDrawer({
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-[380px] sm:w-[420px] flex flex-col p-0 gap-0">
+      <SheetContent side="right" className="w-full sm:w-[420px] flex flex-col h-full p-0 gap-0">
 
         {/* Header */}
         <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0">
@@ -209,7 +216,7 @@ function TagContactsDrawer({
           </div>
         </div>
 
-        <div className="overflow-y-auto px-5 pb-3" style={{ maxHeight: '35vh' }}>
+        <div className="overflow-y-auto px-5 pb-3 max-h-[38%]">
           {loadingTagContacts ? (
             <div className="space-y-2">
               {[1,2,3].map(i => <div key={i} className="h-9 bg-muted rounded animate-pulse" />)}
@@ -235,7 +242,7 @@ function TagContactsDrawer({
                     disabled={removingIds.has(contact.id)}
                     title="Remove from tag"
                   >
-                    {removingIds.has(contact.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserMinus className="h-3.5 w-3.5" />}
+                    {removingIds.has(contact.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserX className="h-3.5 w-3.5" />}
                   </button>
                 </div>
               ))}

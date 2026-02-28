@@ -45,9 +45,13 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await api.post('/auth/register', { name, email, password, invite_token: token ?? undefined });
-      // Auto-login after successful registration
-      await login(email, password);
-      navigate({ to: '/' });
+      try {
+        await login(email, password);
+        navigate({ to: '/' });
+      } catch {
+        // Registered successfully but auto-login failed — redirect to login
+        navigate({ to: '/login' });
+      }
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
       const msg = typeof detail === 'string' ? detail
