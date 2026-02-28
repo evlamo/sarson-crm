@@ -51,7 +51,7 @@ const registerRoute = createRoute({
 function requireAuth() {
   const token = localStorage.getItem('access_token');
   if (!token) {
-    throw redirect({ to: '/login' });
+    throw redirect({ to: '/register' });
   }
 }
 

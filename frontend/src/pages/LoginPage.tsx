@@ -73,9 +73,20 @@ export default function LoginPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in…' : 'Sign In'}
             </Button>
           </form>
+
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Don't have an account?{' '}
+            <a
+              href="/register"
+              className="text-[#253a52] font-medium hover:underline"
+              onClick={(e) => { e.preventDefault(); navigate({ to: '/register' }); }}
+            >
+              Sign up
+            </a>
+          </p>
         </CardContent>
       </Card>
     </div>

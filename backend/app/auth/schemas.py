@@ -32,7 +32,8 @@ class UserCreate(BaseModel):
     email: EmailStr
     name: str
     password: str
-    role: str = "member"
+    role: str = "user"
+    invite_token: Optional[str] = None
 
     @field_validator('password')
     @classmethod

@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import api from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function RegisterPage() {
-  useEffect(() => { document.title = 'Register — Sarson Funds CRM'; }, []);
+  useEffect(() => { document.title = 'Create Account — Sarson Funds CRM'; }, []);
   const navigate = useNavigate();
+  const login = useAuth((s) => s.login);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,10 +24,7 @@ export default function RegisterPage() {
   const token = params.get('token');
 
   useEffect(() => {
-    if (!token) {
-      setTokenValid(null);
-      return;
-    }
+    if (!token) return;
     api.get(`/invites/validate/${token}`)
       .then((res) => {
         if (res.data.valid) {
@@ -37,9 +36,7 @@ export default function RegisterPage() {
           setTokenExpired(res.data.expired);
         }
       })
-      .catch(() => {
-        setTokenValid(false);
-      });
+      .catch(() => setTokenValid(false));
   }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,11 +44,16 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     try {
-      // Use the admin create-user endpoint — but this requires admin auth.
-      // For self-registration we'll call a public register endpoint if it exists,
-      // otherwise inform the user to contact admin.
-      // Since registration is admin-gated, show the invite link info.
-      setError('Registration is managed by your administrator. Share this page URL with them to complete your setup.');
+      await api.post('/auth/register', { name, email, password, invite_token: token ?? undefined });
+      // Auto-login after successful registration
+      await login(email, password);
+      navigate({ to: '/' });
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail
+        : Array.isArray(detail) ? detail.map((d: { msg?: string }) => d.msg).join(', ')
+        : 'Registration failed. Please try again.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -59,20 +61,22 @@ export default function RegisterPage() {
 
   if (token && tokenValid === false) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Sarson Funds CRM</CardTitle>
-            <CardDescription>Invalid Invite</CardDescription>
+      <div className="min-h-screen flex items-center justify-center bg-secondary">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center space-y-3">
+            <div className="flex justify-center">
+              <div className="w-12 h-12 rounded-lg bg-[#253a52] flex items-center justify-center text-white text-lg font-bold">SF</div>
+            </div>
+            <CardTitle className="text-2xl font-extrabold text-[#253a52]">Sarson Funds CRM</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-200">
               {tokenExpired
                 ? 'This invite link has expired. Contact your administrator for a new one.'
-                : 'This invite link is invalid or has expired. Contact your administrator.'}
+                : 'This invite link is invalid. Contact your administrator.'}
             </div>
             <Button className="w-full mt-4" variant="outline" onClick={() => navigate({ to: '/login' })}>
-              Back to Login
+              Back to Sign In
             </Button>
           </CardContent>
         </Card>
@@ -81,35 +85,25 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Sarson Funds CRM</CardTitle>
-          <CardDescription>
-            {tokenValid ? "You've been invited! Register below." : 'Create your account'}
+    <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="text-center space-y-3">
+          <div className="flex justify-center">
+            <div className="w-12 h-12 rounded-lg bg-[#253a52] flex items-center justify-center text-white text-lg font-bold">SF</div>
+          </div>
+          <CardTitle className="text-2xl font-extrabold text-[#253a52]">Sarson Funds CRM</CardTitle>
+          <CardDescription className="text-sm">
+            {tokenValid ? "You've been invited — set up your account below." : 'Internal Operations Platform'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!token && (
-            <div className="p-3 text-sm text-amber-700 bg-amber-50 rounded-md border border-amber-200 mb-4">
-              Registration requires an invite link or an @sarsonfunds.com email. Contact your administrator.
-            </div>
-          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-200">
-                {error}
-              </div>
+              <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-200">{error}</div>
             )}
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoFocus
-              />
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus placeholder="Jane Smith" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -120,7 +114,8 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 readOnly={emailLocked}
-                className={emailLocked ? 'bg-muted' : ''}
+                className={emailLocked ? 'bg-muted cursor-not-allowed' : ''}
+                placeholder="you@sarsonfunds.com"
               />
             </div>
             <div className="space-y-2">
@@ -132,17 +127,25 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
+                placeholder="8+ characters, 1 uppercase, 1 number"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading || (!token && !email.endsWith('@sarsonfunds.com'))}>
-              {loading ? 'Creating account...' : 'Create Account'}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Creating account…' : 'Create Account'}
             </Button>
           </form>
-          <div className="mt-4 text-center">
-            <Button variant="link" onClick={() => navigate({ to: '/login' })}>
-              Already have an account? Sign in
-            </Button>
-          </div>
+
+          {/* Small sign-in link — standard pattern */}
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <a
+              href="/login"
+              className="text-[#253a52] font-medium hover:underline"
+              onClick={(e) => { e.preventDefault(); navigate({ to: '/login' }); }}
+            >
+              Sign in
+            </a>
+          </p>
         </CardContent>
       </Card>
     </div>

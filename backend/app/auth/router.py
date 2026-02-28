@@ -59,6 +59,52 @@ def refresh(req: RefreshRequest, db: Session = Depends(get_db)):
 def me(current_user: User = Depends(get_current_user)):
     return current_user
 
+@router.post("/register", response_model=UserOut, status_code=201)
+def register(req: UserCreate, db: Session = Depends(get_db)):
+    """Public self-registration endpoint. Respects ENFORCE_DOMAIN_RESTRICTION setting."""
+    email_lower = req.email.lower().strip()
+
+    active_count = db.query(User).filter(User.is_active == True).count()
+    if active_count >= settings.max_users:
+        raise HTTPException(status_code=403, detail=f"Maximum user limit ({settings.max_users}) reached.")
+
+    existing = db.query(User).filter(User.email == email_lower).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    TRUSTED_DOMAINS = ("@sarsonfunds.com", "@speranza.local")
+    invite = None
+    if settings.enforce_domain_restriction:
+        if not any(email_lower.endswith(d) for d in TRUSTED_DOMAINS):
+            invite_token = getattr(req, 'invite_token', None)
+            invite = (
+                db.query(UserInvite)
+                .filter(
+                    UserInvite.email == email_lower,
+                    UserInvite.status == InviteStatus.pending,
+                    UserInvite.expires_at > utcnow(),
+                )
+                .first()
+            )
+            if not invite:
+                raise HTTPException(status_code=403, detail="Registration requires an invitation.")
+
+    user = User(
+        id=uuid.uuid4(),
+        email=email_lower,
+        name=req.name,
+        hashed_password=hash_password(req.password),
+        role="user",
+    )
+    db.add(user)
+    if invite:
+        invite.status = InviteStatus.accepted
+        invite.accepted_at = utcnow()
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 # Users management
 users_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
@@ -87,9 +133,11 @@ def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = De
 
     # Invite check: only enforced when ENFORCE_DOMAIN_RESTRICTION=true (production)
     # In dev/testing, any email can register freely.
+    # @sarsonfunds.com and @speranza.local always bypass (speranza.local = internal admin accounts)
+    TRUSTED_DOMAINS = ("@sarsonfunds.com", "@speranza.local")
     invite = None
     if settings.enforce_domain_restriction:
-        if not email_lower.endswith("@sarsonfunds.com"):
+        if not any(email_lower.endswith(d) for d in TRUSTED_DOMAINS):
             invite = (
                 db.query(UserInvite)
                 .filter(
