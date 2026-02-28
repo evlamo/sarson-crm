@@ -206,7 +206,41 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
                   ))}
                 </select>
               </div>
-              {field('Source', 'source', { placeholder: 'Conference, referral...' })}
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Source</Label>
+                <select
+                  value={[
+                    'website', 'referral', 'linkedin', 'conference',
+                    'cold_outreach', 'inbound', 'import', 'other'
+                  ].includes(form.source) ? form.source : (form.source ? 'other' : '')}
+                  onChange={(e) => {
+                    if (e.target.value !== 'other') {
+                      setForm(f => ({ ...f, source: e.target.value }));
+                    } else {
+                      setForm(f => ({ ...f, source: 'other' }));
+                    }
+                  }}
+                  className="w-full h-9 px-3 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="">— Select source —</option>
+                  <option value="website">Website</option>
+                  <option value="referral">Referral</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="conference">Conference</option>
+                  <option value="cold_outreach">Cold Outreach</option>
+                  <option value="inbound">Inbound</option>
+                  <option value="import">Import</option>
+                  <option value="other">Other...</option>
+                </select>
+                {(form.source === 'other' || (form.source && !['website','referral','linkedin','conference','cold_outreach','inbound','import','other'].includes(form.source))) && (
+                  <Input
+                    value={form.source === 'other' ? '' : form.source}
+                    onChange={(e) => setForm(f => ({ ...f, source: e.target.value }))}
+                    placeholder="Describe the source..."
+                    className="mt-1"
+                  />
+                )}
+              </div>
             </div>
           </div>
 

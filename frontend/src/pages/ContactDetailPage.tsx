@@ -97,16 +97,6 @@ const STATUS_COLORS: Record<string, string> = {
   na: 'bg-gray-300',
 };
 
-const LEAD_SOURCE_OPTIONS = [
-  { value: 'website', label: 'Website' },
-  { value: 'referral', label: 'Referral' },
-  { value: 'linkedin', label: 'LinkedIn' },
-  { value: 'conference', label: 'Conference' },
-  { value: 'cold_outreach', label: 'Cold Outreach' },
-  { value: 'inbound', label: 'Inbound' },
-  { value: 'import', label: 'Import' },
-  { value: 'other', label: 'Other' },
-];
 
 function StatusDot({ status }: { status: string }) {
   const color = STATUS_COLORS[status] || 'bg-gray-300';
@@ -184,6 +174,100 @@ function InlineLastContactedDetail({ contact, onSave }: { contact: ContactDetail
   );
 }
 
+function InlineLeadSource({ value, onSave }: { value: string | null; onSave: (v: string) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState('');
+  const [customText, setCustomText] = useState('');
+  const customInputRef = useRef<HTMLInputElement>(null);
+
+  const INLINE_LEAD_SOURCE_OPTIONS = [
+    { value: 'website', label: 'Website' },
+    { value: 'referral', label: 'Referral' },
+    { value: 'linkedin', label: 'LinkedIn' },
+    { value: 'conference', label: 'Conference' },
+    { value: 'cold_outreach', label: 'Cold Outreach' },
+    { value: 'inbound', label: 'Inbound' },
+    { value: 'import', label: 'Import' },
+    { value: 'other', label: 'Other...' },
+  ];
+
+  const knownValues = INLINE_LEAD_SOURCE_OPTIONS.map(o => o.value);
+
+  const start = () => {
+    const isKnown = knownValues.includes(value || '');
+    setSelected(isKnown ? (value || '') : (value ? 'other' : ''));
+    setCustomText(isKnown ? '' : (value || ''));
+    setEditing(true);
+  };
+
+  const save = async (finalValue: string) => {
+    if (finalValue && finalValue !== value) {
+      await onSave(finalValue);
+    }
+    setEditing(false);
+  };
+
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = e.target.value;
+    setSelected(v);
+    if (v !== 'other' && v !== '') {
+      save(v);
+    } else if (v === 'other') {
+      setTimeout(() => customInputRef.current?.focus(), 0);
+    }
+  };
+
+  const displayLabel = () => {
+    if (!value) return null;
+    const opt = INLINE_LEAD_SOURCE_OPTIONS.find(o => o.value === value);
+    return opt ? opt.label : value;
+  };
+
+  if (!editing) {
+    return (
+      <span
+        onClick={start}
+        className="text-sm cursor-pointer hover:text-primary transition-colors"
+        title="Click to edit"
+      >
+        {displayLabel() || <span className="text-muted-foreground italic">—</span>}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <select
+        autoFocus
+        value={selected}
+        onChange={handleSelectChange}
+        onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+        className="h-7 px-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+      >
+        <option value="">— Select —</option>
+        {INLINE_LEAD_SOURCE_OPTIONS.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      {selected === 'other' && (
+        <input
+          ref={customInputRef}
+          type="text"
+          value={customText}
+          onChange={e => setCustomText(e.target.value)}
+          onBlur={() => save(customText.trim() || 'other')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save(customText.trim() || 'other');
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          placeholder="Describe the source..."
+          className="h-7 px-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+      )}
+    </div>
+  );
+}
+
 function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { contact: ContactDetail; onUpdate: () => void; removeTagMutation: { mutate: (tagId: string) => void; isPending: boolean } }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -199,19 +283,22 @@ function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { co
   }, [open]);
 
   const { data: allTags } = useQuery({
-    queryKey: ['tags'],
+    queryKey: ['all-tags'],
     queryFn: async () => {
-      const res = await api.get<{ data: { id: string; name: string; color: string }[] }>('/tags/');
-      return res.data.data || [];
+      const res = await api.get('/tags');
+      const tags = Array.isArray(res.data) ? res.data : (res.data.data || res.data.items || []);
+      return tags as { id: string; name: string; color: string }[];
     },
     enabled: open,
+    staleTime: 30_000,
   });
 
   const contactTagIds = new Set(contact.tags?.map(t => t.id) || []);
+  const atMax = (contact.tags?.length || 0) >= 8;
 
   const addTag = useMutation({
     mutationFn: async (tagId: string) => {
-      await api.post(`/contacts/${contact.id}/tags`, { tag_id: tagId });
+      await api.post(`/contacts/${contact.id}/tags/by-id`, null, { params: { tag_id: tagId } });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['contact', contact.id] }); queryClient.invalidateQueries({ queryKey: ['contacts'] }); onUpdate(); },
     onError: () => toast.error('Failed to add tag'),
@@ -221,22 +308,14 @@ function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { co
 
   const createAndAddTag = useMutation({
     mutationFn: async (name: string) => {
-      const res = await api.post<{ id: string; name: string; color: string }>('/tags/', { name: name.trim() });
+      const res = await api.post<{ id: string; name: string; color: string }>('/tags', { name: name.trim() });
       const newTagId = res.data.id;
-      try {
-        await api.post(`/contacts/${contact.id}/tags`, { tag_id: newTagId });
-      } catch (linkErr) {
-        try {
-          await api.post(`/contacts/${contact.id}/tags`, { tag_id: newTagId });
-        } catch {
-          throw new Error('Tag created but could not be linked to contact. Try adding it manually.');
-        }
-      }
+      await api.post(`/contacts/${contact.id}/tags/by-id`, null, { params: { tag_id: newTagId } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
+      queryClient.invalidateQueries({ queryKey: ['all-tags'] });
       setSearch('');
       toast.success('Tag created and added');
       onUpdate();
@@ -255,7 +334,7 @@ function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { co
   const exactMatch = (allTags || []).some(t => t.name.toLowerCase() === search.toLowerCase());
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <div ref={ref} className="relative inline-block shrink-0">
       <button
         type="button"
         aria-expanded={open}
@@ -274,6 +353,7 @@ function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { co
             placeholder="Search or create tag..."
             className="w-full px-2 py-1.5 text-sm border rounded mb-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
           />
+          {atMax && <p className="text-xs text-muted-foreground text-center py-1">Max 8 tags reached</p>}
           <div className="max-h-48 overflow-y-auto space-y-0.5">
             {filtered.map(tag => {
               const isOn = contactTagIds.has(tag.id);
@@ -282,7 +362,10 @@ function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { co
                   key={tag.id}
                   type="button"
                   disabled={isMutating}
-                  onClick={() => isOn ? removeTag.mutate(tag.id) : addTag.mutate(tag.id)}
+                  onClick={() => {
+                    if (!isOn && atMax) { toast.error('Maximum 8 tags per contact'); return; }
+                    isOn ? removeTag.mutate(tag.id) : addTag.mutate(tag.id);
+                  }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span
@@ -294,7 +377,7 @@ function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { co
                 </button>
               );
             })}
-            {search && !exactMatch && (
+            {search && !exactMatch && !atMax && (
               <button
                 type="button"
                 onClick={() => createAndAddTag.mutate(search.trim())}
@@ -459,30 +542,25 @@ export default function ContactDetailPage() {
                   </button>
                 )}
               </p>
-              {/* Tags with × and TagManager */}
-              {contact.tags && contact.tags.length > 0 ? (
-                <div className="flex gap-1.5 flex-wrap mt-2 items-center">
-                  {contact.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className={`inline-flex items-center gap-1 ${tag.color ? '' : getTagColorFromId(tag.id)} text-white text-xs px-2 py-0.5 rounded-full`}
-                      style={tag.color ? { backgroundColor: tag.color, color: '#fff' } : undefined}
-                    >
-                      {tag.name}
-                      <button
-                        type="button"
-                        onClick={() => removeTagMutation.mutate(tag.id)}
-                        className="ml-0.5 hover:opacity-70 transition-opacity"
-                      >×</button>
-                    </span>
-                  ))}
-                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} removeTagMutation={removeTagMutation} />
-                </div>
-              ) : (
-                <div className="mt-2">
-                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} removeTagMutation={removeTagMutation} />
-                </div>
-              )}
+              {/* Tags with × and TagManager — horizontal scroll, max 8 */}
+              <div className="flex gap-1.5 mt-2 items-center overflow-x-auto pb-1 max-w-full" style={{ scrollbarWidth: 'thin' }}>
+                {contact.tags?.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="inline-flex items-center gap-1 text-white text-xs px-2 py-0.5 rounded-full shrink-0"
+                    style={{ backgroundColor: tag.color || '#6366f1' }}
+                  >
+                    {tag.name}
+                    <button
+                      type="button"
+                      onClick={() => removeTagMutation.mutate(tag.id)}
+                      className="ml-0.5 hover:opacity-70 transition-opacity leading-none"
+                      aria-label={`Remove ${tag.name}`}
+                    >×</button>
+                  </span>
+                ))}
+                <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} removeTagMutation={removeTagMutation} />
+              </div>
               {/* Quick-action chips */}
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 {contact.email && (
@@ -552,10 +630,8 @@ export default function ContactDetailPage() {
                 />
               </FieldRow>
               <FieldRow label="Lead Source">
-                <EditableField
+                <InlineLeadSource
                   value={contact.source || contact.lead_source}
-                  type="select"
-                  options={LEAD_SOURCE_OPTIONS}
                   onSave={(v) => savePatch('source', v)}
                 />
               </FieldRow>
@@ -632,18 +708,31 @@ export default function ContactDetailPage() {
                 <EditableField value={contact.title} onSave={(v) => savePatch('title', v)} placeholder="—" />
               </FieldRow>
               <FieldRow label="Company">
-                <CompanyCombobox
-                  companyName={contact.company_name || contact.company}
-                  companyId={contact.company_id}
-                  onSave={async (name, selectedCompanyId) => {
-                    const payload: Record<string, unknown> = { company: name };
-                    if (selectedCompanyId) payload.company_id = selectedCompanyId;
-                    await patchContact(payload);
-                    queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
-                    toast.success('Company updated');
-                  }}
-                  onNavigate={() => navigate({ to: '/companies' })}
-                />
+                <div className="flex items-center gap-2">
+                  {(contact.company_name || contact.company) && (
+                    <button
+                      type="button"
+                      onClick={() => navigate({ to: '/companies' })}
+                      className="text-sm text-primary hover:underline text-left truncate"
+                      title="View company"
+                    >
+                      {contact.company_name || contact.company}
+                    </button>
+                  )}
+                  <CompanyCombobox
+                    companyName={contact.company_name || contact.company}
+                    companyId={contact.company_id}
+                    onSave={async (name, selectedCompanyId) => {
+                      const payload: Record<string, unknown> = { company: name };
+                      if (selectedCompanyId) payload.company_id = selectedCompanyId;
+                      await patchContact(payload);
+                      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+                      toast.success('Company updated');
+                    }}
+                    onNavigate={() => navigate({ to: '/companies' })}
+                    showPencilOnly={!!(contact.company_name || contact.company)}
+                  />
+                </div>
               </FieldRow>
               <FieldRow label="City">
                 <EditableField value={contact.city} onSave={(v) => savePatch('city', v)} placeholder="—" />

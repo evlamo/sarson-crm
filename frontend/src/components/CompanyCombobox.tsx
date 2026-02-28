@@ -10,9 +10,10 @@ interface CompanyComboboxProps {
   companyId: string | null | undefined;
   onSave: (companyName: string, companyId?: string) => Promise<void>;
   onNavigate?: (companyId: string) => void;
+  showPencilOnly?: boolean;
 }
 
-export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: CompanyComboboxProps) {
+export function CompanyCombobox({ companyName, companyId, onSave, onNavigate, showPencilOnly }: CompanyComboboxProps) {
   const [editing, setEditing] = useState(false);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
@@ -144,6 +145,23 @@ export function CompanyCombobox({ companyName, companyId, onSave, onNavigate }: 
             ))}
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (showPencilOnly) {
+    return (
+      <div className="group inline-flex items-center">
+        {blurHint && <span className="text-xs text-muted-foreground mr-1">Press Enter to create or select from list</span>}
+        {success && <Check className="h-3.5 w-3.5 text-green-500 shrink-0 mr-1" />}
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity"
+          title="Edit company"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
       </div>
     );
   }
