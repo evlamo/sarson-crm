@@ -71,22 +71,39 @@ function TagContactsDrawer({
   const [tagSearch, setTagSearch] = useState('');
   const [addSearch, setAddSearch] = useState('');
   const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
 
   const debouncedTagSearch = useDebounce(tagSearch, 300);
   const debouncedAddSearch = useDebounce(addSearch, 300);
 
-  // Reset state when tag changes
+  // Reset state when tag changes or drawer closes
   useEffect(() => {
     setTagSearch('');
     setAddSearch('');
     setJustAdded(null);
+    setMutationError(null);
+    setRemovingIds(new Set());
+    setAddingIds(new Set());
   }, [tag.id]);
 
-  // Contacts with this tag
+  useEffect(() => {
+    if (!open) {
+      setTagSearch('');
+      setAddSearch('');
+      setJustAdded(null);
+      setMutationError(null);
+      setRemovingIds(new Set());
+      setAddingIds(new Set());
+    }
+  }, [open]);
+
+  // Contacts with this tag (H1: per_page 500)
   const { data: tagContacts, isLoading: loadingTagContacts } = useQuery<PaginatedContacts>({
     queryKey: ['tag-contacts', tag.id, debouncedTagSearch],
     queryFn: async () => {
-      const params: Record<string, string | number> = { tag_id: tag.id, per_page: 50 };
+      const params: Record<string, string | number> = { tag_id: tag.id, per_page: 500 };
       if (debouncedTagSearch) params.search = debouncedTagSearch;
       const res = await api.get('/contacts', { params });
       return res.data;
@@ -113,28 +130,45 @@ function TagContactsDrawer({
     .filter((c) => !tagContactIds.has(c.id))
     .slice(0, 5);
 
+  const showError = (msg: string) => {
+    setMutationError(msg);
+    setTimeout(() => setMutationError(null), 4000);
+  };
+
   // Add tag to contact
   const addMutation = useMutation({
     mutationFn: async (contactId: string) => {
+      setAddingIds((prev) => new Set(prev).add(contactId));
       await api.post('/contacts/bulk', { ids: [contactId], tag_ids: [tag.id] });
     },
     onSuccess: (_data, contactId) => {
+      setAddingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
       setJustAdded(contactId);
       setAddSearch('');
       setTimeout(() => setJustAdded(null), 1000);
       queryClient.invalidateQueries({ queryKey: ['tag-contacts', tag.id] });
       queryClient.invalidateQueries({ queryKey: ['tags', 'with-counts'] });
     },
+    onError: (_err, contactId) => {
+      setAddingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
+      showError('Failed to add contact. Please try again.');
+    },
   });
 
   // Remove tag from contact
   const removeMutation = useMutation({
     mutationFn: async (contactId: string) => {
+      setRemovingIds((prev) => new Set(prev).add(contactId));
       await api.delete(`/contacts/${contactId}/tags/${tag.id}`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, contactId) => {
+      setRemovingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
       queryClient.invalidateQueries({ queryKey: ['tag-contacts', tag.id] });
       queryClient.invalidateQueries({ queryKey: ['tags', 'with-counts'] });
+    },
+    onError: (_err, contactId) => {
+      setRemovingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
+      showError('Failed to remove contact. Please try again.');
     },
   });
 
@@ -209,15 +243,26 @@ function TagContactsDrawer({
                     size="sm"
                     className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
                     onClick={() => removeMutation.mutate(contact.id)}
-                    disabled={removeMutation.isPending}
+                    disabled={removingIds.has(contact.id)}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    {removingIds.has(contact.id) ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <X className="h-3.5 w-3.5" />
+                    )}
                   </Button>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Error display */}
+        {mutationError && (
+          <div className="px-6">
+            <p className="text-xs text-destructive">{mutationError}</p>
+          </div>
+        )}
 
         {/* Divider */}
         <div className="px-6 py-3">
@@ -251,6 +296,13 @@ function TagContactsDrawer({
                   <div
                     key={contact.id}
                     className="flex items-center gap-3 px-3 py-2"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !addingIds.has(contact.id)) {
+                        addMutation.mutate(contact.id);
+                      }
+                    }}
                     style={{ minHeight: 44 }}
                   >
                     <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
@@ -270,9 +322,13 @@ function TagContactsDrawer({
                         size="sm"
                         className="h-7 text-xs shrink-0"
                         onClick={() => addMutation.mutate(contact.id)}
-                        disabled={addMutation.isPending}
+                        disabled={addingIds.has(contact.id)}
                       >
-                        Add
+                        {addingIds.has(contact.id) ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          'Add'
+                        )}
                       </Button>
                     )}
                   </div>

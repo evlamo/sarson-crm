@@ -357,6 +357,26 @@ def get_contact_activities(
     }
 
 
+# ── Remove Tag from Contact ────────────────────────────────────────────────
+
+@router.delete("/{contact_id}/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_tag_from_contact(
+    contact_id: str,
+    tag_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove a single tag from a contact."""
+    contact = _get_contact_or_404(contact_id, db)
+    tag = db.query(Tag).filter(Tag.id == tag_id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    if tag in contact.tags:
+        contact.tags.remove(tag)
+        contact.updated_at = _utcnow()
+        db.commit()
+
+
 # ── Bulk Update ────────────────────────────────────────────────────────────
 
 @router.post("/bulk", response_model=BulkUpdateResponse)
