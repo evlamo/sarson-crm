@@ -43,6 +43,7 @@ import {
 import { Search, UserPlus, Tag, Download, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { RepAssignPopover } from '@/components/RepAssignPopover';
+import { STATUSES, getStatus } from '@/lib/statuses';
 
 // Module augmentation for TanStack Table meta
 declare module '@tanstack/react-table' {
@@ -493,20 +494,7 @@ function InlineSalesRep({ contact }: { contact: Contact }) {
   );
 }
 
-const STATUSES = [
-  { value: 'hot',       label: 'Hot',       dot: 'bg-red-500' },
-  { value: 'warm',      label: 'Warm',      dot: 'bg-orange-400' },
-  { value: 'prospect',  label: 'Prospect',  dot: 'bg-yellow-400' },
-  { value: 'cold',      label: 'Cold',      dot: 'bg-blue-400' },
-  { value: 'poc',       label: 'POC',       dot: 'bg-purple-500' },
-  { value: 'active',    label: 'Active',    dot: 'bg-green-500' },
-  { value: 'na',        label: 'N/A',       dot: 'bg-gray-300' },
-];
-
-const STATUS_MAP = Object.fromEntries(STATUSES.map((s) => [s.value, s]));
-
-const getStatusMeta = (val: string) =>
-  STATUS_MAP[val] ?? { label: val, dot: 'bg-gray-300' };
+const getStatusMeta = (val: string) => getStatus(val);
 
 function InlineStatus({ contact }: { contact: Contact }) {
   const queryClient = useQueryClient();

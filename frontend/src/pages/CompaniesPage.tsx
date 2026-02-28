@@ -19,6 +19,7 @@ import {
 import { Search, Plus, ExternalLink, Trash2, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { EditableField } from '@/components/EditableField';
+import { getStatus } from '@/lib/statuses';
 
 interface CompanyContact {
   id: string;
@@ -457,7 +458,9 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
                         <Badge className="bg-[#253a52] text-white text-[10px] shrink-0">POC</Badge>
                       ) : (
                         <>
-                          <Badge variant="outline" className="text-[10px] shrink-0">{c.status}</Badge>
+                          <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${getStatus(c.status).badge}`}>
+                            {getStatus(c.status).label}
+                          </span>
                           <button
                             type="button"
                             onClick={() => assignPocMutation.mutate(c.id)}

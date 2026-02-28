@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { formatDate, formatTime } from '@/lib/formatDate';
+import { STATUSES, getStatus } from '@/lib/statuses';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
@@ -73,30 +74,20 @@ function getTagColorFromId(id: string): string {
   return COLORS[Math.abs(hash) % COLORS.length];
 }
 
-const STATUS_OPTIONS = [
-  { value: 'hot', label: 'Hot' },
-  { value: 'warm', label: 'Warm' },
-  { value: 'prospect', label: 'Prospect' },
-  { value: 'cold', label: 'Cold' },
-  { value: 'poc', label: 'POC' },
-  { value: 'active', label: 'Active' },
-  { value: 'na', label: 'N/A' },
-];
-
-const STATUS_COLORS: Record<string, string> = {
-  hot: 'bg-red-500',
-  warm: 'bg-orange-500',
-  prospect: 'bg-blue-500',
-  cold: 'bg-gray-400',
-  poc: 'bg-purple-500',
-  active: 'bg-green-500',
-  na: 'bg-gray-300',
-};
-
+const STATUS_OPTIONS = STATUSES.map(s => ({ value: s.value, label: s.label }));
 
 function StatusDot({ status }: { status: string }) {
-  const color = STATUS_COLORS[status] || 'bg-gray-300';
-  return <span className={`inline-block w-2.5 h-2.5 rounded-full ${color} mr-2`} />;
+  const { dot } = getStatus(status);
+  return <span className={`inline-block w-2.5 h-2.5 rounded-full ${dot} mr-2`} />;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const { label, badge } = getStatus(status);
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border ${badge}`}>
+      {label}
+    </span>
+  );
 }
 
 function getInitials(first: string | null, last: string | null, email?: string | null): string {
@@ -614,7 +605,10 @@ export default function ContactDetailPage() {
               {getInitials(contact.first_name, contact.last_name, contact.email)}
             </div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold leading-tight">{fullName}</h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl font-bold leading-tight">{fullName}</h1>
+                <StatusBadge status={contact.status} />
+              </div>
               <p className="text-muted-foreground mt-0.5">
                 {contact.title}
                 {contact.title && companyDisplay ? ' at ' : ''}
