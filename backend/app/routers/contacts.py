@@ -77,6 +77,7 @@ def list_contacts(
     contacted: Optional[bool] = Query(None),
     assigned_to: Optional[uuid.UUID] = Query(None),
     sarson_rep: Optional[str] = Query(None, max_length=255),
+    tag_id: Optional[str] = Query(None, max_length=36),
     sort: Optional[str] = Query("last_name", max_length=50),
     order: Optional[str] = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
@@ -85,13 +86,17 @@ def list_contacts(
     """
     Paginated contact list with filters:
     - search: full-text via tsvector (falls back to ILIKE on name/email)
-    - status, contacted, assigned_to, sarson_rep filters
+    - status, contacted, assigned_to, sarson_rep, tag_id filters
     """
     query = (
         db.query(Contact)
         .options(joinedload(Contact.tags), joinedload(Contact.company_obj))
         .filter(Contact.deleted_at.is_(None))
     )
+
+    # Filter by tag
+    if tag_id:
+        query = query.filter(Contact.tags.any(Tag.id == tag_id))
 
     # Full-text search
     if search:
@@ -152,6 +157,7 @@ def list_contacts(
         *([Contact.contacted == contacted] if contacted is not None else []),
         *([Contact.assigned_to == assigned_to] if assigned_to else []),
         *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
+        *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
         *([or_(
             Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
             Contact.first_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
