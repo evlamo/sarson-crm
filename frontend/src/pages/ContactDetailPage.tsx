@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle, Pencil, Check, X } from 'lucide-react';
+import { RepAssignPopover } from '@/components/RepAssignPopover';
 
 interface ContactDetail {
   id: string;
@@ -451,28 +452,14 @@ export default function ContactDetailPage() {
                     </span>
                   </div>
                 )}
-                {/* Sales Rep — inline editable */}
+                {/* Sales Rep — popover assign */}
                 <div className="flex justify-between items-center min-h-[24px]">
                   <span className="text-muted-foreground shrink-0">Sales Rep</span>
-                  {editingSalesRep ? (
-                    <div className="flex items-center gap-1 flex-1 ml-2">
-                      <input
-                        ref={salesRepRef}
-                        value={salesRepDraft}
-                        onChange={(e) => setSalesRepDraft(e.target.value)}
-                        onBlur={saveSalesRep}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveSalesRep(); if (e.key === 'Escape') setEditingSalesRep(false); }}
-                        placeholder="Assign rep..."
-                        className="flex-1 h-6 px-2 text-xs border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary text-right"
-                      />
-                      <button onClick={() => setEditingSalesRep(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 group cursor-pointer" onClick={startEditingSalesRep}>
-                      <span className={contact.sarson_rep ? '' : 'text-muted-foreground italic'}>{contact.sarson_rep || '—'}</span>
-                      <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
-                    </div>
-                  )}
+                  <RepAssignPopover
+                    contactId={contact.id}
+                    currentRep={contact.sarson_rep}
+                    variant="detail"
+                  />
                 </div>
                 <Separator />
                 {/* Next Step — inline editable, nested at bottom */}

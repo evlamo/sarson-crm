@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, UserPlus, Tag, Download, Trash2, X } from 'lucide-react';
+import { RepAssignPopover } from '@/components/RepAssignPopover';
 
 // Module augmentation for TanStack Table meta
 declare module '@tanstack/react-table' {
@@ -875,7 +876,13 @@ export default function ContactsPage() {
         accessorKey: 'sarson_rep',
         header: 'Sales Rep',
         meta: { className: 'min-w-[120px]' },
-        cell: ({ row }) => <InlineSalesRep contact={row.original} />,
+        cell: ({ row }) => (
+          <RepAssignPopover
+            contactId={row.original.id}
+            currentRep={row.original.sarson_rep}
+            variant="table"
+          />
+        ),
       },
       {
         accessorKey: 'status',
