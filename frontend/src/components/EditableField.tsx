@@ -149,6 +149,8 @@ export function EditableField({
   if (showPencilOnly) {
     return (
       <button
+        type="button"
+        aria-label="Edit"
         className={cn('inline-flex items-center text-muted-foreground hover:text-primary transition-colors shrink-0', className)}
         onClick={() => setEditing(true)}
         title="Edit"

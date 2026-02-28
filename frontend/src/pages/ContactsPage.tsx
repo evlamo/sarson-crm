@@ -11,6 +11,7 @@ import {
   type RowSelectionState,
 } from '@tanstack/react-table';
 import api from '@/lib/api';
+import { copyToClipboard } from '@/lib/clipboard';
 import type { Contact, PaginatedResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -858,7 +859,8 @@ export default function ContactsPage() {
           if (!val) return <span className="text-muted-foreground text-sm">—</span>;
           return (
             <button
-              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(val); toast.success('Email copied!'); }}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); copyToClipboard(val); toast.success('Email copied!'); }}
               className="block truncate text-muted-foreground text-sm max-w-[220px] hover:text-primary transition-colors text-left"
               title="Click to copy"
             >
@@ -876,7 +878,8 @@ export default function ContactsPage() {
           if (!val) return <span className="text-muted-foreground text-sm">—</span>;
           return (
             <button
-              onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(val); toast.success('Phone copied!'); }}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); copyToClipboard(val); toast.success('Phone copied!'); }}
               className="block truncate text-muted-foreground text-sm hover:text-primary transition-colors text-left"
               title="Click to copy"
             >

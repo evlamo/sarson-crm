@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { copyToClipboard } from '@/lib/clipboard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,6 +68,15 @@ const TAG_COLORS = [
   'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-rose-500',
 ];
 
+function getTagColorFromId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = ((hash << 5) - hash) + id.charCodeAt(i);
+    hash |= 0;
+  }
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+}
+
 const STATUS_OPTIONS = [
   { value: 'hot', label: 'Hot' },
   { value: 'warm', label: 'Warm' },
@@ -122,6 +132,13 @@ function InlineLastContactedDetail({ contact, onSave }: { contact: ContactDetail
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const save = async () => {
     const current = contact.last_contacted_at ? contact.last_contacted_at.slice(0, 10) : '';
@@ -129,6 +146,13 @@ function InlineLastContactedDetail({ contact, onSave }: { contact: ContactDetail
       await onSave('last_contacted_at', draft);
     }
     setEditing(false);
+  };
+
+  const start = () => {
+    const iso = contact.last_contacted_at ? contact.last_contacted_at.slice(0, 10) : '';
+    setDraft(iso);
+    setEditing(true);
+    timerRef.current = setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   if (editing) {
@@ -151,21 +175,16 @@ function InlineLastContactedDetail({ contact, onSave }: { contact: ContactDetail
   const display = contact.last_contacted_at ? formatDate(contact.last_contacted_at) : null;
   return (
     <span
-      onClick={() => {
-        const iso = contact.last_contacted_at ? contact.last_contacted_at.slice(0, 10) : '';
-        setDraft(iso);
-        setEditing(true);
-        setTimeout(() => inputRef.current?.focus(), 0);
-      }}
-      className="text-sm cursor-pointer hover:text-primary transition-colors"
-      title="Click to edit"
+      onClick={start}
+      className="text-sm cursor-pointer hover:text-primary transition-colors inline-flex items-center gap-1 group"
+      title="Click to set date"
     >
-      {display || <span className="text-muted-foreground italic">—</span>}
+      {display || <span className="text-muted-foreground italic">— <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity">set date</span></span>}
     </span>
   );
 }
 
-function TagManager({ contact, onUpdate }: { contact: ContactDetail; onUpdate: () => void }) {
+function TagManager({ contact, onUpdate, removeTagMutation: removeTagExt }: { contact: ContactDetail; onUpdate: () => void; removeTagMutation: { mutate: (tagId: string) => void; isPending: boolean } }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const queryClient = useQueryClient();
@@ -198,28 +217,37 @@ function TagManager({ contact, onUpdate }: { contact: ContactDetail; onUpdate: (
     onError: () => toast.error('Failed to add tag'),
   });
 
-  const removeTag = useMutation({
-    mutationFn: async (tagId: string) => {
-      await api.delete(`/contacts/${contact.id}/tags/${tagId}`);
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['contact', contact.id] }); queryClient.invalidateQueries({ queryKey: ['contacts'] }); onUpdate(); },
-    onError: () => toast.error('Failed to remove tag'),
-  });
+  const removeTag = removeTagExt;
 
   const createAndAddTag = useMutation({
     mutationFn: async (name: string) => {
-      const res = await api.post<{ id: string; name: string; color: string }>('/tags/', { name });
-      await api.post(`/contacts/${contact.id}/tags`, { tag_id: res.data.id });
+      const res = await api.post<{ id: string; name: string; color: string }>('/tags/', { name: name.trim() });
+      const newTagId = res.data.id;
+      try {
+        await api.post(`/contacts/${contact.id}/tags`, { tag_id: newTagId });
+      } catch (linkErr) {
+        try {
+          await api.post(`/contacts/${contact.id}/tags`, { tag_id: newTagId });
+        } catch {
+          throw new Error('Tag created but could not be linked to contact. Try adding it manually.');
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       queryClient.invalidateQueries({ queryKey: ['tags'] });
       setSearch('');
+      toast.success('Tag created and added');
       onUpdate();
     },
-    onError: () => toast.error('Failed to create tag'),
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Failed to create tag';
+      toast.error(msg);
+    },
   });
+
+  const isMutating = addTag.isPending || removeTag.isPending || createAndAddTag.isPending;
 
   const filtered = (allTags || []).filter(t =>
     !search || t.name.toLowerCase().includes(search.toLowerCase())
@@ -229,13 +257,16 @@ function TagManager({ contact, onUpdate }: { contact: ContactDetail; onUpdate: (
   return (
     <div ref={ref} className="relative inline-block">
       <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
         onClick={() => setOpen(o => !o)}
         className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-dashed border-muted-foreground/40 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
       >
         <span>+</span> Tag
       </button>
       {open && (
-        <div className="absolute top-8 left-0 z-50 w-56 bg-card border rounded-lg shadow-lg p-2">
+        <div className="absolute top-8 left-0 z-[100] w-56 bg-card border rounded-lg shadow-lg p-2">
           <input
             autoFocus
             value={search}
@@ -249,8 +280,10 @@ function TagManager({ contact, onUpdate }: { contact: ContactDetail; onUpdate: (
               return (
                 <button
                   key={tag.id}
+                  type="button"
+                  disabled={isMutating}
                   onClick={() => isOn ? removeTag.mutate(tag.id) : addTag.mutate(tag.id)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span
                     className="h-2.5 w-2.5 rounded-full shrink-0"
@@ -263,9 +296,10 @@ function TagManager({ contact, onUpdate }: { contact: ContactDetail; onUpdate: (
             })}
             {search && !exactMatch && (
               <button
+                type="button"
                 onClick={() => createAndAddTag.mutate(search.trim())}
-                disabled={createAndAddTag.isPending}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left text-primary"
+                disabled={isMutating}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted transition-colors text-left text-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>+</span> Create &ldquo;{search.trim()}&rdquo;
               </button>
@@ -428,31 +462,33 @@ export default function ContactDetailPage() {
               {/* Tags with × and TagManager */}
               {contact.tags && contact.tags.length > 0 ? (
                 <div className="flex gap-1.5 flex-wrap mt-2 items-center">
-                  {contact.tags.map((tag, i) => (
+                  {contact.tags.map((tag) => (
                     <span
                       key={tag.id}
-                      className={`inline-flex items-center gap-1 ${tag.color ? '' : TAG_COLORS[i % TAG_COLORS.length]} text-white text-xs px-2 py-0.5 rounded-full`}
+                      className={`inline-flex items-center gap-1 ${tag.color ? '' : getTagColorFromId(tag.id)} text-white text-xs px-2 py-0.5 rounded-full`}
                       style={tag.color ? { backgroundColor: tag.color, color: '#fff' } : undefined}
                     >
                       {tag.name}
                       <button
+                        type="button"
                         onClick={() => removeTagMutation.mutate(tag.id)}
                         className="ml-0.5 hover:opacity-70 transition-opacity"
                       >×</button>
                     </span>
                   ))}
-                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} />
+                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} removeTagMutation={removeTagMutation} />
                 </div>
               ) : (
                 <div className="mt-2">
-                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} />
+                  <TagManager contact={contact} onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })} removeTagMutation={removeTagMutation} />
                 </div>
               )}
               {/* Quick-action chips */}
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 {contact.email && (
                   <button
-                    onClick={() => { navigator.clipboard.writeText(contact.email!); toast.success('Email copied!'); }}
+                    type="button"
+                    onClick={() => { copyToClipboard(contact.email!); toast.success('Email copied!'); }}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors"
                     title="Click to copy email"
                   >
@@ -462,7 +498,8 @@ export default function ContactDetailPage() {
                 )}
                 {contact.phone && (
                   <button
-                    onClick={() => { navigator.clipboard.writeText(contact.phone!); toast.success('Phone copied!'); }}
+                    type="button"
+                    onClick={() => { copyToClipboard(contact.phone!); toast.success('Phone copied!'); }}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors"
                     title="Click to copy phone"
                   >
@@ -561,7 +598,8 @@ export default function ContactDetailPage() {
                 <div className="flex items-center gap-2">
                   {contact.email ? (
                     <button
-                      onClick={() => { navigator.clipboard.writeText(contact.email!); toast.success('Email copied!'); }}
+                      type="button"
+                      onClick={() => { copyToClipboard(contact.email!); toast.success('Email copied!'); }}
                       className="text-sm hover:text-primary transition-colors text-left break-all"
                       title="Click to copy"
                     >
@@ -577,7 +615,8 @@ export default function ContactDetailPage() {
                 <div className="flex items-center gap-2">
                   {contact.phone ? (
                     <button
-                      onClick={() => { navigator.clipboard.writeText(contact.phone!); toast.success('Phone copied!'); }}
+                      type="button"
+                      onClick={() => { copyToClipboard(contact.phone!); toast.success('Phone copied!'); }}
                       className="text-sm hover:text-primary transition-colors text-left break-all"
                       title="Click to copy"
                     >
