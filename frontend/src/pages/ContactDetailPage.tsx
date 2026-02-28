@@ -381,18 +381,13 @@ function TagInput({
 
   return (
     <div className="relative">
-      <div
-        className={`flex flex-wrap items-center gap-1.5 min-h-[32px] px-2 py-1 rounded-lg border transition-colors cursor-text ${
-          focused
-            ? 'border-primary/50 bg-background shadow-sm'
-            : 'border-dashed border-muted-foreground/20 hover:border-muted-foreground/40'
-        }`}
-        onClick={() => inputRef.current?.focus()}
-      >
+      {/* Tags row — horizontal, no wrap, + Tag button on the right */}
+      <div className="flex items-center gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        {/* Tag chips */}
         {contact.tags?.map(tag => (
           <span
             key={tag.id}
-            className="inline-flex items-center gap-1 text-white text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
+            className="inline-flex items-center gap-1 text-white text-xs px-2.5 py-1 rounded-full font-medium shrink-0"
             style={{ backgroundColor: tag.color || getTagColorFromId(tag.id) }}
           >
             {tag.name}
@@ -407,7 +402,32 @@ function TagInput({
           </span>
         ))}
 
+        {/* + Tag button — always on the right, looks like a real button */}
         {!atMax && (
+          <button
+            type="button"
+            onClick={() => { setFocused(true); setTimeout(() => inputRef.current?.focus(), 0); }}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border shrink-0 transition-all ${
+              focused
+                ? 'border-primary text-primary bg-primary/5'
+                : 'border-border text-muted-foreground bg-muted/50 hover:border-primary/50 hover:text-primary hover:bg-primary/5'
+            }`}
+          >
+            {isMutating ? (
+              <span className="animate-pulse">···</span>
+            ) : (
+              <>+ Tag</>
+            )}
+          </button>
+        )}
+        {atMax && (
+          <span className="text-xs text-muted-foreground shrink-0 ml-1">Max 8</span>
+        )}
+      </div>
+
+      {/* Hidden input — focused when + Tag is clicked */}
+      {!atMax && (
+        <div className={`mt-1.5 transition-all ${focused ? 'block' : 'hidden'}`}>
           <input
             ref={inputRef}
             type="text"
@@ -416,18 +436,12 @@ function TagInput({
             onFocus={() => setFocused(true)}
             onBlur={() => setTimeout(() => setFocused(false), 200)}
             onKeyDown={handleKeyDown}
-            placeholder={contact.tags?.length ? '+ tag' : 'Add tags...'}
-            className="flex-1 min-w-[80px] bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+            placeholder="Search or create tag..."
+            className="w-full h-8 px-3 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
             disabled={isMutating}
           />
-        )}
-        {atMax && !value && (
-          <span className="text-xs text-muted-foreground italic ml-1">Max 8 tags</span>
-        )}
-        {isMutating && (
-          <span className="text-xs text-muted-foreground animate-pulse ml-1">...</span>
-        )}
-      </div>
+        </div>
+      )}
 
       {showDropdown && (
         <div className="absolute top-full left-0 mt-1 z-[100] w-56 bg-popover border border-border rounded-xl shadow-xl py-1 overflow-hidden">
