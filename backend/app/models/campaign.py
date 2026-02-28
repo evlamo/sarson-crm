@@ -17,8 +17,8 @@ class EmailTemplate(Base):
     category = Column(String)
     thumbnail = Column(String)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class EmailCampaign(Base):
@@ -59,8 +59,8 @@ class EmailCampaign(Base):
     spam_count = Column(Integer, default=0)
 
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     sends = relationship("EmailSend", back_populates="campaign", cascade="all, delete-orphan")
@@ -85,7 +85,7 @@ class EmailSend(Base):
     bounced_at = Column(DateTime(timezone=True))
     bounce_type = Column(String)
     unsubscribed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     campaign = relationship("EmailCampaign", back_populates="sends")
     contact = relationship("Contact", back_populates="email_sends")

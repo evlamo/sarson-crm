@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { formatDate } from '@/lib/formatDate';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import {
@@ -312,7 +313,7 @@ function InlineLastContact({ contact }: { contact: Contact }) {
   }
 
   const display = contact.last_contacted_at
-    ? new Date(contact.last_contacted_at).toLocaleDateString()
+    ? formatDate(contact.last_contacted_at)
     : null;
 
   return (
@@ -628,7 +629,7 @@ function exportToCSV(contacts: Contact[]) {
     c.status || '',
     c.sarson_rep || '',
     c.next_step || '',
-    c.last_contacted_at ? new Date(c.last_contacted_at).toLocaleDateString() : '',
+    c.last_contacted_at ? formatDate(c.last_contacted_at) : '',
     c.source || '',
     c.city || '',
     c.state || '',

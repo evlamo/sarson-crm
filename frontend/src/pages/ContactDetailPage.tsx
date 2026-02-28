@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { formatDate, formatDateTime, formatTime } from '@/lib/formatDate';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
@@ -439,7 +440,7 @@ export default function ContactDetailPage() {
                 <InfoRow label="Location" value={[contact.city, contact.state, contact.country].filter(Boolean).join(', ')} />
                 {contact.source && <InfoRow label="Source" value={contact.source} />}
                 {contact.last_contacted_at && (
-                  <InfoRow label="Last Contacted" value={new Date(contact.last_contacted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} />
+                  <InfoRow label="Last Contacted" value={formatDate(contact.last_contacted_at)} />
                 )}
                 {(contact.email_open_count > 0 || contact.email_click_count > 0) && (
                   <div className="flex justify-between">
@@ -556,9 +557,8 @@ export default function ContactDetailPage() {
                 activities.map((activity) => {
                   const Icon = ACTIVITY_ICONS[activity.activity_type] || FileText;
                   const isNote = activity.activity_type === 'note';
-                  const dt = activity.performed_at ? new Date(activity.performed_at) : null;
-                  const dateStr = dt ? dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-                  const timeStr = dt ? dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+                  const dateStr = activity.performed_at ? formatDate(activity.performed_at) : '';
+                  const timeStr = activity.performed_at ? formatTime(activity.performed_at) : '';
 
                   return (
                     <div key={activity.id} className="flex gap-3 group">

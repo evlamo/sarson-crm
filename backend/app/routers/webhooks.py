@@ -328,16 +328,21 @@ async def sendgrid_webhook(request: Request, db: Session = Depends(get_db)):
 # ── Mailchimp Webhook ─────────────────────────────────────────────────────
 
 @router.post("/mailchimp")
-async def mailchimp_webhook(request: Request):
+async def mailchimp_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Receives Mailchimp webhook POST events.
     Events: subscribe, unsubscribe, cleaned, campaign (status change).
     Mailchimp webhooks include a secret key in the URL as a query param for verification.
     """
-    # Optional: verify webhook secret via query param
+    # Verify webhook secret via query param
     webhook_secret = request.query_params.get("secret", "")
-    expected_secret = settings.mailchimp_api_key[:16] if settings.mailchimp_api_key else ""
-    if settings.environment == "production" and expected_secret and webhook_secret != expected_secret:
+    expected_secret = settings.mailchimp_webhook_secret
+    if not expected_secret:
+        if settings.environment == "production":
+            logger.error("MAILCHIMP_WEBHOOK_SECRET not set in production — rejecting webhook")
+            raise HTTPException(status_code=403, detail="Webhook secret not configured")
+        logger.warning("MAILCHIMP_WEBHOOK_SECRET not set — skipping verification (dev mode)")
+    elif webhook_secret != expected_secret:
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
     try:
@@ -349,7 +354,6 @@ async def mailchimp_webhook(request: Request):
 
     event_type = data.get("type", "")
 
-    db = SessionLocal()
     try:
         if event_type == "unsubscribe":
             email = data.get("data", {}).get("email", "") if isinstance(data.get("data"), dict) else data.get("data[email]", "")
@@ -378,8 +382,6 @@ async def mailchimp_webhook(request: Request):
         db.rollback()
         logger.exception(f"Mailchimp webhook failed: {e}")
         raise HTTPException(status_code=500, detail="Webhook processing failed")
-    finally:
-        db.close()
 
 
 @router.get("/mailchimp")

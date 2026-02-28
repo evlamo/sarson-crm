@@ -23,8 +23,8 @@ class UserInvite(Base):
     invited_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     token = Column(String, unique=True, nullable=False, default=lambda: secrets.token_hex(32))
     status = Column(SAEnum(InviteStatus, name="invite_status", create_type=True), default=InviteStatus.pending, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime(timezone=True), default=lambda: datetime.utcnow() + timedelta(hours=72), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    expires_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc) + timedelta(hours=72), nullable=False)
     accepted_at = Column(DateTime(timezone=True), nullable=True)
 
     inviter = relationship("User", foreign_keys=[invited_by])

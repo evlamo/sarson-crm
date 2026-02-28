@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { formatDate } from '@/lib/formatDate';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -93,7 +94,7 @@ export default function UsersPage() {
                     </Badge>
                     {!u.is_active && <Badge variant="destructive">Inactive</Badge>}
                     <span className="text-xs text-muted-foreground">
-                      {u.last_login ? `Last login: ${new Date(u.last_login).toLocaleDateString()}` : 'Never logged in'}
+                      {u.last_login ? `Last login: ${formatDate(u.last_login)}` : 'Never logged in'}
                     </span>
                     <Button size="sm" variant="outline" onClick={() => setResetTarget(u)}>
                       Reset Password

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from datetime import datetime
 from jose import JWTError
 import logging
 from slowapi import Limiter
@@ -12,6 +11,7 @@ from app.auth.security import verify_password, hash_password, create_access_toke
 from app.auth.schemas import LoginRequest, TokenResponse, RefreshRequest, UserOut, UserCreate, UserUpdate, PasswordResetRequest
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.config import settings
+from app.utils.time import utcnow
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
         logger.warning("Failed login attempt for user: %s", req.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    user.last_login = datetime.utcnow()
+    user.last_login = utcnow()
     db.commit()
 
     token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
@@ -93,7 +93,7 @@ def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = De
             .filter(
                 UserInvite.email == email_lower,
                 UserInvite.status == InviteStatus.pending,
-                UserInvite.expires_at > datetime.utcnow(),
+                UserInvite.expires_at > utcnow(),
             )
             .first()
         )
@@ -115,7 +115,7 @@ def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = De
     # Mark invite as accepted
     if invite:
         invite.status = InviteStatus.accepted
-        invite.accepted_at = datetime.utcnow()
+        invite.accepted_at = utcnow()
 
     db.commit()
     db.refresh(user)

@@ -13,7 +13,7 @@ class Pipeline(Base):
     name = Column(String, nullable=False)
     stages = Column(JSONB, nullable=False)  # [{name, order, probability, color}]
     is_default = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     deals = relationship("Deal", back_populates="pipeline")
 
@@ -39,8 +39,8 @@ class Deal(Base):
     loss_reason = Column(String)
     custom_fields = Column(JSONB, default=dict)
     deleted_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
 
     # Relationships

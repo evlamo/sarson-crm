@@ -10,7 +10,7 @@ StaticListMember = Table(
     Base.metadata,
     Column("list_id", UUID(as_uuid=True), ForeignKey("static_lists.id", ondelete="CASCADE"), primary_key=True),
     Column("contact_id", UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="CASCADE"), primary_key=True),
-    Column("added_at", DateTime(timezone=True), default=datetime.utcnow),
+    Column("added_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
 )
 
 
@@ -21,8 +21,8 @@ class StaticList(Base):
     name = Column(String, nullable=False)
     description = Column(Text)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     contacts = relationship("Contact", secondary="static_list_members", lazy="dynamic")
     creator = relationship("User", foreign_keys=[created_by])

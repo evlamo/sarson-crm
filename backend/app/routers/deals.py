@@ -1,10 +1,10 @@
 """Deals API — CRUD + stage moves for pipeline Kanban."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,7 @@ from app.auth.dependencies import get_current_user
 from app.models.user import User
 from app.models.deal import Deal
 from app.models.company import Company
+from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api/v1/deals", tags=["deals"])
 
@@ -64,12 +65,10 @@ class DealOut(BaseModel):
         from_attributes = True
 
 
-def _enrich(deal: Deal, db: Session) -> dict:
+def _enrich(deal: Deal) -> dict:
     d = DealOut.model_validate(deal).model_dump()
-    if deal.company_id:
-        co = db.query(Company).filter(Company.id == deal.company_id).first()
-        if co:
-            d["company_name"] = co.name
+    if deal.company:
+        d["company_name"] = deal.company.name
     d["expected_close"] = str(deal.expected_close) if deal.expected_close else None
     d["amount"] = float(deal.amount) if deal.amount else None
     return d
@@ -80,14 +79,31 @@ def _enrich(deal: Deal, db: Session) -> dict:
 @router.get("")
 def list_deals(
     stage: Optional[str] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Deal).filter(Deal.deleted_at.is_(None))
+    query = (
+        db.query(Deal)
+        .options(joinedload(Deal.company))
+        .filter(Deal.deleted_at.is_(None))
+    )
     if stage:
         query = query.filter(Deal.stage == stage)
-    deals = query.order_by(Deal.created_at.desc()).all()
-    return [_enrich(d, db) for d in deals]
+
+    total = db.query(func.count(Deal.id)).filter(
+        Deal.deleted_at.is_(None),
+        *([Deal.stage == stage] if stage else []),
+    ).scalar()
+
+    deals = query.order_by(Deal.created_at.desc()).offset(skip).limit(limit).all()
+    return {
+        "data": [_enrich(d) for d in deals],
+        "total": total,
+        "page": skip // limit + 1 if limit else 1,
+        "per_page": limit,
+    }
 
 
 # ── Create Deal ────────────────────────────────────────────────────────────
@@ -113,7 +129,9 @@ def create_deal(
     db.add(deal)
     db.commit()
     db.refresh(deal)
-    return _enrich(deal, db)
+    # Reload with company relationship
+    deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
+    return _enrich(deal)
 
 
 # ── Get Deal ───────────────────────────────────────────────────────────────
@@ -124,10 +142,15 @@ def get_deal(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    deal = db.query(Deal).filter(Deal.id == deal_id, Deal.deleted_at.is_(None)).first()
+    deal = (
+        db.query(Deal)
+        .options(joinedload(Deal.company))
+        .filter(Deal.id == deal_id, Deal.deleted_at.is_(None))
+        .first()
+    )
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
-    return _enrich(deal, db)
+    return _enrich(deal)
 
 
 # ── Update Deal ────────────────────────────────────────────────────────────
@@ -145,10 +168,11 @@ def update_deal(
 
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(deal, key, value)
-    deal.updated_at = datetime.utcnow()
+    deal.updated_at = utcnow()
     db.commit()
     db.refresh(deal)
-    return _enrich(deal, db)
+    deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
+    return _enrich(deal)
 
 
 # ── Move Stage ─────────────────────────────────────────────────────────────
@@ -164,10 +188,11 @@ def move_deal_stage(
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
     deal.stage = data.stage
-    deal.updated_at = datetime.utcnow()
+    deal.updated_at = utcnow()
     db.commit()
     db.refresh(deal)
-    return _enrich(deal, db)
+    deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
+    return _enrich(deal)
 
 
 # ── Delete Deal ────────────────────────────────────────────────────────────
@@ -181,5 +206,5 @@ def delete_deal(
     deal = db.query(Deal).filter(Deal.id == deal_id, Deal.deleted_at.is_(None)).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
-    deal.deleted_at = datetime.utcnow()
+    deal.deleted_at = utcnow()
     db.commit()

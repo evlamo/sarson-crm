@@ -23,7 +23,7 @@ class Contact(Base):
     first_name = Column(String)
     middle_name = Column(Text)
     last_name = Column(String)
-    email = Column(String, index=True, unique=True)
+    email = Column(String, index=True)
     email_secondary = Column(String)
     phone = Column(String)
     phone_secondary = Column(String)

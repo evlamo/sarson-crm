@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
+import { formatDate } from '@/lib/formatDate';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -191,10 +192,10 @@ export default function InvitesPage() {
                       <TableCell>{inv.invited_by_name || '—'}</TableCell>
                       <TableCell>{statusBadge(inv.status, inv.expires_at)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(inv.created_at).toLocaleDateString()}
+                        {formatDate(inv.created_at)}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(inv.expires_at).toLocaleDateString()}
+                        {formatDate(inv.expires_at)}
                       </TableCell>
                       <TableCell>
                         {isPending && (

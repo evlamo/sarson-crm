@@ -10,6 +10,8 @@ import os
 import re
 import uuid
 from datetime import datetime, date
+from app.utils.time import utcnow
+from app.utils.time import utcnow
 from typing import Optional
 
 from sqlalchemy import func
@@ -171,7 +173,7 @@ def execute_import(db: Session, job: ImportJob,
                    mapping_overrides: Optional[dict[str, str]] = None):
     """Execute the import with batch processing — supports all file formats."""
     job.status = "processing"
-    job.started_at = datetime.utcnow()
+    job.started_at = utcnow()
     db.commit()  # Issue #20: commit processing status before doing work
 
     file_path = job.column_map.get("file_path", "")
@@ -355,7 +357,7 @@ def execute_import(db: Session, job: ImportJob,
         job.skipped_count = skipped
         job.error_count = len(errors)
         job.errors = errors[:1000]
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utcnow()
         db.commit()
 
     except Exception as e:
@@ -368,7 +370,7 @@ def execute_import(db: Session, job: ImportJob,
         job.skipped_count = skipped
         job.error_count = len(errors)
         job.errors = errors[:1000]
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utcnow()
         db.commit()
 
     # Issue #5: Delete uploaded file after import

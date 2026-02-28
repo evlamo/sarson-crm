@@ -33,6 +33,11 @@ def _get_column(field: str):
     return col
 
 
+def _escape_like(val: str) -> str:
+    """Escape special LIKE/ILIKE characters to prevent wildcard injection."""
+    return val.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 # ── Condition → Predicate ──────────────────────────────────────────────────
 
 def _build_tag_predicate(op: str, value):
@@ -53,11 +58,11 @@ def _build_tag_predicate(op: str, value):
             )
         )
     elif op == "contains":
-        tag_subq = tag_subq.where(Tag.name.ilike(f"%{value}%"))
+        tag_subq = tag_subq.where(Tag.name.ilike(f"%{_escape_like(value)}%", escape="\\"))
     elif op == "not_contains":
         return ~exists(
             tag_subq.where(
-                Tag.name.ilike(f"%{value}%"),
+                Tag.name.ilike(f"%{_escape_like(value)}%", escape="\\"),
                 ContactTag.c.contact_id == Contact.id,
             )
         )
@@ -100,11 +105,11 @@ def _build_condition_predicate(condition: FilterCondition):
     elif op == "neq":
         return col != val
     elif op == "contains":
-        return col.ilike(f"%{val}%")
+        return col.ilike(f"%{_escape_like(val)}%", escape="\\")
     elif op == "not_contains":
-        return ~col.ilike(f"%{val}%")
+        return ~col.ilike(f"%{_escape_like(val)}%", escape="\\")
     elif op == "starts_with":
-        return col.ilike(f"{val}%")
+        return col.ilike(f"{_escape_like(val)}%", escape="\\")
     elif op == "gt":
         return col > val
     elif op == "gte":

@@ -2,6 +2,7 @@
 import uuid
 import secrets
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
@@ -93,7 +94,7 @@ def create_invite(
     active_users = db.query(User).filter(User.is_active == True).count()
     pending_invites = db.query(UserInvite).filter(
         UserInvite.status == InviteStatus.pending,
-        UserInvite.expires_at > datetime.utcnow(),
+        UserInvite.expires_at > utcnow(),
     ).count()
     if active_users + pending_invites >= settings.max_users:
         raise HTTPException(
@@ -112,7 +113,7 @@ def create_invite(
         .filter(
             UserInvite.email == email_lower,
             UserInvite.status == InviteStatus.pending,
-            UserInvite.expires_at > datetime.utcnow(),
+            UserInvite.expires_at > utcnow(),
         )
         .first()
     )
@@ -125,8 +126,8 @@ def create_invite(
         invited_by=admin.id,
         token=secrets.token_hex(32),
         status=InviteStatus.pending,
-        created_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(hours=72),
+        created_at=utcnow(),
+        expires_at=utcnow() + timedelta(hours=72),
     )
     db.add(invite)
     db.commit()
@@ -167,7 +168,7 @@ def validate_invite(token: str, db: Session = Depends(get_db)):
     if not invite:
         raise HTTPException(status_code=404, detail="Invalid invite token")
 
-    now = datetime.utcnow()
+    now = utcnow()
     expired = invite.expires_at < now
     valid = invite.status == InviteStatus.pending and not expired
 

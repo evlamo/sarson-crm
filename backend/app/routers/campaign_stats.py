@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 from datetime import datetime
 from typing import List, Optional
 
+import redis
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_user
+from app.config import settings as app_settings
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -141,13 +144,47 @@ async def _fetch_mailchimp() -> List[CampaignStat]:
     return results
 
 
+# ── Redis Cache ────────────────────────────────────────────────────────────
+
+CACHE_TTL = 300  # 5 minutes
+
+def _get_redis():
+    try:
+        return redis.from_url(app_settings.redis_url, decode_responses=True)
+    except Exception:
+        return None
+
+
+async def _fetch_mailchimp_cached(cache_key: str) -> Optional[List[CampaignStat]]:
+    """Fetch from Redis cache or Mailchimp API, caching the result."""
+    r = _get_redis()
+    if r:
+        try:
+            cached = r.get(cache_key)
+            if cached:
+                data = json.loads(cached)
+                return [CampaignStat(**c) for c in data]
+        except Exception as exc:
+            logger.warning("Redis cache read failed: %s", exc)
+
+    campaigns = await _fetch_mailchimp()
+
+    if r:
+        try:
+            r.setex(cache_key, CACHE_TTL, json.dumps([c.model_dump() for c in campaigns]))
+        except Exception as exc:
+            logger.warning("Redis cache write failed: %s", exc)
+
+    return campaigns
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=CampaignStatsResponse)
 async def get_campaign_stats(current_user: User = Depends(get_current_user)):
     if _mailchimp_configured():
         try:
-            campaigns = await _fetch_mailchimp()
+            campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
             return CampaignStatsResponse(campaigns=campaigns, source="mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign stats from Mailchimp: %s", exc)
@@ -158,7 +195,7 @@ async def get_campaign_stats(current_user: User = Depends(get_current_user)):
 async def get_campaign_summary(current_user: User = Depends(get_current_user)):
     if _mailchimp_configured():
         try:
-            campaigns = await _fetch_mailchimp()
+            campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
             return _compute_summary(campaigns, "mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign summary from Mailchimp: %s", exc)

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import Optional
 
 from app.database import get_db
@@ -117,7 +118,7 @@ def update_company(
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(company, field, value)
 
-    company.updated_at = datetime.utcnow()
+    company.updated_at = utcnow()
     db.commit()
     db.refresh(company)
     return _company_response(company, db)
@@ -137,5 +138,5 @@ def delete_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    company.deleted_at = datetime.utcnow()
+    company.deleted_at = utcnow()
     db.commit()

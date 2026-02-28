@@ -25,8 +25,8 @@ app = FastAPI(
     title="Speranza CRM",
     description="Investment firm CRM — replaces Salesforce + Mailchimp",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if settings.environment == "development" else None,
+    redoc_url="/redoc" if settings.environment == "development" else None,
 )
 
 app.state.limiter = limiter

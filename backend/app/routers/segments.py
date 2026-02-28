@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
+from app.utils.time import utcnow
 import uuid
 
 from app.database import get_db
@@ -91,7 +92,7 @@ def update_segment(
     if payload.filter_rules is not None:
         segment.filters = payload.filter_rules.model_dump()
 
-    segment.updated_at = datetime.utcnow()
+    segment.updated_at = utcnow()
     db.commit()
     db.refresh(segment)
     return _segment_response(segment, db)

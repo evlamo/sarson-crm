@@ -4,7 +4,6 @@ Celery task for sending email campaigns via SendGrid.
 Batches recipients into groups of 1000, rate-limits API calls,
 tracks per-recipient send status.
 """
-import time
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
@@ -227,7 +226,7 @@ def send_campaign_task(self, campaign_id: str):
                 db.commit()
                 batch = []
                 send_map = {}
-                time.sleep(CALL_INTERVAL)  # Rate limiting
+                # Rate limiting is handled by Celery's task_default_rate_limit
 
         # Send remaining batch
         if batch:

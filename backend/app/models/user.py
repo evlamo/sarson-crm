@@ -16,8 +16,8 @@ class User(Base):
     avatar_url = Column(String)
     is_active = Column(Boolean, default=True)
     last_login = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     owned_contacts = relationship("Contact", back_populates="owner", foreign_keys="Contact.owner_id")

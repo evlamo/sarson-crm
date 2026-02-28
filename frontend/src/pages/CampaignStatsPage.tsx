@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { formatDate } from '@/lib/formatDate';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -169,7 +170,7 @@ export default function CampaignStatsPage() {
                       <TableRow key={c.id}>
                         <TableCell className="font-medium max-w-[280px] truncate">{c.name}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {c.send_date ? new Date(c.send_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                          {c.send_date ? formatDate(c.send_date + 'T00:00:00') : '—'}
                         </TableCell>
                         <TableCell className="text-right">{c.recipients.toLocaleString()}</TableCell>
                         <TableCell className="text-right">

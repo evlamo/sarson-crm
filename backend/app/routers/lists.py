@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, insert, delete
 from datetime import datetime
+from app.utils.time import utcnow
 import uuid
 
 from app.database import get_db
@@ -89,7 +90,7 @@ def update_static_list(
         sl.name = payload.name
     if payload.description is not None:
         sl.description = payload.description
-    sl.updated_at = datetime.utcnow()
+    sl.updated_at = utcnow()
     db.commit()
     db.refresh(sl)
     return _list_response(sl, db)

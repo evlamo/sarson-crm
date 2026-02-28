@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { formatDateTime } from '@/lib/formatDate';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -98,7 +99,7 @@ export default function ImportHistoryPage() {
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{job.filename || 'Unnamed import'}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(job.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            {formatDateTime(job.created_at)}
                           </p>
                         </div>
                       </div>

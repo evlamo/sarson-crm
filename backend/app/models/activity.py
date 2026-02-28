@@ -33,11 +33,11 @@ class Activity(Base):
     assigned_to = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
 
     performed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-    performed_at = Column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    performed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     source = Column(String, default="manual")
     metadata_ = Column("metadata", JSONB, default=dict)
 
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     contact = relationship("Contact", back_populates="activities")
