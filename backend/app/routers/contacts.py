@@ -23,6 +23,7 @@ from app.schemas.contact import (
     BulkUpdateResponse,
 )
 from app.models.user import User
+from app.services.company_service import get_or_create_company
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["contacts"])
 
@@ -38,6 +39,53 @@ class BulkDeleteRequest(BaseModel):
 
 def _utcnow():
     return datetime.now(timezone.utc)
+
+
+def _check_poc_enforcement(db: Session, contact_id, company_id, status_value: str):
+    """Raise 409 if setting status to 'poc' but company already has a POC."""
+    if status_value != "poc" or not company_id:
+        return
+    existing_poc = (
+        db.query(Contact)
+        .filter(
+            Contact.company_id == company_id,
+            Contact.status == "poc",
+            Contact.id != contact_id,
+            Contact.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if existing_poc:
+        poc_name = existing_poc.full_name
+        raise HTTPException(
+            status_code=409,
+            detail=f"This company already has a Point of Contact: {poc_name}. Remove their POC status first.",
+        )
+
+
+def _sync_poc_on_company(db: Session, contact):
+    """If contact status is 'poc', set company.poc_contact_id."""
+    if contact.status == "poc" and contact.company_id:
+        company = db.query(Company).filter(Company.id == contact.company_id).first()
+        if company:
+            company.poc_contact_id = contact.id
+    elif contact.company_id:
+        # If status changed away from poc, clear if this contact was the poc
+        company = db.query(Company).filter(Company.id == contact.company_id).first()
+        if company and company.poc_contact_id == contact.id:
+            company.poc_contact_id = None
+
+
+def _resolve_company(db: Session, data: dict, contact=None):
+    """Resolve company field to company_id via get_or_create_company."""
+    company_name = data.get("company")
+    if company_name is not None:
+        co = get_or_create_company(db, company_name)
+        if co:
+            data["company_id"] = co.id
+            data["company"] = co.name  # normalize casing
+        else:
+            data["company_id"] = None
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -206,9 +254,14 @@ def create_contact(
     # Map schema field names → model column names
     if 'source' in data:
         data['lead_source'] = data.pop('source')
+    # Auto-resolve company name → company_id
+    _resolve_company(db, data)
     # Strip any keys that don't exist on the model to prevent TypeError
     valid_cols = {c.key for c in Contact.__table__.columns}
     data = {k: v for k, v in data.items() if k in valid_cols}
+    # POC enforcement
+    if data.get("status") == "poc" and data.get("company_id"):
+        _check_poc_enforcement(db, None, data["company_id"], "poc")
     contact = Contact(**data)
     db.add(contact)
     try:
@@ -217,6 +270,8 @@ def create_contact(
         db.rollback()
         raise HTTPException(status_code=409, detail="A contact with this email already exists")
     db.refresh(contact)
+    _sync_poc_on_company(db, contact)
+    db.commit()
     return _build_response(_get_contact_or_404(str(contact.id), db))
 
 
@@ -254,13 +309,24 @@ def patch_contact(
 ):
     """Partial update — only provided fields are changed."""
     contact = _get_contact_or_404(contact_id, db)
+    data = payload.model_dump(exclude_unset=True)
+    # Map source → lead_source
+    if 'source' in data:
+        data['lead_source'] = data.pop('source')
+    # Auto-resolve company name → company_id
+    _resolve_company(db, data, contact)
     valid_cols = {c.key for c in Contact.__table__.columns}
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        key = 'lead_source' if field == 'source' else field
+    # Determine the final status and company_id for POC check
+    new_status = data.get("status", contact.status)
+    new_company_id = data.get("company_id", contact.company_id)
+    if new_status == "poc":
+        _check_poc_enforcement(db, contact.id, new_company_id, "poc")
+    for key, value in data.items():
         if key in valid_cols:
             setattr(contact, key, value)
 
     contact.updated_at = _utcnow()
+    _sync_poc_on_company(db, contact)
     db.commit()
     return _build_response(_get_contact_or_404(contact_id, db))
 

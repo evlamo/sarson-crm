@@ -16,6 +16,7 @@ import UsersPage from '@/pages/UsersPage';
 import CampaignStatsPage from '@/pages/CampaignStatsPage';
 import InvitesPage from '@/pages/InvitesPage';
 import RegisterPage from '@/pages/RegisterPage';
+import CompaniesPage from '@/pages/CompaniesPage';
 
 import { useEffect } from 'react';
 
@@ -102,7 +103,7 @@ const contactDetailRoute = createRoute({
 const companiesRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/companies',
-  component: () => <PlaceholderPage title="Companies" />,
+  component: CompaniesPage,
 });
 
 const pipelineRoute = createRoute({

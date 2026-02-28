@@ -62,6 +62,30 @@ export interface Campaign {
   sent_at: string | null;
 }
 
+export interface Company {
+  id: string;
+  name: string;
+  domain: string | null;
+  industry: string | null;
+  company_type: string | null;
+  website: string | null;
+  linkedin_url: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  employee_count: number | null;
+  revenue_range: string | null;
+  description: string | null;
+  notes: string | null;
+  poc_contact_id: string | null;
+  custom_fields: Record<string, unknown>;
+  contact_count: number;
+  owner_id: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface Deal {
   id: string;
   title: string;

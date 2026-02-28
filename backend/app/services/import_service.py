@@ -23,6 +23,7 @@ from app.models.company import Company
 from app.models.tag import Tag, ContactTag
 from app.models.import_job import ImportJob
 from app.services.file_parser import parse_file
+from app.services.company_service import get_or_create_company as _get_or_create_company
 from app.services.import_normalizer import (
     map_headers, normalize_row, sanitize_value,
     normalize_email, normalize_phone, normalize_name,
@@ -268,29 +269,18 @@ def execute_import(db: Session, job: ImportJob,
                     continue
                 seen_emails_in_file.add(email)
 
-                # Resolve company
+                # Resolve company via shared service
                 if company_name:
                     cname_lower = company_name.lower()
                     if cname_lower not in company_cache:
-                        existing_co = db.query(Company).filter(
-                            func.lower(Company.name) == cname_lower,
-                            Company.deleted_at.is_(None)
-                        ).first()
-                        if existing_co:
-                            company_cache[cname_lower] = existing_co.id
-                            if company_website and not existing_co.website:
-                                existing_co.website = company_website
-                        else:
-                            new_co = Company(
-                                id=uuid.uuid4(),
-                                name=company_name,
-                                website=company_website or None,
-                            )
-                            db.add(new_co)
-                            db.flush()
-                            company_cache[cname_lower] = new_co.id
-                    normalized["company_id"] = company_cache[cname_lower]
-                    normalized["company"] = company_name
+                        co = _get_or_create_company(db, company_name)
+                        if co:
+                            company_cache[cname_lower] = co.id
+                            if company_website and not co.website:
+                                co.website = company_website
+                    if cname_lower in company_cache:
+                        normalized["company_id"] = company_cache[cname_lower]
+                        normalized["company"] = company_name
 
                 # Resolve tags
                 tag_ids = []
@@ -309,6 +299,19 @@ def execute_import(db: Session, job: ImportJob,
                                 db.flush()
                                 tag_cache[tname_lower] = new_tag.id
                         tag_ids.append(tag_cache[tname_lower])
+
+                # POC enforcement — skip if company already has a POC
+                if normalized.get("status") == "poc" and normalized.get("company_id"):
+                    existing_poc = db.query(Contact).filter(
+                        Contact.company_id == normalized["company_id"],
+                        Contact.status == "poc",
+                        Contact.deleted_at.is_(None),
+                    ).first()
+                    if existing_poc:
+                        skipped += 1
+                        processed += 1
+                        errors.append({"row": row_num, "error": f"Skipped: company already has POC ({existing_poc.full_name})"})
+                        continue
 
                 # Dedup by email against existing DB contacts
                 if email in email_contact_cache:
