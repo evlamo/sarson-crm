@@ -1,5 +1,8 @@
 """Import router — multi-format upload (CSV/TSV/XLSX/ODS/vCard), preview, execute, status."""
 
+import os
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -14,6 +17,7 @@ from app.schemas.import_schema import (
 )
 from app.services.import_service import (
     save_upload, create_import_record, execute_import,
+    validate_mapping_overrides, UPLOADS_DIR,
 )
 from app.services.file_parser import (
     parse_file, validate_file, get_filetype_from_extension, MAX_FILE_SIZE,
@@ -23,6 +27,9 @@ from app.services.import_normalizer import map_headers
 router = APIRouter(prefix="/api/v1/imports", tags=["imports"])
 
 ALLOWED_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xls", ".ods", ".vcf"}
+
+# Issue #3: chunk size for streaming file size check
+_CHUNK_SIZE = 64 * 1024  # 64KB
 
 
 @router.post("/upload", response_model=ImportUploadResponse)
@@ -35,14 +42,27 @@ async def upload_file(
     if not file.filename:
         raise HTTPException(400, "No filename provided")
 
-    import os
+    # Issue #2/#6: Restrict filename to ASCII-only chars
+    if not re.match(r'^[a-zA-Z0-9.\-_ ]+$', file.filename):
+        raise HTTPException(400, "Filename must contain only ASCII letters, numbers, dots, hyphens, underscores, and spaces")
+
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
 
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(413, f"File too large (max {MAX_FILE_SIZE // 1024 // 1024}MB)")
+    # Issue #3: Read in chunks, enforce file size BEFORE reading entire file into memory
+    chunks = []
+    total_read = 0
+    while True:
+        chunk = await file.read(_CHUNK_SIZE)
+        if not chunk:
+            break
+        total_read += len(chunk)
+        if total_read > MAX_FILE_SIZE:
+            raise HTTPException(413, f"File too large (max {MAX_FILE_SIZE // 1024 // 1024}MB)")
+        chunks.append(chunk)
+
+    content = b"".join(chunks)
     if len(content) == 0:
         raise HTTPException(400, "Empty file")
 
@@ -52,8 +72,7 @@ async def upload_file(
     try:
         validate_file(file_path, ext)
     except ValueError as e:
-        import os as _os
-        _os.unlink(file_path)
+        os.unlink(file_path)
         raise HTTPException(400, str(e))
 
     # Parse file
@@ -61,12 +80,10 @@ async def upload_file(
     try:
         rows = parse_file(file_path, filetype)
     except ValueError as e:
-        import os as _os
-        _os.unlink(file_path)
+        os.unlink(file_path)
         raise HTTPException(400, str(e))
     except Exception as e:
-        import os as _os
-        _os.unlink(file_path)
+        os.unlink(file_path)
         raise HTTPException(400, f"Failed to parse file: {str(e)[:200]}")
 
     if not rows:
@@ -128,13 +145,24 @@ def execute_import_job(
     db: Session = Depends(get_db),
 ):
     """Execute a pending import."""
-    job = db.query(ImportJob).filter(ImportJob.id == import_id).first()
+    # Issue #20: Use with_for_update() to prevent TOCTOU race condition
+    job = db.query(ImportJob).filter(
+        ImportJob.id == import_id
+    ).with_for_update().first()
     if not job:
         raise HTTPException(404, "Import not found")
     if job.status not in ("pending", "failed"):
         raise HTTPException(400, f"Import is already {job.status}")
 
     overrides = body.column_mapping if body else None
+
+    # Issue #19: Validate mapping overrides against whitelist
+    if overrides:
+        try:
+            validate_mapping_overrides(overrides)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+
     execute_import(db, job, overrides)
     db.refresh(job)
 
@@ -152,6 +180,32 @@ def execute_import_job(
         completed_at=job.completed_at,
         created_at=job.created_at,
     )
+
+
+@router.delete("/{import_id}")
+def delete_import_job(
+    import_id: UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Issue #18: Delete a staged import job and its uploaded file."""
+    job = db.query(ImportJob).filter(ImportJob.id == import_id).first()
+    if not job:
+        raise HTTPException(404, "Import not found")
+    if job.status == "processing":
+        raise HTTPException(400, "Cannot delete an import that is currently processing")
+
+    # Delete the uploaded file
+    file_path = job.column_map.get("file_path", "") if job.column_map else ""
+    if file_path and os.path.exists(file_path):
+        try:
+            os.unlink(file_path)
+        except Exception:
+            pass
+
+    db.delete(job)
+    db.commit()
+    return {"detail": "Import deleted"}
 
 
 @router.get("", response_model=list[ImportListResponse])

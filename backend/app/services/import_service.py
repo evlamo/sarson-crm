@@ -29,7 +29,19 @@ from app.services.import_normalizer import (
 
 BATCH_SIZE = 500
 
-UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploads")
+# Issue #7/#12: UPLOADS_DIR outside repo, configurable via env var
+UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "/tmp/crm_uploads")
+
+# Whitelist of allowed CRM target field names (Issue #19)
+ALLOWED_CRM_FIELDS = {
+    "first_name", "middle_name", "last_name", "email", "phone", "title",
+    "company", "city", "state", "country", "status", "lead_source",
+    "sarson_rep", "next_step", "last_contacted_at", "contacted", "notes",
+    "linkedin_url", "website", "profile_url", "email_domain",
+    # Internal mapping fields
+    "_company", "_company_website", "_sheet_tag", "_tab_tag", "_ignore",
+    "__skip__",
+}
 
 # Legacy CSV header → contact field mapping (extended)
 HEADER_MAP = {
@@ -107,7 +119,8 @@ def build_header_mapping(headers: list[str]) -> dict[str, str]:
 def save_upload(file_content: bytes, filename: str) -> str:
     """Save uploaded file, return file path."""
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    safe_name = re.sub(r"[^\w.\-]", "_", filename)
+    # Issue #2/#11: ASCII-only filename sanitization
+    safe_name = re.sub(r"[^a-zA-Z0-9.\-]", "_", filename)
     unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
     path = os.path.join(UPLOADS_DIR, unique_name)
     with open(path, "wb") as f:
@@ -147,12 +160,19 @@ def create_import_record(db: Session, filename: str, file_path: str,
     return job
 
 
+def validate_mapping_overrides(overrides: dict[str, str]) -> None:
+    """Issue #19: Validate mapping override values against whitelist."""
+    invalid = [v for v in overrides.values() if v not in ALLOWED_CRM_FIELDS]
+    if invalid:
+        raise ValueError(f"Unknown target fields: {', '.join(invalid)}")
+
+
 def execute_import(db: Session, job: ImportJob,
                    mapping_overrides: Optional[dict[str, str]] = None):
     """Execute the import with batch processing — supports all file formats."""
     job.status = "processing"
     job.started_at = datetime.utcnow()
-    db.commit()
+    db.commit()  # Issue #20: commit processing status before doing work
 
     file_path = job.column_map.get("file_path", "")
     mapping = job.column_map.get("mapping", {})
@@ -177,6 +197,8 @@ def execute_import(db: Session, job: ImportJob,
     skipped = 0
     errors = []
     processed = 0
+    # Track in-file emails for duplicate detection (Issue #10/#16)
+    seen_emails_in_file: set[str] = set()
 
     try:
         # Parse using the multi-format parser
@@ -202,7 +224,7 @@ def execute_import(db: Session, job: ImportJob,
                     if not val:
                         continue
 
-                    if field == "_ignore":
+                    if field == "_ignore" or field == "__skip__":
                         continue
                     elif field == "_sheet_tag":
                         sheet_tag = val
@@ -228,12 +250,21 @@ def execute_import(db: Session, job: ImportJob,
                 # Normalize all fields
                 normalized = normalize_row(mapped_row)
 
-                # Skip rows without email
+                # Skip rows without email (Issue #10: record reason)
                 email = normalized.get("email")
                 if not email:
                     skipped += 1
                     processed += 1
+                    errors.append({"row": row_num, "error": "Skipped: missing or invalid email"})
                     continue
+
+                # Issue #16: Check for in-file duplicate emails
+                if email in seen_emails_in_file:
+                    skipped += 1
+                    processed += 1
+                    errors.append({"row": row_num, "error": f"Skipped: duplicate email '{email}' within file"})
+                    continue
+                seen_emails_in_file.add(email)
 
                 # Resolve company
                 if company_name:
@@ -277,10 +308,10 @@ def execute_import(db: Session, job: ImportJob,
                                 tag_cache[tname_lower] = new_tag.id
                         tag_ids.append(tag_cache[tname_lower])
 
-                # Dedup by email
+                # Dedup by email against existing DB contacts
                 if email in email_contact_cache:
-                    # SKIP duplicates (don't overwrite per spec)
                     skipped += 1
+                    errors.append({"row": row_num, "error": f"Skipped: email '{email}' already exists in CRM"})
                 else:
                     contact_id = uuid.uuid4()
                     normalized["id"] = contact_id
@@ -293,18 +324,19 @@ def execute_import(db: Session, job: ImportJob,
 
                 processed += 1
 
-                # Batch commit
+                # Issue #14: Use flush instead of commit for batches
                 if processed % BATCH_SIZE == 0:
                     if batch_contacts_new:
                         db.bulk_insert_mappings(Contact, batch_contacts_new)
                         batch_contacts_new = []
                     _insert_tag_links(db, batch_tag_links)
                     batch_tag_links = []
-                    db.commit()
+                    db.flush()
+                    # Update progress for polling (Issue #23)
                     job.imported_count = created
                     job.updated_count = updated
                     job.skipped_count = skipped
-                    db.commit()
+                    db.flush()
 
             except Exception as e:
                 errors.append({"row": row_num, "error": str(e)[:200]})
@@ -315,21 +347,36 @@ def execute_import(db: Session, job: ImportJob,
         if batch_contacts_new:
             db.bulk_insert_mappings(Contact, batch_contacts_new)
         _insert_tag_links(db, batch_tag_links)
+
+        # Issue #14: Single commit at the very end
+        job.status = "complete"
+        job.imported_count = created
+        job.updated_count = updated
+        job.skipped_count = skipped
+        job.error_count = len(errors)
+        job.errors = errors[:1000]
+        job.completed_at = datetime.utcnow()
         db.commit()
 
-        job.status = "complete"
     except Exception as e:
+        # Issue #14: Full rollback on any error
+        db.rollback()
         job.status = "failed"
         errors.append({"row": 0, "error": f"Fatal: {str(e)[:500]}"})
-        db.rollback()
+        job.imported_count = created
+        job.updated_count = updated
+        job.skipped_count = skipped
+        job.error_count = len(errors)
+        job.errors = errors[:1000]
+        job.completed_at = datetime.utcnow()
+        db.commit()
 
-    job.imported_count = created
-    job.updated_count = updated
-    job.skipped_count = skipped
-    job.error_count = len(errors)
-    job.errors = errors[:1000]
-    job.completed_at = datetime.utcnow()
-    db.commit()
+    # Issue #5: Delete uploaded file after import
+    try:
+        if file_path and os.path.exists(file_path):
+            os.unlink(file_path)
+    except Exception:
+        pass  # Don't break the response if file deletion fails
 
 
 def _insert_tag_links(db: Session, links: list[tuple]):

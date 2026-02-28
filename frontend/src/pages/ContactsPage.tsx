@@ -40,6 +40,16 @@ import {
 } from '@/components/ui/select';
 import { Search, UserPlus, Tag, Download, Trash2, X } from 'lucide-react';
 
+// Module augmentation for TanStack Table meta
+declare module '@tanstack/react-table' {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData, TValue> {
+    className?: string;
+    headerClassName?: string;
+    truncate?: boolean;
+  }
+}
+
 // ─── Add Contact Modal ────────────────────────────────────────────────────────
 const EMPTY_FORM = {
   first_name: '',
@@ -77,7 +87,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
   const mutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
       const res = await api.post('/contacts', payload);
-      // If a note was included, post it as an activity log entry too
       if (payload.notes && res.data?.id) {
         await api.post(`/contacts/${res.data.id}/activities`, {
           activity_type: 'note',
@@ -119,7 +128,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
       const v = form[k].trim();
       if (v !== '') payload[k] = v;
     });
-    // Always send status even if default
     payload.status = form.status;
     mutation.mutate(payload);
   };
@@ -163,7 +171,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Required */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Required</p>
             <div className="grid grid-cols-2 gap-4">
@@ -174,7 +181,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           </div>
 
-          {/* Contact Details */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Contact Details</p>
             <div className="grid grid-cols-2 gap-4">
@@ -197,7 +203,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           </div>
 
-          {/* Assignment */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Assignment</p>
             <div className="grid grid-cols-2 gap-4">
@@ -207,7 +212,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           </div>
 
-          {/* Online */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Online</p>
             <div className="grid grid-cols-2 gap-4">
@@ -216,7 +220,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           </div>
 
-          {/* Location */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Location</p>
             <div className="grid grid-cols-3 gap-4">
@@ -226,7 +229,6 @@ function AddContactModal({ open, onClose }: { open: boolean; onClose: () => void
             </div>
           </div>
 
-          {/* Notes */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Notes</p>
             <textarea
@@ -388,7 +390,7 @@ function InlineNextStep({ contact }: { contact: Contact }) {
   );
 }
 
-// Inline editable Sales Rep cell — single field, compact
+// Inline editable Sales Rep cell
 function InlineSalesRep({ contact }: { contact: Contact }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -550,7 +552,6 @@ function TagModal({ open, onClose, contactIds }: { open: boolean; onClose: () =>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Create new tag */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Create New Tag</p>
             <div className="flex gap-2">
@@ -568,7 +569,6 @@ function TagModal({ open, onClose, contactIds }: { open: boolean; onClose: () =>
             </div>
           </div>
 
-          {/* Existing tags */}
           {existingTags.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Add Existing Tag</p>
@@ -706,7 +706,7 @@ export default function ContactsPage() {
     sarson_rep:       windowWidth >= 768,
   }), [windowWidth]);
 
-  // Bulk delete mutation — single API call, not N individual requests
+  // Bulk delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       await api.post('/contacts/bulk-delete', { ids });
@@ -727,10 +727,8 @@ export default function ContactsPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Set page title
   useEffect(() => { document.title = 'Contacts — Sarson Funds CRM'; }, []);
 
-  // Map frontend column ids to backend sortable fields
   const SORT_FIELD_MAP: Record<string, string> = {
     full_name: 'last_name',
     first_name: 'first_name',
@@ -744,7 +742,7 @@ export default function ContactsPage() {
     contacted: 'contacted',
     status: 'status',
   };
-  const rawSortField = sorting[0]?.id || 'last_name'; // default sort: last name A→Z
+  const rawSortField = sorting[0]?.id || 'last_name';
   const sortField = SORT_FIELD_MAP[rawSortField] || rawSortField;
   const sortOrder = sorting[0]?.desc ? 'desc' : 'asc';
 
@@ -783,78 +781,78 @@ export default function ContactsPage() {
           />
         ),
         enableSorting: false,
-        size: 40,
+        meta: { className: 'w-10 min-w-[40px]' },
       },
       {
         accessorKey: 'first_name',
         header: 'First Name',
-        size: 130,
+        meta: { className: 'min-w-[110px]' },
         cell: ({ row }) => (
-          <span className="font-medium text-foreground">{row.original.first_name || '—'}</span>
+          <span className="block truncate font-medium text-foreground">{row.original.first_name || '—'}</span>
         ),
       },
       {
         accessorKey: 'last_name',
         header: 'Last Name',
-        size: 130,
+        meta: { className: 'min-w-[110px]' },
         cell: ({ row }) => (
-          <span className="font-medium text-foreground">{row.original.last_name || '—'}</span>
+          <span className="block truncate font-medium text-foreground">{row.original.last_name || '—'}</span>
         ),
       },
       {
         accessorKey: 'company_name',
         header: 'Company',
-        size: 160,
+        meta: { className: 'min-w-[140px]', truncate: true },
         cell: ({ getValue }) => (
-          <span className="text-foreground/80">{getValue<string | null>() || '—'}</span>
+          <span className="block truncate text-foreground/80 max-w-[200px]">{getValue<string | null>() || '—'}</span>
         ),
       },
       {
         accessorKey: 'title',
         header: 'Position',
-        size: 150,
+        meta: { className: 'min-w-[130px]', truncate: true },
         cell: ({ getValue }) => (
-          <span className="text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
+          <span className="block truncate text-muted-foreground text-sm max-w-[180px]">{getValue<string | null>() || '—'}</span>
         ),
       },
       {
         accessorKey: 'email',
         header: 'Email',
-        size: 210,
+        meta: { className: 'min-w-[180px]', truncate: true },
         cell: ({ getValue }) => (
-          <span className="text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
+          <span className="block truncate text-muted-foreground text-sm max-w-[220px]">{getValue<string | null>() || '—'}</span>
         ),
       },
       {
         accessorKey: 'phone',
         header: 'Phone',
-        size: 130,
+        meta: { className: 'min-w-[120px]' },
         cell: ({ getValue }) => (
-          <span className="text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
+          <span className="block truncate text-muted-foreground text-sm">{getValue<string | null>() || '—'}</span>
         ),
       },
       {
         accessorKey: 'last_contacted_at',
         header: 'Last Contact',
-        size: 130,
+        meta: { className: 'min-w-[120px]' },
         cell: ({ row }) => <InlineLastContact contact={row.original} />,
       },
       {
         accessorKey: 'next_step',
         header: 'Next Step',
-        size: 200,
+        meta: { className: 'min-w-[160px]', truncate: true },
         cell: ({ row }) => <InlineNextStep contact={row.original} />,
       },
       {
         accessorKey: 'sarson_rep',
         header: 'Sales Rep',
-        size: 150,
+        meta: { className: 'min-w-[120px]' },
         cell: ({ row }) => <InlineSalesRep contact={row.original} />,
       },
       {
         accessorKey: 'status',
         header: 'Status',
-        size: 130,
+        meta: { className: 'w-[130px] min-w-[130px]' },
         cell: ({ row }) => <InlineStatus contact={row.original} />,
       },
     ],
@@ -884,7 +882,7 @@ export default function ContactsPage() {
   const selectedIds = selectedContacts.map((c) => c.id);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full min-w-0">
       <AddContactModal open={addContactOpen} onClose={() => setAddContactOpen(false)} />
       <TagModal
         open={tagModalOpen}
@@ -946,7 +944,7 @@ export default function ContactsPage() {
         </span>
       </div>
 
-      {/* Bulk action bar — floats when rows selected */}
+      {/* Bulk action bar */}
       {selectedCount > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg">
           <span className="text-sm font-medium text-primary">{selectedCount} selected</span>
@@ -976,18 +974,20 @@ export default function ContactsPage() {
       )}
 
       {/* Table */}
-      <div className="rounded-md border overflow-x-auto">
-        <Table>
+      <div className="rounded-md border overflow-x-auto w-full">
+        <Table className="w-full table-auto">
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id} className="bg-muted/40 hover:bg-muted/40">
                 {hg.headers.map((header) => {
                   const isStatus = header.column.id === 'status';
                   const isSelect = header.column.id === 'select';
+                  const metaClass = (header.column.columnDef.meta as { className?: string })?.className || '';
                   return (
                     <TableHead
                       key={header.id}
                       className={cn(
+                        metaClass,
                         header.column.getCanSort() ? 'cursor-pointer select-none' : '',
                         'whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground',
                         isStatus && 'sticky right-0 z-10 bg-muted/40 border-l',
@@ -1040,10 +1040,12 @@ export default function ContactsPage() {
                     const isStatus = cell.column.id === 'status';
                     const isSelect = cell.column.id === 'select';
                     const isInteractive = ['select','status','next_step','sarson_rep','last_contacted_at'].includes(cell.column.id);
+                    const metaClass = (cell.column.columnDef.meta as { className?: string })?.className || '';
                     return (
                       <TableCell
                         key={cell.id}
                         className={cn(
+                          metaClass,
                           'py-3',
                           isStatus && 'sticky right-0 z-10 bg-background border-l',
                           isSelect && 'sticky left-0 z-10 bg-background',

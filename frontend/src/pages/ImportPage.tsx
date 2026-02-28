@@ -21,6 +21,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB — Issue #21
+
 const CRM_FIELDS = [
   { value: '__skip__', label: '— Skip —' },
   { value: 'first_name', label: 'First Name' },
@@ -46,13 +48,6 @@ const CRM_FIELDS = [
 ];
 
 const ACCEPTED_EXTENSIONS = '.csv,.tsv,.xlsx,.xls,.ods,.vcf';
-const ACCEPTED_TYPES = [
-  'text/csv', 'text/tab-separated-values',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'application/vnd.oasis.opendocument.spreadsheet',
-  'text/vcard', 'text/x-vcard',
-];
 
 interface UploadResult {
   import_id: string;
@@ -60,6 +55,18 @@ interface UploadResult {
   row_count: number;
   column_preview: string[][];
   header_mapping: Record<string, string>;
+}
+
+interface ImportStatus {
+  id: string;
+  filename: string;
+  status: string;
+  total_rows: number | null;
+  processed_rows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: { row: number; error: string }[];
 }
 
 export default function ImportPage() {
@@ -77,6 +84,14 @@ export default function ImportPage() {
   const [progress, setProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const uploadMutation = useMutation({
     mutationFn: async (f: File) => {
@@ -89,7 +104,6 @@ export default function ImportPage() {
     },
     onSuccess: (data) => {
       setUploadData(data);
-      // Build column map from server's header_mapping
       const map: Record<string, string> = {};
       Object.entries(data.header_mapping).forEach(([header, field]) => {
         map[header] = field;
@@ -103,6 +117,11 @@ export default function ImportPage() {
   });
 
   const handleFile = useCallback((f: File) => {
+    // Issue #21: Frontend file size check before upload
+    if (f.size > MAX_FILE_SIZE) {
+      toast.error(`File too large (${(f.size / 1024 / 1024).toFixed(1)}MB). Maximum is 10MB.`);
+      return;
+    }
     setFile(f);
     uploadMutation.mutate(f);
   }, []);
@@ -117,39 +136,80 @@ export default function ImportPage() {
     [handleFile]
   );
 
+  // Issue #23: Poll for real progress
+  const startPolling = useCallback((importId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get<ImportStatus>(`/imports/${importId}`);
+        const data = res.data;
+        const total = data.total_rows || 1;
+        const pct = Math.min(Math.round((data.processed_rows / total) * 100), 99);
+        setProgress(pct);
+
+        if (data.status === 'complete' || data.status === 'failed') {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setProgress(100);
+          setResult({
+            imported_count: data.created || 0,
+            updated_count: data.updated || 0,
+            skipped_count: data.skipped || 0,
+            error_count: (data.errors || []).length,
+          });
+          setStep(4);
+          if (data.status === 'complete') {
+            toast.success(`Import complete — ${data.created || 0} created`);
+          } else {
+            toast.error('Import failed. Check error details.');
+          }
+        }
+      } catch {
+        // Polling error — keep trying
+      }
+    }, 2000);
+  }, []);
+
   const executeMutation = useMutation({
     mutationFn: async () => {
       if (!uploadData) throw new Error('No upload');
-      setProgress(50);
+      setProgress(5);
       const res = await api.post(`/imports/${uploadData.import_id}/execute`, {
         column_mapping: columnMap,
       });
-      setProgress(100);
-      return res.data;
+      return res.data as ImportStatus;
     },
     onSuccess: (data) => {
-      setResult({
-        imported_count: data.created || 0,
-        updated_count: data.updated || 0,
-        skipped_count: data.skipped || 0,
-        error_count: (data.errors || []).length,
-      });
-      setStep(4);
-      toast.success(`Import complete — ${data.created || 0} created`);
+      if (data.status === 'complete') {
+        setProgress(100);
+        setResult({
+          imported_count: data.created || 0,
+          updated_count: data.updated || 0,
+          skipped_count: data.skipped || 0,
+          error_count: (data.errors || []).length,
+        });
+        setStep(4);
+        toast.success(`Import complete — ${data.created || 0} created`);
+      } else if (data.status === 'processing' && uploadData) {
+        // Start polling for progress
+        startPolling(uploadData.import_id);
+      } else if (data.status === 'failed') {
+        setProgress(100);
+        setResult({
+          imported_count: data.created || 0,
+          updated_count: data.updated || 0,
+          skipped_count: data.skipped || 0,
+          error_count: (data.errors || []).length,
+        });
+        setStep(4);
+        toast.error('Import failed.');
+      }
     },
     onError: () => {
       toast.error('Import failed. Please check your file and try again.');
     },
   });
 
-  const headers = uploadData ? Object.keys(uploadData.header_mapping).length > 0
-    ? [...new Set([...Object.keys(uploadData.header_mapping), ...(uploadData.column_preview[0] ? uploadData.column_preview[0].map((_, i) => {
-      // Reconstruct headers from preview position — fallback
-      return Object.keys(uploadData.header_mapping)[i] || `col_${i}`;
-    }) : [])])]
-    : [] : [];
-  
-  // Better: use column_preview to infer header count, and header_mapping keys as the actual headers
   const allHeaders = uploadData?.column_preview?.[0]
     ? Array.from({ length: uploadData.column_preview[0].length }, (_, i) => {
         const mappingKeys = Object.keys(uploadData.header_mapping);
@@ -240,7 +300,6 @@ export default function ImportPage() {
             <CardContent>
               <div className="space-y-3">
                 {Object.keys(uploadData.header_mapping).concat(
-                  // Add unmapped headers from preview
                   allHeaders.filter(h => !uploadData.header_mapping[h] && !Object.keys(uploadData.header_mapping).includes(h))
                 ).filter((h, i, arr) => arr.indexOf(h) === i).map((header, idx) => (
                   <div key={idx} className="flex items-center gap-4">
@@ -323,9 +382,12 @@ export default function ImportPage() {
             </Button>
           </div>
 
-          {executeMutation.isPending && (
-            <div className="w-full bg-muted rounded-full h-2">
-              <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+          {(executeMutation.isPending || (progress > 0 && progress < 100)) && (
+            <div className="space-y-1">
+              <div className="w-full bg-muted rounded-full h-2">
+                <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground text-center">{progress}%</p>
             </div>
           )}
         </div>
@@ -356,7 +418,7 @@ export default function ImportPage() {
                 <p className="text-sm text-red-600">Errors</p>
               </div>
             </div>
-            <Button onClick={() => { setStep(1); setFile(null); setResult(null); setUploadData(null); }}>
+            <Button onClick={() => { setStep(1); setFile(null); setResult(null); setUploadData(null); setProgress(0); }}>
               Import More
             </Button>
           </CardContent>

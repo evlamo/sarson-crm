@@ -14,8 +14,11 @@ ALLOWED_MIMES = {
     "application/vnd.oasis.opendocument.spreadsheet",  # ods
     "text/x-vcard", "text/vcard", "text/directory",  # vcf
     "application/zip",  # xlsx/ods are zips
-    "application/octet-stream",  # fallback
+    # Issue #1: removed application/octet-stream
 }
+
+# Extensions that are zip-based (for secondary check when mime is application/zip)
+ZIP_BASED_EXTENSIONS = {".xlsx", ".ods"}
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_ROWS = 10_000
@@ -30,9 +33,20 @@ def validate_file(filepath: str, claimed_ext: str) -> str:
         raise ValueError("Empty file")
 
     detected = magic.from_file(filepath, mime=True)
-    # For text-based formats (csv/tsv/vcf), magic often returns text/plain
-    if detected not in ALLOWED_MIMES:
+
+    # For zip-based formats, do secondary extension check
+    if detected == "application/zip":
+        if claimed_ext.lower() not in ZIP_BASED_EXTENSIONS:
+            raise ValueError(f"Zip file detected but extension {claimed_ext} is not a known zip-based format")
+    elif detected == "application/octet-stream":
+        # Reject octet-stream — require proper mime detection
+        if claimed_ext.lower() in ZIP_BASED_EXTENSIONS:
+            pass  # Allow xlsx/ods that detect as octet-stream (some systems)
+        else:
+            raise ValueError(f"Unsupported file type: {detected}")
+    elif detected not in ALLOWED_MIMES:
         raise ValueError(f"Unsupported file type: {detected}")
+
     return detected
 
 
