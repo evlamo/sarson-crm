@@ -268,7 +268,7 @@ function InlineLeadSource({ value, onSave }: { value: string | null; onSave: (v:
   );
 }
 
-function TagManager({
+function TagInput({
   contact,
   onUpdate,
   onRemoveTag,
@@ -277,50 +277,39 @@ function TagManager({
   onUpdate: () => void;
   onRemoveTag: (tagId: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const [value, setValue] = useState('');
+  const [focused, setFocused] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
-  // Close on outside click or Escape
-  useEffect(() => {
-    if (!open) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSearch('');
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setOpen(false); setSearch(''); }
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
-  // Focus search on open
-  useEffect(() => {
-    if (open) setTimeout(() => searchRef.current?.focus(), 50);
-  }, [open]);
-
-  const { data: allTags = [], isLoading: tagsLoading } = useQuery({
+  const { data: allTags = [] } = useQuery({
     queryKey: ['all-tags'],
     queryFn: async () => {
       const res = await api.get<{ id: string; name: string; color: string }[]>('/tags');
       return Array.isArray(res.data) ? res.data : [];
     },
-    enabled: open,
-    refetchOnMount: true,
-    staleTime: 0,
+    staleTime: 30_000,
   });
 
   const contactTagIds = new Set(contact.tags?.map(t => t.id) ?? []);
   const atMax = (contact.tags?.length ?? 0) >= 8;
+
+  const suggestions = value.trim()
+    ? allTags.filter(t =>
+        t.name.toLowerCase().includes(value.toLowerCase()) &&
+        !contactTagIds.has(t.id)
+      ).slice(0, 6)
+    : [];
+
+  const exactMatch = allTags.find(
+    t => t.name.toLowerCase() === value.trim().toLowerCase()
+  );
+  const showCreate = value.trim() && !exactMatch && !atMax;
+  const showDropdown = focused && value.trim() && (suggestions.length > 0 || showCreate);
+  const totalOptions = suggestions.length + (showCreate ? 1 : 0);
+
+  useEffect(() => { setActiveIdx(0); }, [value]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['contact', contact.id] });
@@ -328,113 +317,151 @@ function TagManager({
     onUpdate();
   };
 
-  const addTag = useMutation({
+  const addByIdMutation = useMutation({
     mutationFn: (tagId: string) =>
       api.post(`/contacts/${contact.id}/tags/by-id`, null, { params: { tag_id: tagId } }),
-    onSuccess: () => { invalidate(); toast.success('Tag added'); },
+    onSuccess: () => { invalidate(); setValue(''); toast.success('Tag added'); },
     onError: () => toast.error('Failed to add tag'),
   });
 
-  const createAndAdd = useMutation({
-    mutationFn: async (name: string) => {
-      await api.post(`/contacts/${contact.id}/tags`, { name: name.trim() });
-    },
+  const createAndAddMutation = useMutation({
+    mutationFn: (name: string) =>
+      api.post(`/contacts/${contact.id}/tags`, { name: name.trim() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-tags'] });
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
       invalidate();
-      setSearch('');
-      toast.success('Tag created and added');
+      setValue('');
+      toast.success('Tag added');
     },
-    onError: () => toast.error('Failed to create tag'),
+    onError: () => toast.error('Failed to add tag'),
   });
 
-  const isMutating = addTag.isPending || createAndAdd.isPending;
+  const isMutating = addByIdMutation.isPending || createAndAddMutation.isPending;
 
-  const filtered = search
-    ? allTags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
-    : allTags;
+  const commitValue = (text: string) => {
+    if (!text.trim() || isMutating) return;
+    if (atMax) { toast.error('Max 8 tags per contact'); return; }
+    const match = allTags.find(t => t.name.toLowerCase() === text.trim().toLowerCase());
+    if (match) {
+      if (contactTagIds.has(match.id)) { setValue(''); return; }
+      addByIdMutation.mutate(match.id);
+    } else {
+      createAndAddMutation.mutate(text.trim());
+    }
+  };
 
-  const exactMatch = allTags.some(t => t.name.toLowerCase() === search.trim().toLowerCase());
+  const commitSuggestion = (tag: { id: string; name: string }) => {
+    if (isMutating || atMax) return;
+    if (contactTagIds.has(tag.id)) { setValue(''); return; }
+    addByIdMutation.mutate(tag.id);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showDropdown && suggestions.length > 0 && activeIdx < suggestions.length) {
+        commitSuggestion(suggestions[activeIdx]);
+      } else if (showDropdown && showCreate && activeIdx === suggestions.length) {
+        createAndAddMutation.mutate(value.trim());
+      } else {
+        commitValue(value);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx(i => Math.min(i + 1, totalOptions - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Escape') {
+      setValue('');
+      setFocused(false);
+      inputRef.current?.blur();
+    } else if (e.key === 'Backspace' && !value && contact.tags?.length) {
+      const lastTag = contact.tags[contact.tags.length - 1];
+      onRemoveTag(lastTag.id);
+    }
+  };
 
   return (
-    <div ref={containerRef} className="relative inline-flex shrink-0">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        onClick={() => { setOpen(o => !o); if (open) setSearch(''); }}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-muted-foreground/30 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+    <div className="relative">
+      <div
+        className={`flex flex-wrap items-center gap-1.5 min-h-[32px] px-2 py-1 rounded-lg border transition-colors cursor-text ${
+          focused ? 'border-primary/50 bg-background' : 'border-transparent bg-transparent hover:border-border'
+        }`}
+        onClick={() => inputRef.current?.focus()}
       >
-        + Tag
-      </button>
+        {contact.tags?.map(tag => (
+          <span
+            key={tag.id}
+            className="inline-flex items-center gap-1 text-white text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
+            style={{ backgroundColor: tag.color || getTagColorFromId(tag.id) }}
+          >
+            {tag.name}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onRemoveTag(tag.id); }}
+              className="opacity-70 hover:opacity-100 transition-opacity leading-none ml-0.5"
+              aria-label={`Remove ${tag.name}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
 
-      {open && (
-        <div className="absolute top-7 left-0 z-[100] w-60 bg-popover border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1">
+        {!atMax && (
           <input
-            ref={searchRef}
+            ref={inputRef}
             type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search tags..."
-            className="w-full h-8 px-3 text-sm rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setTimeout(() => setFocused(false), 150)}
+            onKeyDown={handleKeyDown}
+            placeholder={contact.tags?.length ? '' : 'Add tags...'}
+            className="flex-1 min-w-[80px] bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+            disabled={isMutating}
           />
+        )}
+        {atMax && !value && (
+          <span className="text-xs text-muted-foreground italic ml-1">Max 8 tags</span>
+        )}
+        {isMutating && (
+          <span className="text-xs text-muted-foreground animate-pulse ml-1">...</span>
+        )}
+      </div>
 
-          <div className="max-h-52 overflow-y-auto space-y-0.5 mt-1">
-            {tagsLoading ? (
-              <div className="flex items-center justify-center py-4 text-xs text-muted-foreground">Loading tags...</div>
-            ) : filtered.length === 0 && !search ? (
-              <p className="text-xs text-muted-foreground text-center py-3">No tags available</p>
-            ) : (
-              <>
-                {filtered.map(tag => {
-                  const isOn = contactTagIds.has(tag.id);
-                  const blocked = !isOn && atMax;
-                  return (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      disabled={isMutating || blocked}
-                      onClick={() => {
-                        if (blocked) { toast.error('Max 8 tags per contact'); return; }
-                        if (isOn) {
-                          onRemoveTag(tag.id);
-                        } else {
-                          addTag.mutate(tag.id);
-                        }
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-muted transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <span
-                        className="h-2 w-2 rounded-full shrink-0"
-                        style={{ backgroundColor: tag.color || '#6366f1' }}
-                      />
-                      <span className="flex-1 truncate text-foreground">{tag.name}</span>
-                      {isOn && (
-                        <span className="text-primary text-xs font-medium">✓</span>
-                      )}
-                    </button>
-                  );
-                })}
-
-                {search.trim() && !exactMatch && (
-                  <button
-                    type="button"
-                    disabled={isMutating || atMax}
-                    onClick={() => createAndAdd.mutate(search.trim())}
-                    className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm text-primary hover:bg-primary/5 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="font-medium">+</span>
-                    <span>Create &ldquo;<strong>{search.trim()}</strong>&rdquo;</span>
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-
-          {atMax && (
-            <p className="text-xs text-muted-foreground text-center border-t pt-1.5 mt-0.5">
-              Max 8 tags per contact
-            </p>
+      {showDropdown && (
+        <div className="absolute top-full left-0 mt-1 z-[100] w-56 bg-popover border border-border rounded-xl shadow-xl py-1 overflow-hidden">
+          {suggestions.map((tag, i) => (
+            <button
+              key={tag.id}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); commitSuggestion(tag); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                i === activeIdx ? 'bg-muted' : 'hover:bg-muted/60'
+              }`}
+            >
+              <span
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: tag.color || '#6366f1' }}
+              />
+              <span className="flex-1 truncate">{tag.name}</span>
+              <span className="text-xs text-muted-foreground">↵</span>
+            </button>
+          ))}
+          {showCreate && (
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); createAndAddMutation.mutate(value.trim()); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors text-primary ${
+                activeIdx === suggestions.length ? 'bg-muted' : 'hover:bg-muted/60'
+              }`}
+            >
+              <span className="font-semibold">+</span>
+              <span>Create "<strong>{value.trim()}</strong>"</span>
+              <span className="ml-auto text-xs text-muted-foreground">↵</span>
+            </button>
           )}
         </div>
       )}
@@ -587,24 +614,9 @@ export default function ContactDetailPage() {
                   </button>
                 )}
               </p>
-              {/* Tags with × and TagManager — horizontal scroll, max 8 */}
-              <div className="flex gap-1.5 mt-2 items-center overflow-x-auto pb-0.5 flex-nowrap max-w-full" style={{ scrollbarWidth: 'none' }}>
-                {contact.tags?.map((tag) => (
-                  <span
-                    key={tag.id}
-                    className="inline-flex items-center gap-1 text-white text-xs px-2.5 py-0.5 rounded-full shrink-0 font-medium"
-                    style={{ backgroundColor: tag.color || getTagColorFromId(tag.id) }}
-                  >
-                    {tag.name}
-                    <button
-                      type="button"
-                      onClick={() => removeTagMutation.mutate(tag.id)}
-                      className="ml-0.5 opacity-70 hover:opacity-100 transition-opacity leading-none text-white"
-                      aria-label={`Remove ${tag.name}`}
-                    >×</button>
-                  </span>
-                ))}
-                <TagManager
+              {/* Tags — inline chip input */}
+              <div className="mt-2 max-w-lg">
+                <TagInput
                   contact={contact}
                   onUpdate={() => queryClient.invalidateQueries({ queryKey: ['contact', contactId] })}
                   onRemoveTag={(tagId) => removeTagMutation.mutate(tagId)}
