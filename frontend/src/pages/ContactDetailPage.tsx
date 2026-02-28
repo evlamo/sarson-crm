@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { formatDate, formatTime } from '@/lib/formatDate';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from '@tanstack/react-router';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle, Linkedin, Globe, ExternalLink } from 'lucide-react';
 import { RepAssignPopover } from '@/components/RepAssignPopover';
 import { EditableField } from '@/components/EditableField';
 import { CompanyCombobox } from '@/components/CompanyCombobox';
@@ -36,7 +36,6 @@ interface ContactDetail {
   country: string | null;
   linkedin_url: string | null;
   website: string | null;
-  profile_url: string | null;
   email_domain: string | null;
   source: string | null;
   lead_source: string | null;
@@ -80,6 +79,16 @@ const STATUS_OPTIONS = [
   { value: 'na', label: 'N/A' },
 ];
 
+const STATUS_COLORS: Record<string, string> = {
+  hot: 'bg-red-500',
+  warm: 'bg-orange-500',
+  prospect: 'bg-blue-500',
+  cold: 'bg-gray-400',
+  poc: 'bg-purple-500',
+  active: 'bg-green-500',
+  na: 'bg-gray-300',
+};
+
 const LEAD_SOURCE_OPTIONS = [
   { value: 'website', label: 'Website' },
   { value: 'referral', label: 'Referral' },
@@ -90,6 +99,27 @@ const LEAD_SOURCE_OPTIONS = [
   { value: 'import', label: 'Import' },
   { value: 'other', label: 'Other' },
 ];
+
+function StatusDot({ status }: { status: string }) {
+  const color = STATUS_COLORS[status] || 'bg-gray-300';
+  return <span className={`inline-block w-2.5 h-2.5 rounded-full ${color} mr-2`} />;
+}
+
+function getInitials(first: string | null, last: string | null): string {
+  const f = (first || '').trim()[0] || '';
+  const l = (last || '').trim()[0] || '';
+  return (f + l).toUpperCase() || '?';
+}
+
+function truncateUrl(url: string | null): string {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    return u.hostname + (u.pathname !== '/' ? u.pathname : '');
+  } catch {
+    return url.replace(/^https?:\/\//, '').slice(0, 40);
+  }
+}
 
 export default function ContactDetailPage() {
   const { contactId } = useParams({ strict: false }) as { contactId: string };
@@ -201,178 +231,112 @@ export default function ContactDetailPage() {
     );
   }
 
-  const fullName = [contact.first_name, contact.middle_name, contact.last_name].filter(Boolean).join(' ') || 'Unnamed Contact';
+  const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Unnamed Contact';
+  const companyDisplay = contact.company_name || contact.company;
+  const locationParts = [contact.city, contact.state, contact.country].filter(Boolean);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Button variant="ghost" size="sm" className="mb-1 -ml-3" onClick={() => navigate({ to: '/contacts' })}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Back to Contacts
+      {/* ─── Hero Header ─── */}
+      <div className="bg-card border rounded-lg p-6">
+        <div className="flex items-start justify-between">
+          <div className="flex items-start gap-4">
+            <Button variant="ghost" size="icon" className="-ml-2 mt-1" onClick={() => navigate({ to: '/contacts' })}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            {/* Avatar */}
+            <div className="h-16 w-16 rounded-full bg-[#1e293b] text-white flex items-center justify-center text-xl font-bold shrink-0">
+              {getInitials(contact.first_name, contact.last_name)}
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold leading-tight">{fullName}</h1>
+              <p className="text-muted-foreground mt-0.5">
+                {contact.title}
+                {contact.title && companyDisplay ? ' at ' : ''}
+                {companyDisplay && (
+                  <button
+                    className="text-primary hover:underline"
+                    onClick={() => navigate({ to: '/companies' })}
+                  >
+                    {companyDisplay}
+                  </button>
+                )}
+              </p>
+              {/* Tags */}
+              {contact.tags && contact.tags.length > 0 && (
+                <div className="flex gap-1.5 flex-wrap mt-2">
+                  {contact.tags.map((tag, i) => (
+                    <Badge
+                      key={tag.id}
+                      className={`${tag.color ? '' : TAG_COLORS[i % TAG_COLORS.length]} text-white text-xs`}
+                      style={tag.color ? { backgroundColor: tag.color, color: '#fff' } : undefined}
+                    >
+                      {tag.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {/* Quick-action chips */}
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                {contact.email && (
+                  <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors">
+                    <Mail className="h-3.5 w-3.5" />
+                    {contact.email}
+                  </a>
+                )}
+                {contact.phone && (
+                  <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted text-sm hover:bg-muted/80 transition-colors">
+                    <Phone className="h-3.5 w-3.5" />
+                    {contact.phone}
+                  </a>
+                )}
+                {contact.linkedin_url && (
+                  <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-muted hover:bg-muted/80 transition-colors">
+                    <Linkedin className="h-4 w-4" />
+                  </a>
+                )}
+                {contact.website && (
+                  <a href={contact.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-muted hover:bg-muted/80 transition-colors">
+                    <Globe className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+          <Button
+            variant={contact.contacted ? 'default' : 'outline'}
+            size="sm"
+            onClick={toggleContacted}
+            className="shrink-0"
+          >
+            {contact.contacted ? '✓ Contacted' : 'Mark Contacted'}
           </Button>
-          <h1 className="text-2xl font-bold">{fullName}</h1>
-          <p className="text-muted-foreground">
-            {contact.title}{contact.title && (contact.company_name || contact.company) ? ' at ' : ''}{contact.company_name || contact.company}
-          </p>
         </div>
-        <Button
-          variant={contact.contacted ? 'default' : 'outline'}
-          size="sm"
-          onClick={toggleContacted}
-        >
-          {contact.contacted ? '✓ Contacted' : 'Mark Contacted'}
-        </Button>
       </div>
 
-      {/* Tags */}
-      {contact.tags && contact.tags.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          {contact.tags.map((tag, i) => (
-            <Badge
-              key={tag.id}
-              className={`${tag.color ? '' : TAG_COLORS[i % TAG_COLORS.length]} text-white`}
-              style={tag.color ? { backgroundColor: tag.color, color: '#fff' } : undefined}
-            >
-              {tag.name}
-            </Badge>
-          ))}
-        </div>
-      )}
-
+      {/* ─── Two-Column Layout ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column — Editable Fields */}
+        {/* ─── Left Column (1/3) ─── */}
         <div className="space-y-6 lg:col-span-1">
-          {/* Contact Info */}
+          {/* Card 1: CRM */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Contact Info</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <FieldRow label="First Name">
-                <EditableField value={contact.first_name} onSave={(v) => savePatch('first_name', v)} placeholder="Add first name..." />
-              </FieldRow>
-              <FieldRow label="Middle Name">
-                <EditableField value={contact.middle_name} onSave={(v) => savePatch('middle_name', v)} placeholder="Add middle name..." />
-              </FieldRow>
-              <FieldRow label="Last Name">
-                <EditableField value={contact.last_name} onSave={(v) => savePatch('last_name', v)} placeholder="Add last name..." />
-              </FieldRow>
-              <FieldRow label="Email">
-                <EditableField value={contact.email} type="email" onSave={(v) => savePatch('email', v)} placeholder="Add email..." />
-              </FieldRow>
-              <FieldRow label="Phone">
-                <EditableField value={contact.phone} type="tel" onSave={(v) => savePatch('phone', v)} placeholder="Add phone..." hint="+1234567890" />
-              </FieldRow>
-              <FieldRow label="Title">
-                <EditableField value={contact.title} onSave={(v) => savePatch('title', v)} placeholder="Add title..." />
-              </FieldRow>
-            </CardContent>
-          </Card>
-
-          {/* Company */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Company</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <FieldRow label="Company">
-                <CompanyCombobox
-                  companyName={contact.company_name || contact.company}
-                  companyId={contact.company_id}
-                  onSave={async (name, selectedCompanyId) => {
-                    const payload: Record<string, unknown> = { company: name };
-                    if (selectedCompanyId) {
-                      payload.company_id = selectedCompanyId;
-                    }
-                    await patchContact(payload);
-                    queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
-                    toast.success('Company updated');
-                  }}
-                  onNavigate={() => navigate({ to: '/companies' })}
-                />
-              </FieldRow>
-            </CardContent>
-          </Card>
-
-          {/* Location */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Location</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <FieldRow label="City">
-                <EditableField value={contact.city} onSave={(v) => savePatch('city', v)} placeholder="Add city..." />
-              </FieldRow>
-              <FieldRow label="State">
-                <EditableField value={contact.state} onSave={(v) => savePatch('state', v)} placeholder="Add state..." />
-              </FieldRow>
-              <FieldRow label="Country">
-                <EditableField value={contact.country} onSave={(v) => savePatch('country', v)} placeholder="Add country..." />
-              </FieldRow>
-            </CardContent>
-          </Card>
-
-          {/* Online */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Online</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <FieldRow label="LinkedIn">
-                <EditableField
-                  value={contact.linkedin_url}
-                  type="url"
-                  onSave={(v) => savePatch('linkedin_url', v)}
-                  placeholder="Add LinkedIn URL..."
-                  linkHref={contact.linkedin_url || undefined}
-                />
-              </FieldRow>
-              <FieldRow label="Website">
-                <EditableField
-                  value={contact.website}
-                  type="url"
-                  onSave={(v) => savePatch('website', v)}
-                  placeholder="Add website..."
-                  linkHref={contact.website || undefined}
-                />
-              </FieldRow>
-              <FieldRow label="Profile">
-                <EditableField
-                  value={contact.profile_url}
-                  type="url"
-                  onSave={(v) => savePatch('profile_url', v)}
-                  placeholder="Add profile URL..."
-                  linkHref={contact.profile_url || undefined}
-                />
-              </FieldRow>
-            </CardContent>
-          </Card>
-
-          {/* CRM */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">CRM</CardTitle>
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">CRM</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <FieldRow label="Status">
-                <EditableField
-                  value={contact.status}
-                  type="select"
-                  options={STATUS_OPTIONS}
-                  onSave={(v) => savePatch('status', v)}
-                />
-              </FieldRow>
-              <FieldRow label="Lead Source">
-                <EditableField
-                  value={contact.source || contact.lead_source}
-                  type="select"
-                  options={LEAD_SOURCE_OPTIONS}
-                  onSave={(v) => savePatch('source', v)}
-                />
+                <div className="flex items-center justify-end">
+                  <StatusDot status={contact.status} />
+                  <EditableField
+                    value={contact.status}
+                    type="select"
+                    options={STATUS_OPTIONS}
+                    onSave={(v) => savePatch('status', v)}
+                  />
+                </div>
               </FieldRow>
               <div className="flex justify-between items-center min-h-[24px]">
-                <span className="text-muted-foreground shrink-0">Sales Rep</span>
+                <span className="text-muted-foreground shrink-0 mr-3">Sales Rep</span>
                 <RepAssignPopover
                   contactId={contact.id}
                   currentRep={contact.sarson_rep}
@@ -382,33 +346,153 @@ export default function ContactDetailPage() {
               <FieldRow label="Next Step">
                 <EditableField value={contact.next_step} onSave={(v) => savePatch('next_step', v)} placeholder="Add next step..." />
               </FieldRow>
+              <FieldRow label="Lead Source">
+                <EditableField
+                  value={contact.source || contact.lead_source}
+                  type="select"
+                  options={LEAD_SOURCE_OPTIONS}
+                  onSave={(v) => savePatch('source', v)}
+                />
+              </FieldRow>
               {contact.last_contacted_at && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Last Contacted</span>
+                <FieldRow label="Last Contacted">
                   <span>{formatDate(contact.last_contacted_at)}</span>
-                </div>
+                </FieldRow>
               )}
               {(contact.email_open_count > 0 || contact.email_click_count > 0) && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Email Stats</span>
+                <FieldRow label="Email Stats">
                   <span className="text-xs space-x-2">
-                    {contact.email_open_count > 0 && <span>{contact.email_open_count} opens</span>}
-                    {contact.email_click_count > 0 && <span>{contact.email_click_count} clicks</span>}
+                    {contact.email_open_count > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs">{contact.email_open_count} opens</span>
+                    )}
+                    {contact.email_click_count > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs">{contact.email_click_count} clicks</span>
+                    )}
                   </span>
-                </div>
+                </FieldRow>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Contact Info */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Contact Info</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <FieldRow label="First Name">
+                <EditableField value={contact.first_name} onSave={(v) => savePatch('first_name', v)} placeholder="—" />
+              </FieldRow>
+              <FieldRow label="Last Name">
+                <EditableField value={contact.last_name} onSave={(v) => savePatch('last_name', v)} placeholder="—" />
+              </FieldRow>
+              {contact.middle_name && (
+                <FieldRow label="Middle Name">
+                  <EditableField value={contact.middle_name} onSave={(v) => savePatch('middle_name', v)} placeholder="—" />
+                </FieldRow>
+              )}
+              <FieldRow label="Email">
+                <div className="flex items-center gap-1 justify-end">
+                  <EditableField value={contact.email} type="email" onSave={(v) => savePatch('email', v)} placeholder="—" />
+                  {contact.email && (
+                    <a href={`mailto:${contact.email}`} className="text-muted-foreground hover:text-primary shrink-0"><Mail className="h-3.5 w-3.5" /></a>
+                  )}
+                </div>
+              </FieldRow>
+              <FieldRow label="Phone">
+                <div className="flex items-center gap-1 justify-end">
+                  <EditableField value={contact.phone} type="tel" onSave={(v) => savePatch('phone', v)} placeholder="—" hint="+1234567890" />
+                  {contact.phone && (
+                    <a href={`tel:${contact.phone}`} className="text-muted-foreground hover:text-primary shrink-0"><Phone className="h-3.5 w-3.5" /></a>
+                  )}
+                </div>
+              </FieldRow>
+              <FieldRow label="Title">
+                <EditableField value={contact.title} onSave={(v) => savePatch('title', v)} placeholder="—" />
+              </FieldRow>
+              <FieldRow label="Company">
+                <div className="flex items-center gap-1 justify-end">
+                  <CompanyCombobox
+                    companyName={contact.company_name || contact.company}
+                    companyId={contact.company_id}
+                    onSave={async (name, selectedCompanyId) => {
+                      const payload: Record<string, unknown> = { company: name };
+                      if (selectedCompanyId) payload.company_id = selectedCompanyId;
+                      await patchContact(payload);
+                      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+                      toast.success('Company updated');
+                    }}
+                    onNavigate={() => navigate({ to: '/companies' })}
+                  />
+                  {contact.company_id && (
+                    <button onClick={() => navigate({ to: '/companies' })} className="text-muted-foreground hover:text-primary shrink-0">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </FieldRow>
+              <FieldRow label="City">
+                <EditableField value={contact.city} onSave={(v) => savePatch('city', v)} placeholder="—" />
+              </FieldRow>
+              <FieldRow label="State">
+                <EditableField value={contact.state} onSave={(v) => savePatch('state', v)} placeholder="—" />
+              </FieldRow>
+              <FieldRow label="Country">
+                <EditableField value={contact.country} onSave={(v) => savePatch('country', v)} placeholder="—" />
+              </FieldRow>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: Online */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Online</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <FieldRow label="LinkedIn">
+                <div className="flex items-center gap-1 justify-end min-w-0">
+                  <EditableField
+                    value={contact.linkedin_url}
+                    type="url"
+                    onSave={(v) => savePatch('linkedin_url', v)}
+                    placeholder="—"
+                    linkHref={contact.linkedin_url || undefined}
+                  />
+                  {contact.linkedin_url && (
+                    <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary shrink-0">
+                      <Linkedin className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+              </FieldRow>
+              <FieldRow label="Website">
+                <div className="flex items-center gap-1 justify-end min-w-0">
+                  <EditableField
+                    value={contact.website}
+                    type="url"
+                    onSave={(v) => savePatch('website', v)}
+                    placeholder="—"
+                    linkHref={contact.website || undefined}
+                  />
+                  {contact.website && (
+                    <a href={contact.website} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary shrink-0">
+                      <Globe className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+              </FieldRow>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Column — Activity + Notes */}
+        {/* ─── Right Column (2/3) ─── */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Activity Timeline */}
-          <Card>
+          {/* Notes & Activity */}
+          <Card className="min-h-[400px] flex flex-col">
             <CardHeader>
-              <CardTitle>Notes & Activity</CardTitle>
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Notes & Activity</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col">
               <div className="flex gap-2 mb-4">
                 <Input
                   placeholder="Write a note... (Enter to save)"
@@ -431,7 +515,7 @@ export default function ContactDetailPage() {
 
               <Separator />
 
-              <div className="space-y-3 mt-4">
+              <div className="space-y-3 mt-4 flex-1 overflow-y-auto">
                 {activitiesLoading ? (
                   <div className="space-y-3">
                     {[1, 2, 3].map((i) => (
@@ -483,8 +567,8 @@ export default function ContactDetailPage() {
 
           {/* Background Notes */}
           <Card>
-            <CardHeader>
-              <CardTitle>Background Notes</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Background Notes</CardTitle>
             </CardHeader>
             <CardContent>
               <EditableField
@@ -505,7 +589,7 @@ export default function ContactDetailPage() {
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between items-center min-h-[24px]">
-      <span className="text-muted-foreground shrink-0 mr-3">{label}</span>
+      <span className="text-muted-foreground shrink-0 mr-3 text-xs">{label}</span>
       <div className="flex-1 text-right">{children}</div>
     </div>
   );
