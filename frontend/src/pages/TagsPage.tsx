@@ -111,24 +111,24 @@ function TagContactsDrawer({
     enabled: open,
   });
 
-  // All contacts search (for adding)
+  // All contacts search (for adding) — always live, shows untagged contacts immediately
   const { data: searchResults, isLoading: loadingSearch } = useQuery<PaginatedContacts>({
     queryKey: ['contact-search', debouncedAddSearch],
     queryFn: async () => {
       const res = await api.get('/contacts', {
-        params: { search: debouncedAddSearch, per_page: 20 },
+        params: { search: debouncedAddSearch || undefined, per_page: 50 },
       });
       return res.data;
     },
-    enabled: open && debouncedAddSearch.length >= 2,
+    enabled: open,
   });
 
   const tagContactIds = new Set(tagContacts?.data.map((c) => c.id) || []);
 
-  // Filter out contacts already tagged
+  // Filter out contacts already tagged — always visible, live search
   const addCandidates = (searchResults?.data || [])
     .filter((c) => !tagContactIds.has(c.id))
-    .slice(0, 5);
+    .slice(0, 20);
 
   const showError = (msg: string) => {
     setMutationError(msg);
@@ -280,16 +280,15 @@ function TagContactsDrawer({
             />
           </div>
 
-          {/* Add results */}
-          {debouncedAddSearch.length >= 2 && (
-            <div className="mt-2 border rounded-md divide-y max-h-[200px] overflow-y-auto">
+          {/* Add results — always visible, filters as you type */}
+          <div className="mt-2 border rounded-md divide-y max-h-[200px] overflow-y-auto">
               {loadingSearch ? (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
               ) : addCandidates.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-4">
-                  No contacts found
+                  {debouncedAddSearch ? 'No contacts match your search' : 'All contacts already have this tag'}
                 </p>
               ) : (
                 addCandidates.map((contact) => (
@@ -335,7 +334,6 @@ function TagContactsDrawer({
                 ))
               )}
             </div>
-          )}
         </div>
 
         {/* Footer */}
