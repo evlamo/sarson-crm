@@ -68,7 +68,7 @@ function KPICard({ label, value, suffix }: { label: string; value: string | numb
 export default function CampaignStatsPage() {
   useEffect(() => { document.title = 'Campaign Stats — Sarson Funds CRM'; }, []);
 
-  const { data: summary, isLoading: summaryLoading } = useQuery<CampaignSummary>({
+  const { data: summary, isLoading: summaryLoading, isError: summaryError } = useQuery<CampaignSummary>({
     queryKey: ['campaign-stats-summary'],
     queryFn: async () => {
       const res = await api.get<CampaignSummary>('/campaign-stats/summary');
@@ -76,7 +76,7 @@ export default function CampaignStatsPage() {
     },
   });
 
-  const { data: statsData, isLoading: statsLoading } = useQuery<CampaignStatsResponse>({
+  const { data: statsData, isLoading: statsLoading, isError: statsError } = useQuery<CampaignStatsResponse>({
     queryKey: ['campaign-stats'],
     queryFn: async () => {
       const res = await api.get<CampaignStatsResponse>('/campaign-stats');
@@ -100,12 +100,20 @@ export default function CampaignStatsPage() {
         </Badge>
       </div>
 
+      {(summaryError || statsError) && (
+        <Card className="border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-800">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              ❌ Failed to load campaign stats. Please try again later.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {isDemo && (
         <div className="rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-800 px-4 py-3">
           <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            <strong>Showing demo data</strong> — connect Mailchimp to see live stats.
-            Set <code className="text-xs bg-yellow-200 dark:bg-yellow-900 px-1 rounded">MAILCHIMP_API_KEY</code> and{' '}
-            <code className="text-xs bg-yellow-200 dark:bg-yellow-900 px-1 rounded">MAILCHIMP_SERVER_PREFIX</code> environment variables.
+            ⚠️ <strong>Showing Demo Data</strong> — Connect Mailchimp to view live Sarson Funds campaign stats
           </p>
         </div>
       )}

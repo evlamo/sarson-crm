@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_user
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/campaign-stats", tags=["campaign-stats"])
 
@@ -93,6 +97,8 @@ async def _fetch_mailchimp() -> List[CampaignStat]:
 
     api_key = os.environ["MAILCHIMP_API_KEY"]
     server = os.environ["MAILCHIMP_SERVER_PREFIX"]
+    if not re.match(r"^us\d+$", server):
+        raise HTTPException(status_code=500, detail="Invalid Mailchimp server prefix configuration")
     url = f"https://{server}.api.mailchimp.com/3.0/campaigns"
     params = {
         "count": 50,
@@ -143,8 +149,8 @@ async def get_campaign_stats(current_user: User = Depends(get_current_user)):
         try:
             campaigns = await _fetch_mailchimp()
             return CampaignStatsResponse(campaigns=campaigns, source="mailchimp")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Failed to fetch campaign stats from Mailchimp: %s", exc)
     return CampaignStatsResponse(campaigns=DEMO_CAMPAIGNS, source="demo")
 
 
@@ -154,6 +160,6 @@ async def get_campaign_summary(current_user: User = Depends(get_current_user)):
         try:
             campaigns = await _fetch_mailchimp()
             return _compute_summary(campaigns, "mailchimp")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Failed to fetch campaign summary from Mailchimp: %s", exc)
     return _compute_summary(DEMO_CAMPAIGNS, "demo")
