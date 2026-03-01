@@ -206,6 +206,56 @@ def delete_campaign_segment(
     db.commit()
 
 
+@router.get("/{segment_id}/members")
+def get_segment_members(
+    segment_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    search: str = "",
+    page: int = 1,
+    per_page: int = 50,
+):
+    """Return paginated, searchable list of resolved contacts for a list, with source tag."""
+    from app.models.contact import Contact as ContactModel
+
+    seg = db.query(CampaignSegment).filter(CampaignSegment.id == segment_id).first()
+    if not seg:
+        raise HTTPException(status_code=404, detail="List not found")
+
+    contacts = campaign_list_service.resolve_segment_contacts(seg, db)
+    manual_ids = {str(cid) for cid in (seg.contact_ids or [])}
+
+    # Apply search filter
+    if search:
+        s = search.lower()
+        contacts = [
+            c for c in contacts
+            if s in (c.first_name or "").lower()
+            or s in (c.last_name or "").lower()
+            or s in (c.email or "").lower()
+            or s in (c.company or "").lower()
+        ]
+
+    total = len(contacts)
+    start = (page - 1) * per_page
+    page_contacts = contacts[start: start + per_page]
+
+    data = [
+        {
+            "id": str(c.id),
+            "first_name": c.first_name,
+            "last_name": c.last_name,
+            "email": c.email,
+            "company": c.company,
+            "status": c.status,
+            "source": "manual" if str(c.id) in manual_ids else "filter",
+        }
+        for c in page_contacts
+    ]
+
+    return {"data": data, "total": total, "page": page, "per_page": per_page}
+
+
 @router.get("/{segment_id}/preview", response_model=CampaignSegmentPreviewResponse)
 def preview_campaign_segment(
     segment_id: UUID,
