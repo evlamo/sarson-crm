@@ -10,7 +10,7 @@ celery_app = Celery(
     "crm_worker",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.send_campaign"],
+    include=["app.tasks.send_campaign", "app.tasks.google_ads_sync"],
 )
 
 celery_app.conf.update(
@@ -28,5 +28,11 @@ celery_app.conf.update(
     task_default_queue="default",
     task_routes={
         "app.tasks.send_campaign.*": {"queue": "email"},
+    },
+    beat_schedule={
+        "sync-google-ads-conversions": {
+            "task": "sync_google_ads_conversions",
+            "schedule": 900.0,  # every 15 minutes
+        },
     },
 )

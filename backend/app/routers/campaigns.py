@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,11 @@ from app.services.campaign_service import get_campaign_stats
 from app.tasks.send_campaign import send_campaign_task, cancel_campaign_task
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
+
+# Rate limiter — uses app.state.limiter set in main.py
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ── List Campaigns ─────────────────────────────────────────────────────────
@@ -338,7 +343,9 @@ async def get_mailchimp_template_content(
 
 
 @router.post("/{campaign_id}/sync-mailchimp")
+@limiter.limit("10/minute")
 async def sync_to_mailchimp(
+    request: Request,
     campaign_id: UUID,
     data: MailchimpSyncRequest,
     db: Session = Depends(get_db),
@@ -360,16 +367,24 @@ async def sync_to_mailchimp(
         contact_ids.update(str(cid) for cid in seg_ids)
 
     if data.tag_ids:
-        from app.models.tag import contact_tags
+        from app.models.tag import ContactTag
         from sqlalchemy import select
-        stmt = select(contact_tags.c.contact_id).where(
-            contact_tags.c.tag_id.in_(data.tag_ids)
+        stmt = select(ContactTag.c.contact_id).where(
+            ContactTag.c.tag_id.in_(data.tag_ids)
         )
         rows = db.execute(stmt).fetchall()
         contact_ids.update(str(r[0]) for r in rows)
 
+    # Campaign Lists (static segments) — the new Lists system
+    if data.campaign_list_ids:
+        from app.services.campaign_list_service import resolve_combined_segment_contacts
+        list_contacts = resolve_combined_segment_contacts(
+            data.campaign_list_ids, db
+        )
+        contact_ids.update(str(c.id) for c in list_contacts)
+
     if not contact_ids:
-        raise HTTPException(status_code=400, detail="No contacts specified. Provide contact_ids, segment_id, or tag_ids.")
+        raise HTTPException(status_code=400, detail="No contacts specified. Provide contact_ids, segment_id, tag_ids, or campaign_list_ids.")
 
     # Filter out unsubscribed/bounced
     eligible = mailchimp_service.filter_eligible_contacts(db, list(contact_ids))
@@ -382,17 +397,38 @@ async def sync_to_mailchimp(
     # Step 2: Batch upsert members
     result = await mailchimp_service.batch_upsert_members(audience_id, eligible)
 
-    # Step 3: Tag synced contacts for segment targeting
-    tag_name = f"crm-{str(campaign.id)[:8]}"
+    # Step 3: Create a static segment for targeting (or fall back to tag-based)
     synced_emails = [c["email"] for c in eligible]
-    await mailchimp_service.apply_member_tag(audience_id, tag_name, synced_emails)
+    mc_segment_id = None
 
-    # Build segment_opts to target ONLY those tagged members
-    segment_opts = mailchimp_service.build_tag_segment_opts(tag_name)
+    if data.campaign_list_ids:
+        # Use static segment approach (new Lists system)
+        mc_segment_id = await mailchimp_service.create_or_update_static_segment(
+            list_id=audience_id,
+            segment_name=f"Campaign: {campaign.name[:80]}",
+            emails=synced_emails,
+            existing_mc_segment_id=None,
+        )
+    else:
+        # Legacy: tag-based approach
+        tag_name = f"crm-{str(campaign.id)[:8]}"
+        campaign.mailchimp_segment_tag = tag_name
+        db.add(campaign)
+        db.flush()
+        await mailchimp_service.apply_member_tag(audience_id, tag_name, synced_emails)
 
     # Step 4: Create Mailchimp campaign with segment targeting
     from_name = campaign.from_name or "Sarson Funds"
     reply_to = campaign.reply_to or campaign.from_email
+
+    # Build segment_opts or use segment_id
+    segment_opts = None
+    if mc_segment_id:
+        # No segment_opts needed — we pass saved_segment_id in recipients
+        pass
+    elif hasattr(campaign, 'mailchimp_segment_tag') and campaign.mailchimp_segment_tag:
+        segment_opts = mailchimp_service.build_tag_segment_opts(campaign.mailchimp_segment_tag)
+
     mc_campaign_id = await mailchimp_service.create_mc_campaign(
         list_id=audience_id,
         subject=campaign.subject,
@@ -404,6 +440,7 @@ async def sync_to_mailchimp(
         tracking_html_clicks=data.tracking_html_clicks,
         google_analytics_tag=data.google_analytics_tag,
         segment_opts=segment_opts,
+        mc_segment_id=mc_segment_id,
     )
 
     # Step 5: Set content
@@ -418,6 +455,10 @@ async def sync_to_mailchimp(
     campaign.mailchimp_audience_id = audience_id
     campaign.mailchimp_status = "draft"
     campaign.recipient_count = len(eligible)
+    if mc_segment_id:
+        campaign.mc_segment_id_combined = mc_segment_id
+    if data.campaign_list_ids:
+        campaign.segment_ids = data.campaign_list_ids
     db.commit()
 
     return {
@@ -426,7 +467,7 @@ async def sync_to_mailchimp(
         "synced_count": result["added"] + result["updated"],
         "error_count": result["errors"],
         "recipient_count": len(eligible),
-        "segment_tag": tag_name,
+        "mc_segment_id": mc_segment_id,
     }
 
 
@@ -444,7 +485,9 @@ async def mailchimp_send_checklist(
 
 
 @router.post("/{campaign_id}/send-test")
+@limiter.limit("10/minute")
 async def send_test_email_endpoint(
+    request: Request,
     campaign_id: UUID,
     data: TestSendRequest,
     db: Session = Depends(get_db),
@@ -466,7 +509,9 @@ async def send_test_email_endpoint(
 
 
 @router.post("/{campaign_id}/send-mailchimp")
+@limiter.limit("10/minute")
 async def send_via_mailchimp(
+    request: Request,
     campaign_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
@@ -487,7 +532,9 @@ async def send_via_mailchimp(
 
 
 @router.post("/{campaign_id}/schedule-mailchimp")
+@limiter.limit("10/minute")
 async def schedule_via_mailchimp(
+    request: Request,
     campaign_id: UUID,
     data: MailchimpScheduleRequest,
     db: Session = Depends(get_db),

@@ -18,6 +18,11 @@ from app.routers.templates import router as templates_router
 from app.routers.deals import router as deals_router
 from app.routers.campaign_stats import router as campaign_stats_router
 from app.routers.invites import router as invites_router
+from app.routers.campaign_lists import router as campaign_lists_router
+from app.routers.google_ads import router as google_ads_router
+from app.routers.api_controls import router as api_controls_router
+from app.models import google_ads as _google_ads_models  # noqa
+from app.models import api_credentials as _api_credentials_models  # noqa
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -71,6 +76,9 @@ app.include_router(templates_router)
 app.include_router(deals_router)
 app.include_router(campaign_stats_router)
 app.include_router(invites_router, prefix="/api/v1")
+app.include_router(campaign_lists_router)
+app.include_router(google_ads_router)
+app.include_router(api_controls_router)
 
 @app.get("/health")
 def health():

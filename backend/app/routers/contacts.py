@@ -330,9 +330,26 @@ def patch_contact(
     new_company_id = data.get("company_id", contact.company_id)
     if new_status == "poc":
         _check_poc_enforcement(db, contact.id, new_company_id, "poc")
+
+    # Capture old status BEFORE applying changes for Google Ads trigger detection
+    old_status = contact.status
+
     for key, value in data.items():
         if key in valid_cols:
             setattr(contact, key, value)
+
+    # Auto-trigger Google Ads conversion only if status actually changed
+    if "status" in data and data["status"] != old_status:
+        from app.models.google_ads import GoogleAdsConversionAction
+        from app.services.google_ads_service import is_gclid_valid
+        trigger_action = db.query(GoogleAdsConversionAction).filter(
+            GoogleAdsConversionAction.trigger_on_status == data["status"],
+            GoogleAdsConversionAction.is_active == True,
+        ).first()
+        if trigger_action and contact.gclid and is_gclid_valid(contact.gclid_captured_at):
+            contact.conversion_status = "pending"
+            contact.conversion_name = trigger_action.name
+            contact.conversion_value = contact.conversion_value or float(trigger_action.default_value or 0)
 
     contact.updated_at = _utcnow()
     _sync_poc_on_company(db, contact)

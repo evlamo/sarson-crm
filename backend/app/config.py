@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     max_users: int = 15
     enforce_domain_restriction: bool = False  # Set to true in production to require @sarsonfunds.com or invite
 
+    # Google Ads OCT
+    google_ads_client_id: str = ""
+    google_ads_client_secret: str = ""
+    google_ads_refresh_token: str = ""
+    google_ads_developer_token: str = ""
+    google_ads_customer_id: str = ""
+    google_ads_manager_customer_id: str = ""
+
     class Config:
         env_file = ".env"
 

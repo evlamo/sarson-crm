@@ -29,6 +29,8 @@ interface ContactDetail {
   status: string;
   sarson_rep: string | null;
   next_step: string | null;
+  contact_method_preference: string | null;
+  contact_method_custom: string | null;
   last_contacted_at: string | null;
   notes: string | null;
   city: string | null;
@@ -248,6 +250,104 @@ function InlineLeadSource({ value, onSave }: { value: string | null; onSave: (v:
             if (e.key === 'Escape') setEditing(false);
           }}
           placeholder="Describe the source..."
+          className="h-7 px-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+      )}
+    </div>
+  );
+}
+
+const CONTACT_METHOD_OPTIONS = [
+  { value: 'phone',    label: 'Phone',    icon: '📞' },
+  { value: 'email',    label: 'Email',    icon: '✉️' },
+  { value: 'text',     label: 'Text',     icon: '💬' },
+  { value: 'whatsapp', label: 'WhatsApp', icon: '🟢' },
+  { value: 'telegram', label: 'Telegram', icon: '✈️' },
+  { value: 'linkedin', label: 'LinkedIn', icon: '💼' },
+  { value: 'other',    label: 'Other…',   icon: '✏️' },
+];
+
+function InlineContactMethodPref({
+  preference,
+  custom,
+  onSave,
+}: {
+  preference: string | null;
+  custom: string | null;
+  onSave: (pref: string, customText?: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState('');
+  const [customText, setCustomText] = useState('');
+  const customInputRef = useRef<HTMLInputElement>(null);
+
+  const start = () => {
+    setSelected(preference || '');
+    setCustomText(preference === 'other' ? (custom || '') : '');
+    setEditing(true);
+  };
+
+  const save = async (pref: string, ct?: string) => {
+    await onSave(pref, ct);
+    setEditing(false);
+  };
+
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = e.target.value;
+    setSelected(v);
+    if (v === 'other') {
+      setCustomText('');
+      setTimeout(() => customInputRef.current?.focus(), 0);
+    } else if (v) {
+      save(v);
+    }
+  };
+
+  const displayLabel = () => {
+    if (!preference) return null;
+    if (preference === 'other') return custom || 'Other';
+    const opt = CONTACT_METHOD_OPTIONS.find(o => o.value === preference);
+    return opt ? `${opt.icon} ${opt.label}` : preference;
+  };
+
+  if (!editing) {
+    return (
+      <span
+        onClick={start}
+        className="text-sm cursor-pointer hover:text-primary transition-colors"
+        title="Click to edit"
+      >
+        {displayLabel() || <span className="text-muted-foreground italic">—</span>}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <select
+        autoFocus
+        value={selected}
+        onChange={handleSelectChange}
+        onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+        className="h-7 px-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+      >
+        <option value="">— Select —</option>
+        {CONTACT_METHOD_OPTIONS.map(o => (
+          <option key={o.value} value={o.value}>{o.icon} {o.label}</option>
+        ))}
+      </select>
+      {selected === 'other' && (
+        <input
+          ref={customInputRef}
+          type="text"
+          value={customText}
+          onChange={e => setCustomText(e.target.value)}
+          onBlur={() => { if (customText.trim()) save('other', customText.trim()); else setEditing(false); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save('other', customText.trim() || 'other');
+            if (e.key === 'Escape') setEditing(false);
+          }}
+          placeholder="e.g. Slack, Signal, Zoom..."
           className="h-7 px-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
         />
       )}
@@ -705,6 +805,19 @@ export default function ContactDetailPage() {
               </FieldRow>
               <FieldRow label="Last Contacted">
                 <InlineLastContactedDetail contact={contact} onSave={savePatch} />
+              </FieldRow>
+              <FieldRow label="Contact Preference">
+                <InlineContactMethodPref
+                  preference={contact.contact_method_preference}
+                  custom={contact.contact_method_custom}
+                  onSave={async (pref, ct) => {
+                    await patchContact({
+                      contact_method_preference: pref || null,
+                      contact_method_custom: pref === 'other' ? (ct || null) : null,
+                    });
+                    toast.success('Preference updated');
+                  }}
+                />
               </FieldRow>
               {(contact.email_open_count > 0 || contact.email_click_count > 0) && (
                 <FieldRow label="Email Stats">

@@ -56,6 +56,8 @@ class Contact(Base):
     contacted = Column(Boolean, default=False)  # has this person officially spoken with the firm?
 
     # Engagement
+    contact_method_preference = Column(String(50))   # phone, email, text, whatsapp, telegram, linkedin, other
+    contact_method_custom = Column(String(255))       # free-text when preference == 'other'
     last_contacted_at = Column(DateTime(timezone=True), index=True)
     last_emailed_at = Column(DateTime(timezone=True))
     email_open_count = Column(Integer, default=0)
@@ -75,6 +77,16 @@ class Contact(Base):
     accredited_status = Column(Boolean)
     kyc_completed = Column(Boolean, default=False)
     kyc_completed_at = Column(DateTime(timezone=True))
+
+    # Google Ads OCT
+    gclid = Column(String(250))
+    gclid_captured_at = Column(DateTime(timezone=True))
+    gclid_expires_at = Column(DateTime(timezone=True))
+    conversion_synced = Column(Boolean, default=False)
+    conversion_synced_at = Column(DateTime(timezone=True))
+    conversion_name = Column(String(200))
+    conversion_value = Column(Numeric(10, 2))
+    conversion_status = Column(String(50))
 
     # Full-text search vector (auto-updated by DB trigger)
     search_vector = Column(TSVECTOR)

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, Numeric
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, Numeric, ARRAY
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -35,7 +35,7 @@ class EmailCampaign(Base):
     filter_snapshot = Column(JSONB)
     recipient_count = Column(Integer, default=0)
     from_name = Column(String, nullable=False, default="Speranza CRM")
-    from_email = Column(String, nullable=False)
+    from_email = Column(String, nullable=False, server_default="info@sarsonfunds.com")
     reply_to = Column(String)
     status = Column(String, default="draft", index=True)
     scheduled_at = Column(DateTime(timezone=True))
@@ -46,6 +46,11 @@ class EmailCampaign(Base):
     mailchimp_campaign_id = Column(String)
     mailchimp_audience_id = Column(String)
     mailchimp_status = Column(String)  # draft/scheduled/sending/sent
+    mailchimp_segment_tag = Column(String, nullable=True)
+
+    # Campaign Lists (static segments)
+    segment_ids = Column(ARRAY(UUID(as_uuid=True)), default=list)
+    mc_segment_id_combined = Column(Integer, nullable=True)
 
     # Aggregate stats
     sent_count = Column(Integer, default=0)

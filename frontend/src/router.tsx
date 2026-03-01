@@ -17,6 +17,8 @@ import CampaignStatsPage from '@/pages/CampaignStatsPage';
 import InvitesPage from '@/pages/InvitesPage';
 import RegisterPage from '@/pages/RegisterPage';
 import CompaniesPage from '@/pages/CompaniesPage';
+import ListsPage from '@/pages/ListsPage';
+import ApiControlsPage from '@/pages/ApiControlsPage';
 
 import { useEffect } from 'react';
 
@@ -110,10 +112,12 @@ const companiesRoute = createRoute({
   }),
 });
 
-const pipelineRoute = createRoute({
+import GoogleAdsPage from '@/pages/GoogleAdsPage';
+
+const googleAdsRoute = createRoute({
   getParentRoute: () => layoutRoute,
-  path: '/pipeline',
-  component: () => <PlaceholderPage title="Pipeline" />,
+  path: '/google-ads',
+  component: GoogleAdsPage,
 });
 
 const campaignsRoute = createRoute({
@@ -122,10 +126,10 @@ const campaignsRoute = createRoute({
   component: CampaignsPage,
 });
 
-const segmentsRoute = createRoute({
+const listsRoute = createRoute({
   getParentRoute: () => layoutRoute,
-  path: '/segments',
-  component: () => <PlaceholderPage title="Segments" />,
+  path: '/lists',
+  component: ListsPage,
 });
 
 const importRoute = createRoute({
@@ -164,6 +168,12 @@ const invitesRoute = createRoute({
   component: InvitesPage,
 });
 
+const apiControlsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/api-controls',
+  component: ApiControlsPage,
+});
+
 // Build route tree
 const routeTree = rootRoute.addChildren([
   loginRoute,
@@ -173,15 +183,16 @@ const routeTree = rootRoute.addChildren([
     contactsRoute,
     contactDetailRoute,
     companiesRoute,
-    pipelineRoute,
+    googleAdsRoute,
     campaignsRoute,
-    segmentsRoute,
+    listsRoute,
     importRoute,
     tagsRoute,
     importHistoryRoute,
     campaignStatsRoute,
     usersRoute,
     invitesRoute,
+    apiControlsRoute,
   ]),
 ]);
 

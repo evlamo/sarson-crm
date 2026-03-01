@@ -2,6 +2,7 @@
 SendGrid webhook handler — processes email events (delivered, open, click, bounce, etc.)
 Updates email_sends records and contact-level engagement fields.
 """
+import hmac
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -336,27 +337,37 @@ async def mailchimp_webhook(request: Request, db: Session = Depends(get_db)):
     """
     # Verify webhook secret via query param
     webhook_secret = request.query_params.get("secret", "")
-    expected_secret = settings.mailchimp_webhook_secret
+    # Try DB credentials first, fall back to settings
+    try:
+        from app.services.api_credentials_service import get_decrypted_field
+        expected_secret = get_decrypted_field(db, "mailchimp", "webhook_secret") or settings.mailchimp_webhook_secret
+    except Exception:
+        expected_secret = settings.mailchimp_webhook_secret
     if not expected_secret:
         if settings.environment == "production":
             logger.error("MAILCHIMP_WEBHOOK_SECRET not set in production — rejecting webhook")
-            raise HTTPException(status_code=403, detail="Webhook secret not configured")
+            raise HTTPException(status_code=403, detail="Webhook not configured")
         logger.warning("MAILCHIMP_WEBHOOK_SECRET not set — skipping verification (dev mode)")
-    elif webhook_secret != expected_secret:
+    elif not hmac.compare_digest(webhook_secret.encode(), expected_secret.encode()):
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
-    try:
-        data = await request.json()
-    except Exception:
-        # Mailchimp sends form-encoded data for webhooks
-        form = await request.form()
-        data = dict(form)
+    # Mailchimp always sends application/x-www-form-urlencoded
+    # Keys are like: type, data[email], data[list_id], data[id], data[status], etc.
+    form = await request.form()
+    data = dict(form)
 
-    event_type = data.get("type", "")
+    def get_mc_field(*keys: str) -> str:
+        """Extract a field from Mailchimp's form-encoded format."""
+        for key in keys:
+            if key in data:
+                return str(data[key])
+        return ""
+
+    event_type = get_mc_field("type")
 
     try:
         if event_type == "unsubscribe":
-            email = data.get("data", {}).get("email", "") if isinstance(data.get("data"), dict) else data.get("data[email]", "")
+            email = get_mc_field("data[email]")
             if email:
                 contact = db.query(Contact).filter(Contact.email == email).first()
                 if contact:
@@ -365,7 +376,7 @@ async def mailchimp_webhook(request: Request, db: Session = Depends(get_db)):
                     db.commit()
 
         elif event_type == "cleaned":
-            email = data.get("data", {}).get("email", "") if isinstance(data.get("data"), dict) else data.get("data[email]", "")
+            email = get_mc_field("data[email]")
             if email:
                 contact = db.query(Contact).filter(Contact.email == email).first()
                 if contact:
@@ -374,7 +385,7 @@ async def mailchimp_webhook(request: Request, db: Session = Depends(get_db)):
                     db.commit()
 
         elif event_type == "subscribe":
-            email = data.get("data", {}).get("email", "") if isinstance(data.get("data"), dict) else data.get("data[email]", "")
+            email = get_mc_field("data[email]")
             if email:
                 contact = db.query(Contact).filter(Contact.email == email).first()
                 if contact and contact.email_unsubscribed:
@@ -384,32 +395,18 @@ async def mailchimp_webhook(request: Request, db: Session = Depends(get_db)):
                     logger.info(f"Re-subscribed contact: {email}")
 
         elif event_type == "campaign":
-            # Campaign status change — update our record
-            mc_campaign_id = None
-            if isinstance(data.get("data"), dict):
-                mc_campaign_id = data["data"].get("id")
-            else:
-                mc_campaign_id = data.get("data[id]", "")
-
-            status = None
-            if isinstance(data.get("data"), dict):
-                status = data["data"].get("status")
-            else:
-                status = data.get("data[status]", "")
-
-            if mc_campaign_id and status:
-                campaign = db.query(EmailCampaign).filter(
-                    EmailCampaign.mailchimp_campaign_id == mc_campaign_id
+            mc_cid = get_mc_field("data[id]")
+            status = get_mc_field("data[status]")
+            if mc_cid:
+                ec = db.query(EmailCampaign).filter(
+                    EmailCampaign.mailchimp_campaign_id == mc_cid
                 ).first()
-                if campaign:
-                    campaign.mailchimp_status = status
-                    if status == "sent":
-                        campaign.status = "sent"
-                        campaign.sent_at = datetime.now(timezone.utc)
-                    elif status == "paused":
-                        campaign.status = "paused"
+                if ec:
+                    ec.mailchimp_status = status or "sent"
+                    if status in ("sent", "sending") and not ec.sent_at:
+                        ec.sent_at = datetime.now(timezone.utc)
                     db.commit()
-                    logger.info(f"Updated campaign {mc_campaign_id} status to {status}")
+                    logger.info(f"Updated campaign {mc_cid} → status={status}")
 
         return {"received": True}
     except Exception as e:

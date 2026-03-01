@@ -53,6 +53,8 @@ class CampaignOut(BaseModel):
     mailchimp_campaign_id: Optional[str] = None
     mailchimp_audience_id: Optional[str] = None
     mailchimp_status: Optional[str] = None
+    mc_segment_id_combined: Optional[int] = None
+    segment_ids: Optional[List[UUID]] = []
     # Aggregate stats
     sent_count: int
     delivered_count: int
@@ -146,6 +148,8 @@ class MailchimpSyncRequest(BaseModel):
     contact_ids: Optional[List[str]] = None
     segment_id: Optional[str] = None
     tag_ids: Optional[List[str]] = None
+    campaign_list_ids: Optional[List[UUID]] = None  # CRM campaign list IDs (static segments)
     tracking_opens: bool = True
     tracking_html_clicks: bool = True
     google_analytics_tag: str = ""
+    timewarp: bool = False

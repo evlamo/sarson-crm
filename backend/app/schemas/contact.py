@@ -33,6 +33,8 @@ class ContactBase(BaseModel):
     assigned_to: Optional[uuid.UUID] = None
     owner_id: Optional[uuid.UUID] = None
     next_step: Optional[str] = Field(None, max_length=2000)
+    contact_method_preference: Optional[str] = Field(None, max_length=50)
+    contact_method_custom: Optional[str] = Field(None, max_length=255)
     last_contacted_at: Optional[datetime] = None
     last_emailed_at: Optional[datetime] = None
     email_open_count: Optional[int] = Field(None, ge=0)
@@ -89,6 +91,8 @@ class ContactPatch(BaseModel):
     assigned_to: Optional[uuid.UUID] = None
     owner_id: Optional[uuid.UUID] = None
     next_step: Optional[str] = Field(None, max_length=2000)
+    contact_method_preference: Optional[str] = Field(None, max_length=50)
+    contact_method_custom: Optional[str] = Field(None, max_length=255)
     last_contacted_at: Optional[datetime] = None
     last_emailed_at: Optional[datetime] = None
     email_open_count: Optional[int] = Field(None, ge=0)

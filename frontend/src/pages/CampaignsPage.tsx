@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -327,6 +328,7 @@ function CampaignBuilder({
     reply_to: editCampaign?.reply_to || '',
     segment_id: editCampaign?.segment_id || '',
     tag_ids: [] as string[],
+    campaign_list_ids: [] as string[],
     body_html: editCampaign?.body_html || '',
     body_text: editCampaign?.body_text || '',
     template_id: editCampaign?.template_id || '',
@@ -351,6 +353,27 @@ function CampaignBuilder({
       return res.data.data || [];
     },
   });
+
+  const { data: campaignLists = [] } = useQuery<{ id: string; name: string; member_count: number; mc_synced_at: string | null }[]>({
+    queryKey: ['campaign-lists'],
+    queryFn: async () => {
+      const res = await api.get('/campaign-lists');
+      return res.data || [];
+    },
+  });
+
+  const [combinedCount, setCombinedCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (form.campaign_list_ids.length === 0) { setCombinedCount(null); return; }
+    if (form.campaign_list_ids.length === 1) {
+      const list = campaignLists.find(l => l.id === form.campaign_list_ids[0]);
+      setCombinedCount(list?.member_count ?? null);
+      return;
+    }
+    api.post('/campaign-lists/combine/preview', { segment_ids: form.campaign_list_ids })
+      .then(res => setCombinedCount(res.data.count))
+      .catch(() => setCombinedCount(null));
+  }, [form.campaign_list_ids, campaignLists]);
 
   const { data: tags = [] } = useQuery<Tag[]>({
     queryKey: ['tags'],
@@ -439,6 +462,7 @@ function CampaignBuilder({
         tracking_html_clicks: form.tracking_html_clicks,
         google_analytics_tag: form.google_analytics_tag,
       };
+      if (form.campaign_list_ids.length) syncPayload.campaign_list_ids = form.campaign_list_ids;
       if (form.segment_id) syncPayload.segment_id = form.segment_id;
       if (form.tag_ids.length) syncPayload.tag_ids = form.tag_ids;
 
@@ -539,7 +563,7 @@ function CampaignBuilder({
   };
 
   const canProceedStep1 = form.name && form.subject && form.from_email;
-  const canProceedStep2 = form.segment_id || form.tag_ids.length > 0;
+  const canProceedStep2 = form.segment_id || form.tag_ids.length > 0 || form.campaign_list_ids.length > 0;
 
   return (
     <div className="space-y-4">
@@ -634,59 +658,120 @@ function CampaignBuilder({
       {step === 2 && (
         <Card>
           <CardContent className="pt-6 space-y-4">
+            {/* Campaign Lists (primary method) */}
             <div>
-              <Label>Segment</Label>
-              <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a segment..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {segments.map((seg) => (
-                    <SelectItem key={seg.id} value={seg.id}>
-                      {seg.name} {seg.contact_count != null ? `(${seg.contact_count.toLocaleString()})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {tags.length > 0 && (
-              <div>
-                <Label>Or select specific tags</Label>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {tags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      onClick={() => {
-                        setForm(f => ({
-                          ...f,
-                          tag_ids: f.tag_ids.includes(tag.id)
-                            ? f.tag_ids.filter(t => t !== tag.id)
-                            : [...f.tag_ids, tag.id],
-                        }));
-                      }}
-                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                        form.tag_ids.includes(tag.id)
-                          ? 'bg-[#253a52] text-white border-[#253a52]'
-                          : 'border-gray-300 hover:border-[#253a52]/50'
+              <Label className="text-base font-semibold">Select Lists</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                Choose one or more Lists to send to. Multiple lists will be combined automatically.
+              </p>
+              {campaignLists.length > 0 ? (
+                <div className="space-y-1.5">
+                  {campaignLists.map(list => (
+                    <label
+                      key={list.id}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        form.campaign_list_ids.includes(list.id)
+                          ? 'border-[#253a52] bg-[#253a52]/5'
+                          : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      {tag.name} {tag.contact_count != null ? `(${tag.contact_count})` : ''}
-                    </button>
+                      <input
+                        type="checkbox"
+                        checked={form.campaign_list_ids.includes(list.id)}
+                        onChange={() => {
+                          setForm(f => ({
+                            ...f,
+                            campaign_list_ids: f.campaign_list_ids.includes(list.id)
+                              ? f.campaign_list_ids.filter(x => x !== list.id)
+                              : [...f.campaign_list_ids, list.id],
+                          }));
+                        }}
+                        className="w-4 h-4 rounded"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium">{list.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          ({list.member_count.toLocaleString()} contacts)
+                        </span>
+                      </div>
+                      {!list.mc_synced_at && (
+                        <span className="text-xs text-yellow-600">Not synced</span>
+                      )}
+                    </label>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="bg-gray-50 text-muted-foreground p-4 rounded-lg text-sm text-center">
+                  No lists created yet.{' '}
+                  <Link to="/lists" className="text-[#253a52] underline">Create a List</Link>
+                </div>
+              )}
 
-            {selectedSegment && (
-              <div className="bg-blue-50 text-blue-700 p-3 rounded-lg text-sm">
-                This campaign will reach ~<strong>{selectedSegment.contact_count?.toLocaleString() || '?'}</strong> contacts
+              {form.campaign_list_ids.length > 0 && combinedCount != null && (
+                <div className="bg-blue-50 text-blue-700 p-3 rounded-lg text-sm mt-2">
+                  Combined: ~<strong>{combinedCount.toLocaleString()}</strong> contacts (deduplicated)
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Legacy: Segment or Tags */}
+            <details className="group">
+              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                Advanced: Use dynamic segment or individual tags
+              </summary>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <Label>Dynamic Segment</Label>
+                  <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a segment..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {segments.map((seg) => (
+                        <SelectItem key={seg.id} value={seg.id}>
+                          {seg.name} {seg.contact_count != null ? `(${seg.contact_count.toLocaleString()})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {tags.length > 0 && (
+                  <div>
+                    <Label>Or select specific tags</Label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {tags.map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => {
+                            setForm(f => ({
+                              ...f,
+                              tag_ids: f.tag_ids.includes(tag.id)
+                                ? f.tag_ids.filter(t => t !== tag.id)
+                                : [...f.tag_ids, tag.id],
+                            }));
+                          }}
+                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                            form.tag_ids.includes(tag.id)
+                              ? 'bg-[#253a52] text-white border-[#253a52]'
+                              : 'border-gray-300 hover:border-[#253a52]/50'
+                          }`}
+                        >
+                          {tag.name} {tag.contact_count != null ? `(${tag.contact_count})` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            {!form.segment_id && form.tag_ids.length === 0 && (
+            </details>
+
+            {!form.segment_id && form.tag_ids.length === 0 && form.campaign_list_ids.length === 0 && (
               <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg text-sm">
-                Select a segment or tags to define your audience
+                Select at least one list, segment, or tag to define your audience
               </div>
             )}
             <p className="text-xs text-muted-foreground">
@@ -903,7 +988,12 @@ function CampaignBuilder({
                 <span className="text-muted-foreground">From</span>
                 <span>{form.from_name} &lt;{form.from_email}&gt;</span>
                 <span className="text-muted-foreground">Audience</span>
-                <span>{selectedSegment?.name || 'Tags selected'} ({selectedSegment?.contact_count?.toLocaleString() || '?'} contacts)</span>
+                <span>
+                  {form.campaign_list_ids.length > 0
+                    ? `${form.campaign_list_ids.length} list${form.campaign_list_ids.length !== 1 ? 's' : ''} (${combinedCount?.toLocaleString() || '?'} contacts)`
+                    : selectedSegment?.name || 'Tags selected'
+                  }
+                </span>
                 <span className="text-muted-foreground">Tracking</span>
                 <span>
                   {[form.tracking_opens && 'Opens', form.tracking_html_clicks && 'Clicks'].filter(Boolean).join(', ') || 'None'}
@@ -1007,7 +1097,7 @@ function CampaignBuilder({
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             You're about to send "<strong>{form.name}</strong>" to{' '}
-            <strong>{selectedSegment?.contact_count?.toLocaleString() || '?'}</strong> contacts.
+            <strong>{(form.campaign_list_ids.length > 0 ? combinedCount : selectedSegment?.contact_count)?.toLocaleString() ?? '?'}</strong> contacts.
             This action cannot be undone.
           </p>
           <div className="flex justify-end gap-2 mt-4">

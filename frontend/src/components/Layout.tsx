@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import {
   Users,
   Building2,
-  Kanban,
+  BarChart2,
   Mail,
   Filter,
   Upload,
@@ -15,15 +15,16 @@ import {
   Shield,
   BarChart3,
   UserPlus,
+  KeyRound,
 } from 'lucide-react';
 
 const navItems = [
   { to: '/contacts', label: 'Contacts', icon: Users },
   { to: '/companies', label: 'Companies', icon: Building2 },
-  { to: '/pipeline', label: 'Pipeline', icon: Kanban },
+  { to: '/google-ads', label: 'Google Ads', icon: BarChart2 },
   { to: '/campaigns', label: 'Campaigns', icon: Mail },
   { to: '/campaign-stats', label: 'Campaign Stats', icon: BarChart3 },
-  { to: '/segments', label: 'Segments', icon: Filter },
+  { to: '/lists', label: 'Lists', icon: Filter },
   { to: '/tags', label: 'Tags', icon: Tag },
   { to: '/import', label: 'Import', icon: Upload },
   { to: '/imports', label: 'Import History', icon: History },
@@ -32,6 +33,7 @@ const navItems = [
 const adminItems = [
   { to: '/admin/users', label: 'Users', icon: Shield },
   { to: '/admin/invites', label: 'Team & Invites', icon: UserPlus },
+  { to: '/api-controls', label: 'API Controls', icon: KeyRound },
 ];
 
 export default function Layout() {
