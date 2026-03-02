@@ -16,13 +16,15 @@ import {
   BarChart3,
   UserPlus,
   KeyRound,
+  Target,
 } from 'lucide-react';
 
 const navItems = [
   { to: '/contacts', label: 'Contacts', icon: Users },
   { to: '/companies', label: 'Companies', icon: Building2 },
   { to: '/google-ads', label: 'Google Ads', icon: BarChart2 },
-  { to: '/campaigns', label: 'Campaigns', icon: Mail },
+  { to: '/campaigns', label: 'Email Campaigns', icon: Mail },
+  { to: '/sales-campaigns', label: 'Sales Campaigns', icon: Target },
   { to: '/campaign-stats', label: 'Campaign Stats', icon: BarChart3 },
   { to: '/lists', label: 'Lists', icon: Filter },
   { to: '/tags', label: 'Tags', icon: Tag },

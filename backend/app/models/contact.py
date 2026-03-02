@@ -69,6 +69,12 @@ class Contact(Base):
     email_unsubscribed = Column(Boolean, default=False)
     unsubscribed_at = Column(DateTime(timezone=True))
 
+    # ========== MASTER DNC (Phase 1 Foundation) ==========
+    master_dnc = Column(Boolean, default=False)  # True = excluded from ALL outbound
+    master_dnc_reason = Column(Text)             # Why they're on the DNC list
+    master_dnc_set_at = Column(DateTime(timezone=True))
+    master_dnc_set_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+
     # Investment-specific
     commitment_amount = Column(Numeric(15, 2))
     commitment_currency = Column(String, default="USD")
@@ -108,6 +114,7 @@ class Contact(Base):
     activities = relationship("Activity", back_populates="contact", cascade="all, delete-orphan")
     deal_contacts = relationship("DealContact", back_populates="contact")
     email_sends = relationship("EmailSend", back_populates="contact")
+    master_dnc_setter = relationship("User", foreign_keys=[master_dnc_set_by])
 
     @property
     def full_name(self):

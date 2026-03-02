@@ -18,6 +18,13 @@ interface AuthState {
   fetchUser: () => Promise<void>;
 }
 
+/**
+ * Check if user has admin privileges (admin or owner role).
+ */
+function checkIsAdmin(role: string | undefined): boolean {
+  return role === 'admin' || role === 'owner';
+}
+
 export const useAuth = create<AuthState>((set) => ({
   user: null,
   isLoading: true,
@@ -34,25 +41,35 @@ export const useAuth = create<AuthState>((set) => ({
 
     // Fetch user profile
     const userRes = await api.get('/auth/me');
-    set({ user: userRes.data, isAuthenticated: true, isLoading: false, isAdmin: userRes.data.role === 'admin' });
+    set({
+      user: userRes.data,
+      isAuthenticated: true,
+      isLoading: false,
+      isAdmin: checkIsAdmin(userRes.data.role),
+    });
   },
 
   logout: () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, isAdmin: false });
     window.location.href = '/login';
   },
 
   fetchUser: async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      set({ isLoading: false, isAuthenticated: false });
+      set({ isLoading: false, isAuthenticated: false, isAdmin: false });
       return;
     }
     try {
       const res = await api.get('/auth/me');
-      set({ user: res.data, isAuthenticated: true, isLoading: false, isAdmin: res.data.role === 'admin' });
+      set({
+        user: res.data,
+        isAuthenticated: true,
+        isLoading: false,
+        isAdmin: checkIsAdmin(res.data.role),
+      });
     } catch {
       set({ user: null, isAuthenticated: false, isLoading: false, isAdmin: false });
     }

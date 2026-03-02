@@ -9,6 +9,7 @@ import LoginPage from '@/pages/LoginPage';
 import ContactsPage from '@/pages/ContactsPage';
 import ContactDetailPage from '@/pages/ContactDetailPage';
 import CampaignsPage from '@/pages/CampaignsPage';
+import SalesCampaignsPage from '@/pages/SalesCampaignsPage';
 import ImportPage from '@/pages/ImportPage';
 import TagsPage from '@/pages/TagsPage';
 import ImportHistoryPage from '@/pages/ImportHistoryPage';
@@ -19,6 +20,7 @@ import RegisterPage from '@/pages/RegisterPage';
 import CompaniesPage from '@/pages/CompaniesPage';
 import ListsPage from '@/pages/ListsPage';
 import ApiControlsPage from '@/pages/ApiControlsPage';
+import GoogleAdsPage from '@/pages/GoogleAdsPage';
 
 import { useEffect } from 'react';
 
@@ -29,6 +31,17 @@ function PlaceholderPage({ title }: { title: string }) {
     <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
       <p className="text-lg font-semibold">{title}</p>
       <p className="text-sm mt-1">Coming Soon</p>
+    </div>
+  );
+}
+
+// Unauthorized page for non-admin access attempts
+function UnauthorizedPage() {
+  useEffect(() => { document.title = 'Unauthorized — Sarson Funds CRM'; }, []);
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+      <p className="text-lg font-semibold">Access Denied</p>
+      <p className="text-sm mt-1">You don't have permission to view this page.</p>
     </div>
   );
 }
@@ -112,8 +125,6 @@ const companiesRoute = createRoute({
   }),
 });
 
-import GoogleAdsPage from '@/pages/GoogleAdsPage';
-
 const googleAdsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/google-ads',
@@ -124,6 +135,12 @@ const campaignsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/campaigns',
   component: CampaignsPage,
+});
+
+const salesCampaignsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/sales-campaigns',
+  component: SalesCampaignsPage,
 });
 
 const listsRoute = createRoute({
@@ -156,6 +173,7 @@ const campaignStatsRoute = createRoute({
   component: CampaignStatsPage,
 });
 
+// Admin routes — protected by backend but UI also validates
 const usersRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/admin/users',
@@ -185,6 +203,7 @@ const routeTree = rootRoute.addChildren([
     companiesRoute,
     googleAdsRoute,
     campaignsRoute,
+    salesCampaignsRoute,
     listsRoute,
     importRoute,
     tagsRoute,

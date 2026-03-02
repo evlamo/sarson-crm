@@ -111,14 +111,13 @@ def register(req: UserCreate, db: Session = Depends(get_db)):
 users_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 @users_router.get("/", response_model=list[UserSummary])
-def list_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = db.query(User)
-    if current_user.role != "admin":
-        query = query.filter(User.is_active == True)
-    return query.all()
+def list_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """List all users. Admin only."""
+    return db.query(User).all()
 
 @users_router.post("/", response_model=UserOut)
 def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Create a new user. Admin only."""
     email_lower = req.email.lower().strip()
 
     # Max users check
@@ -175,9 +174,13 @@ def create_user(req: UserCreate, db: Session = Depends(get_db), admin: User = De
 
 @users_router.patch("/{user_id}/deactivate", response_model=UserOut)
 def deactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Deactivate a user. Admin only."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Prevent self-deactivation
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
     user.is_active = False
     db.commit()
     db.refresh(user)
@@ -185,6 +188,7 @@ def deactivate_user(user_id: uuid.UUID, db: Session = Depends(get_db), admin: Us
 
 @users_router.post("/{user_id}/reset-password")
 def admin_reset_password(user_id: uuid.UUID, req: PasswordResetRequest, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Reset a user's password. Admin only."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -193,25 +197,63 @@ def admin_reset_password(user_id: uuid.UUID, req: PasswordResetRequest, db: Sess
     return {"message": "Password reset successfully"}
 
 @users_router.get("/{user_id}", response_model=UserOut)
-def get_user(user_id: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_user(user_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get a single user. Users can view their own profile; admins can view any."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Non-admins can only view themselves
+    if current_user.role not in ("admin", "owner") and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return user
 
 @users_router.patch("/{user_id}", response_model=UserOut)
 def update_user(user_id: uuid.UUID, req: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Update a user. Users can update their own profile (except role); admins can update any."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if current_user.role != "admin" and current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    is_admin = current_user.role in ("admin", "owner")
+    is_self = current_user.id == user_id
+    
+    # Non-admins can only update themselves
+    if not is_admin and not is_self:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     update_data = req.model_dump(exclude_unset=True)
+    
+    # Non-admins cannot change roles
+    if "role" in update_data and not is_admin:
+        raise HTTPException(status_code=403, detail="Only admins can change user roles")
+    
+    # Handle password separately
     if "password" in update_data:
         update_data["hashed_password"] = hash_password(update_data.pop("password"))
+    
     for k, v in update_data.items():
         setattr(user, k, v)
+    
     db.commit()
     db.refresh(user)
     return user
+
+@users_router.patch("/{user_id}/role")
+def update_user_role(
+    user_id: uuid.UUID,
+    role: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    """Change a user's role. Admin only."""
+    if role not in ("user", "admin", "owner"):
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'user', 'admin', or 'owner'")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.role = role
+    db.commit()
+    db.refresh(user)
+    return {"message": f"Role updated to {role}", "user_id": str(user_id)}

@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { AlertCircle } from 'lucide-react';
 
 interface Invite {
   id: string;
@@ -56,10 +57,13 @@ export default function InvitesPage() {
   const [email, setEmail] = useState('');
   const [lastInviteUrl, setLastInviteUrl] = useState('');
 
+  // Admin check — hide page content if not admin
   if (!isAdmin) {
     return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <p className="text-lg">Admin access required.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+        <AlertCircle className="h-12 w-12 mb-4 text-destructive" />
+        <p className="text-lg font-semibold">Access Denied</p>
+        <p className="text-sm mt-1">You don't have permission to view this page.</p>
       </div>
     );
   }
@@ -70,6 +74,7 @@ export default function InvitesPage() {
       const res = await api.get('/invites/');
       return res.data;
     },
+    enabled: isAdmin,
   });
 
   const createMutation = useMutation({
@@ -83,8 +88,9 @@ export default function InvitesPage() {
       setEmail('');
       toast.success(`Invite sent to ${data.email}`);
     },
-    onError: (err: any) => {
-      const detail = err?.response?.data?.detail || 'Failed to create invite';
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      const detail = axiosErr?.response?.data?.detail || 'Failed to create invite';
       toast.error(detail);
     },
   });
@@ -97,8 +103,9 @@ export default function InvitesPage() {
       queryClient.invalidateQueries({ queryKey: ['invites'] });
       toast.success('Invite revoked');
     },
-    onError: (err: any) => {
-      const detail = err?.response?.data?.detail || 'Failed to revoke invite';
+    onError: (err: unknown) => {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      const detail = axiosErr?.response?.data?.detail || 'Failed to revoke invite';
       toast.error(detail);
     },
   });

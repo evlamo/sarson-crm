@@ -6,7 +6,7 @@ from app.utils.time import utcnow
 import uuid
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_admin_user
 from app.models.static_list import StaticList, StaticListMember
 from app.models.contact import Contact
 from app.models.segment import Segment
@@ -100,7 +100,7 @@ def update_static_list(
 def delete_static_list(
     list_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    admin: User = Depends(get_admin_user),
 ):
     sl = _get_list_or_404(list_id, db)
     db.delete(sl)

@@ -21,6 +21,10 @@ from app.routers.invites import router as invites_router
 from app.routers.campaign_lists import router as campaign_lists_router
 from app.routers.google_ads import router as google_ads_router
 from app.routers.api_controls import router as api_controls_router
+# Phase 2: Campaign Hierarchy + DNC
+from app.routers.sales_campaigns import router as sales_campaigns_router
+from app.routers.email_campaigns_hierarchy import router as email_campaigns_hierarchy_router
+from app.routers.dnc import router as dnc_router
 from app.models import google_ads as _google_ads_models  # noqa
 from app.models import api_credentials as _api_credentials_models  # noqa
 
@@ -28,7 +32,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="Speranza CRM",
-    description="Investment firm CRM — replaces Salesforce + Mailchimp",
+    description="Investment firm CRM - replaces Salesforce + Mailchimp",
     version="1.0.0",
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
@@ -38,7 +42,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-# ── Security Headers Middleware ────────────────────────────────────────────
+# -- Security Headers Middleware --------------------------------------------
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -79,6 +83,10 @@ app.include_router(invites_router, prefix="/api/v1")
 app.include_router(campaign_lists_router)
 app.include_router(google_ads_router)
 app.include_router(api_controls_router)
+# Phase 2: Campaign Hierarchy + DNC
+app.include_router(sales_campaigns_router)
+app.include_router(email_campaigns_hierarchy_router)
+app.include_router(dnc_router)
 
 @app.get("/health")
 def health():

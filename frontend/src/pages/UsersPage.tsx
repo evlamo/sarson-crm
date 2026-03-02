@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { AlertCircle } from 'lucide-react';
 
 interface UserRow {
   id: string;
@@ -28,6 +29,7 @@ interface UserRow {
 
 export default function UsersPage() {
   const currentUser = useAuth((s) => s.user);
+  const isAdmin = useAuth((s) => s.isAdmin);
   const queryClient = useQueryClient();
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -35,12 +37,24 @@ export default function UsersPage() {
 
   useEffect(() => { document.title = 'Users — Sarson Funds CRM'; }, []);
 
+  // Admin check — hide page content if not admin
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+        <AlertCircle className="h-12 w-12 mb-4 text-destructive" />
+        <p className="text-lg font-semibold">Access Denied</p>
+        <p className="text-sm mt-1">You don't have permission to view this page.</p>
+      </div>
+    );
+  }
+
   const { data: users = [], isLoading } = useQuery<UserRow[]>({
     queryKey: ['users'],
     queryFn: async () => {
       const res = await api.get('/users/');
       return res.data;
     },
+    enabled: isAdmin,
   });
 
   const deactivate = useMutation({
@@ -67,6 +81,17 @@ export default function UsersPage() {
     onError: () => toast.error('Failed to reset password'),
   });
 
+  const getRoleBadge = (role: string) => {
+    switch (role) {
+      case 'owner':
+        return <Badge className="bg-purple-600">Owner</Badge>;
+      case 'admin':
+        return <Badge className="bg-blue-600">Admin</Badge>;
+      default:
+        return <Badge variant="secondary">Member</Badge>;
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">User Management</h1>
@@ -88,10 +113,7 @@ export default function UsersPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}
-                      className={u.role === 'admin' ? 'bg-blue-600' : ''}>
-                      {u.role === 'admin' ? 'Admin' : 'Member'}
-                    </Badge>
+                    {getRoleBadge(u.role)}
                     {!u.is_active && <Badge variant="destructive">Inactive</Badge>}
                     <span className="text-xs text-muted-foreground">
                       {u.last_login ? `Last login: ${formatDate(u.last_login)}` : 'Never logged in'}

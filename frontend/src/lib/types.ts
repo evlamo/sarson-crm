@@ -3,7 +3,7 @@ export interface Contact {
   first_name: string | null;
   middle_name: string | null;
   last_name: string | null;
-  full_name: string;           // never null — defaults to ""
+  full_name: string;           // never null - defaults to ""
   email: string | null;
   email_domain: string | null;
   email_secondary: string | null;
@@ -33,6 +33,10 @@ export interface Contact {
   email_valid: boolean;
   email_bounced: boolean;
   email_unsubscribed: boolean;
+  // DNC fields (Phase 2)
+  master_dnc: boolean;
+  master_dnc_reason: string | null;
+  master_dnc_set_at: string | null;
   notes: string | null;
   custom_fields: Record<string, unknown>;
   tags: { id: string; name: string; color: string; category: string }[];
@@ -93,4 +97,31 @@ export interface Deal {
   company_id: string | null;
   owner_id: string | null;
   created_at: string;
+}
+
+// Sales Campaign types (Phase 2)
+export interface SalesCampaign {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  owner_id: string | null;
+  contact_count: number;
+  email_campaign_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignContact {
+  id: string;
+  contact_id: string;
+  contact_name: string;
+  contact_email: string | null;
+  contact_company: string | null;
+  status: string;
+  completion_status: string | null;
+  excluded_reason: string | null;
+  master_dnc: boolean;
+  added_at: string;
+  updated_at: string;
 }

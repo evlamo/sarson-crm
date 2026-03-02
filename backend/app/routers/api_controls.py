@@ -24,7 +24,8 @@ router = APIRouter(prefix="/api/v1/api-controls", tags=["api-controls"])
 
 
 def _require_admin(user: User):
-    if getattr(user, 'role', None) != 'admin':
+    """Check if user has admin or owner role."""
+    if getattr(user, 'role', None) not in ('admin', 'owner'):
         raise HTTPException(status_code=403, detail="Admin access required")
 
 

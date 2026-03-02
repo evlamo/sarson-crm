@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 import uuid
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_admin_user
 from app.models.contact import Contact
 from app.models.company import Company
 from app.models.tag import Tag
@@ -526,9 +526,10 @@ def bulk_update_contacts(
 
 @router.post("/bulk-delete", status_code=status.HTTP_200_OK)
 def bulk_delete_contacts(
+    # Admin-only: bulk delete is a destructive operation
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    admin: User = Depends(get_admin_user),
 ):
     """Soft-delete multiple contacts in a single DB round-trip."""
     contacts = (
