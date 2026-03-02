@@ -1,6 +1,7 @@
 """
 Audit and history models.
 Phase 1 Foundation — Full audit trail for compliance and debugging.
+Phase 4 — Enhanced with stats-based snapshots.
 """
 import uuid
 from datetime import datetime, timezone
@@ -28,8 +29,8 @@ class AuditLog(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-    action = Column(String(100), nullable=False)  # 'contact.update', 'contact.delete', 'campaign.create', etc.
-    entity_type = Column(String(100), nullable=False)  # 'contact', 'campaign', 'user', etc.
+    action = Column(String(100), nullable=False)
+    entity_type = Column(String(100), nullable=False)
     entity_id = Column(UUID(as_uuid=True))
     old_values = Column(JSONB)
     new_values = Column(JSONB)
@@ -37,7 +38,6 @@ class AuditLog(Base):
     user_agent = Column(Text)
     created_at = Column(DateTime(timezone=True), default=_utcnow, index=True)
 
-    # Relationships
     user = relationship("User", foreign_keys=[user_id])
 
 
@@ -58,9 +58,8 @@ class ContactFieldHistory(Base):
     new_value = Column(Text)
     changed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     changed_at = Column(DateTime(timezone=True), default=_utcnow, index=True)
-    source = Column(String(50), default="manual")  # 'manual', 'import', 'sheets_sync', 'api'
+    source = Column(String(50), default="manual")
 
-    # Relationships
     contact = relationship("Contact", foreign_keys=[contact_id])
     changed_by_user = relationship("User", foreign_keys=[changed_by])
 
@@ -68,18 +67,18 @@ class ContactFieldHistory(Base):
 class DbSnapshot(Base):
     """
     Registry of database snapshots for rollback capability.
-    Tracks manual and automatic backups.
+    Supports both file-based backups and lightweight stats snapshots.
     """
     __tablename__ = "db_snapshots"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     label = Column(String(255))
-    snapshot_type = Column(String(50), default="auto")  # 'auto', 'manual', 'pre_import'
-    file_path = Column(Text, nullable=False)
+    snapshot_type = Column(String(50), default="auto")  # 'auto', 'manual', 'pre_import', 'stats'
+    file_path = Column(Text)  # nullable for stats-based snapshots
     file_size_bytes = Column(BigInteger)
+    data = Column(JSONB)  # For stats-based snapshots: counts, recent changes, etc.
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), default=_utcnow, index=True)
-    expires_at = Column(DateTime(timezone=True))  # auto snapshots expire after 30 days
+    expires_at = Column(DateTime(timezone=True))
 
-    # Relationships
     creator = relationship("User", foreign_keys=[created_by])

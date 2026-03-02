@@ -17,6 +17,7 @@ import {
   UserPlus,
   KeyRound,
   Target,
+  Clock,
 } from 'lucide-react';
 
 const navItems = [
@@ -27,6 +28,7 @@ const navItems = [
   { to: '/sales-campaigns', label: 'Sales Campaigns', icon: Target },
   { to: '/campaign-stats', label: 'Campaign Stats', icon: BarChart3 },
   { to: '/lists', label: 'Lists', icon: Filter },
+  { to: '/activity', label: 'Activity', icon: Clock },
   { to: '/tags', label: 'Tags', icon: Tag },
   { to: '/import', label: 'Import', icon: Upload },
   { to: '/imports', label: 'Import History', icon: History },

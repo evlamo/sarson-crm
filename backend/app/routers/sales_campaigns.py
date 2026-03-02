@@ -18,6 +18,7 @@ from app.models.user import User
 from app.models.contact import Contact
 from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.campaign import EmailCampaign
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/sales-campaigns", tags=["sales-campaigns"])
 
@@ -124,19 +125,15 @@ def _is_contact_dnc(contact: Contact) -> bool:
 
 def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_id: str, old_values: dict = None, new_values: dict = None):
     """Sync audit logging - fire and forget."""
-    try:
-        from app.models.audit import AuditLog
-        audit = AuditLog(
-            user_id=str(user_id),
-            action=action,
-            entity_type=entity_type,
-            entity_id=str(entity_id),
-            old_values=old_values,
-            new_values=new_values,
-        )
-        db.add(audit)
-    except Exception:
-        pass  # Never fail on audit
+    audit_service.log_action_sync(
+        db=db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        old_values=old_values,
+        new_values=new_values,
+        user_id=user_id,
+    )
 
 
 def _build_campaign_out(campaign: SalesCampaign, db: Session) -> SalesCampaignOut:

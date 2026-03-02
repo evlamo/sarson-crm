@@ -24,6 +24,7 @@ from app.schemas.contact import (
 )
 from app.models.user import User
 from app.services.company_service import get_or_create_company
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["contacts"])
 
@@ -79,7 +80,6 @@ def _sync_poc_on_company(db: Session, contact):
         if company:
             company.poc_contact_id = contact.id
     elif contact.company_id:
-        # If status changed away from poc, clear if this contact was the poc
         company = db.query(Company).filter(Company.id == contact.company_id).first()
         if company and company.poc_contact_id == contact.id:
             company.poc_contact_id = None
@@ -92,7 +92,7 @@ def _resolve_company(db: Session, data: dict, contact=None):
         co = get_or_create_company(db, company_name)
         if co:
             data["company_id"] = co.id
-            data["company"] = co.name  # normalize casing
+            data["company"] = co.name
         else:
             data["company_id"] = None
 
@@ -115,12 +115,41 @@ def _build_response(contact: Contact) -> ContactResponse:
     """Enrich ContactResponse with computed fields."""
     data = ContactResponse.model_validate(contact)
     data.full_name = contact.full_name
-    # Resolve company_name: prefer related Company object, fall back to text field
     if contact.company_obj:
         data.company_name = contact.company_obj.name
     elif contact.company:
         data.company_name = contact.company
     return data
+
+
+def _capture_contact_snapshot(contact: Contact, fields: Optional[List[str]] = None) -> dict:
+    """Capture current values of a contact for audit comparison."""
+    snapshot = {}
+    target_fields = fields or [
+        "first_name", "last_name", "email", "phone", "title", "company",
+        "company_id", "status", "sarson_rep", "city", "state", "country",
+        "linkedin_url", "website", "notes", "next_step", "lead_source",
+        "contact_method_preference", "contact_method_custom", "last_contacted_at",
+    ]
+    for field in target_fields:
+        val = getattr(contact, field, None)
+        if val is not None:
+            snapshot[field] = str(val) if not isinstance(val, str) else val
+        else:
+            snapshot[field] = None
+    return snapshot
+
+
+def _compute_changes(old_snapshot: dict, new_snapshot: dict) -> dict:
+    """Compare two snapshots and return dict of changes."""
+    changes = {}
+    all_keys = set(old_snapshot.keys()) | set(new_snapshot.keys())
+    for key in all_keys:
+        old_val = old_snapshot.get(key)
+        new_val = new_snapshot.get(key)
+        if old_val != new_val:
+            changes[key] = {"old": old_val, "new": new_val}
+    return changes
 
 
 # ── List / Search ──────────────────────────────────────────────────────────
@@ -140,25 +169,17 @@ def list_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Paginated contact list with filters:
-    - search: full-text via tsvector (falls back to ILIKE on name/email)
-    - status, contacted, assigned_to, sarson_rep, tag_id filters
-    """
     query = (
         db.query(Contact)
         .options(joinedload(Contact.tags), joinedload(Contact.company_obj))
         .filter(Contact.deleted_at.is_(None))
     )
 
-    # Filter by tag
     if tag_id:
         query = query.filter(Contact.tags.any(Tag.id == tag_id))
 
-    # Full-text search
     if search:
         search_clean = search.strip()
-        # Escape ILIKE wildcards to prevent pattern injection
         search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
         query = query.filter(
             or_(
@@ -179,7 +200,6 @@ def list_contacts(
     if sarson_rep:
         query = query.filter(Contact.sarson_rep.ilike(f"%{sarson_rep}%"))
 
-    # Whitelist of sortable fields → Contact column
     SORTABLE = {
         "last_name":        Contact.last_name,
         "first_name":       Contact.first_name,
@@ -198,16 +218,13 @@ def list_contacts(
     sort_col = SORTABLE.get(sort, Contact.last_name)
     sort_expr = sort_col.desc().nullslast() if order == "desc" else sort_col.asc().nullslast()
 
-    # Always add tiebreaker secondary sorts for stable, predictable ordering
     if sort == "last_name":
         secondary = Contact.first_name.asc().nullslast()
     elif sort == "first_name":
         secondary = Contact.last_name.asc().nullslast()
     else:
-        # For all other sorts, tiebreak by last_name then first_name
         secondary = Contact.last_name.asc().nullslast()
 
-    # Efficient count — no joins, just filter the base query
     total = db.query(func.count(Contact.id)).filter(
         Contact.deleted_at.is_(None),
         *([Contact.status == status] if status else []),
@@ -246,7 +263,6 @@ def get_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a single contact with company and tags."""
     return _build_response(_get_contact_or_404(contact_id, db))
 
 
@@ -258,17 +274,12 @@ def create_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a contact. email_domain is auto-extracted from email via model event."""
     data = payload.model_dump(exclude_unset=True)
-    # Map schema field names → model column names
     if 'source' in data:
         data['lead_source'] = data.pop('source')
-    # Auto-resolve company name → company_id
     _resolve_company(db, data)
-    # Strip any keys that don't exist on the model to prevent TypeError
     valid_cols = {c.key for c in Contact.__table__.columns}
     data = {k: v for k, v in data.items() if k in valid_cols}
-    # POC enforcement
     if data.get("status") == "poc" and data.get("company_id"):
         _check_poc_enforcement(db, None, data["company_id"], "poc")
     contact = Contact(**data)
@@ -280,6 +291,16 @@ def create_contact(
         raise HTTPException(status_code=409, detail="A contact with this email already exists")
     db.refresh(contact)
     _sync_poc_on_company(db, contact)
+    
+    # Audit log: contact created
+    audit_service.log_action_sync(
+        db=db,
+        action="contact.create",
+        entity_type="contact",
+        entity_id=str(contact.id),
+        new_values=_capture_contact_snapshot(contact),
+        user_id=str(current_user.id),
+    )
     db.commit()
     return _build_response(_get_contact_or_404(str(contact.id), db))
 
@@ -293,8 +314,8 @@ def update_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Full update of a contact."""
     contact = _get_contact_or_404(contact_id, db)
+    old_snapshot = _capture_contact_snapshot(contact)
     valid_cols = {c.key for c in Contact.__table__.columns}
     for field, value in payload.model_dump(exclude_unset=True).items():
         key = 'lead_source' if field == 'source' else field
@@ -302,6 +323,20 @@ def update_contact(
             setattr(contact, key, value)
 
     contact.updated_at = _utcnow()
+    
+    new_snapshot = _capture_contact_snapshot(contact)
+    changes = _compute_changes(old_snapshot, new_snapshot)
+    
+    if changes:
+        audit_service.log_entity_changes_sync(
+            db=db,
+            entity=contact,
+            changes=changes,
+            action="contact.update",
+            entity_type="contact",
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     db.refresh(contact)
     return _build_response(_get_contact_or_404(contact_id, db))
@@ -316,29 +351,25 @@ def patch_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Partial update — only provided fields are changed."""
     contact = _get_contact_or_404(contact_id, db)
+    old_snapshot = _capture_contact_snapshot(contact)
+    
     data = payload.model_dump(exclude_unset=True)
-    # Map source → lead_source
     if 'source' in data:
         data['lead_source'] = data.pop('source')
-    # Auto-resolve company name → company_id
     _resolve_company(db, data, contact)
     valid_cols = {c.key for c in Contact.__table__.columns}
-    # Determine the final status and company_id for POC check
     new_status = data.get("status", contact.status)
     new_company_id = data.get("company_id", contact.company_id)
     if new_status == "poc":
         _check_poc_enforcement(db, contact.id, new_company_id, "poc")
 
-    # Capture old status BEFORE applying changes for Google Ads trigger detection
     old_status = contact.status
 
     for key, value in data.items():
         if key in valid_cols:
             setattr(contact, key, value)
 
-    # Auto-trigger Google Ads conversion only if status actually changed
     if "status" in data and data["status"] != old_status:
         from app.models.google_ads import GoogleAdsConversionAction
         from app.services.google_ads_service import is_gclid_valid
@@ -353,6 +384,20 @@ def patch_contact(
 
     contact.updated_at = _utcnow()
     _sync_poc_on_company(db, contact)
+    
+    new_snapshot = _capture_contact_snapshot(contact)
+    changes = _compute_changes(old_snapshot, new_snapshot)
+    
+    if changes:
+        audit_service.log_entity_changes_sync(
+            db=db,
+            entity=contact,
+            changes=changes,
+            action="contact.update",
+            entity_type="contact",
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     return _build_response(_get_contact_or_404(contact_id, db))
 
@@ -365,9 +410,18 @@ def delete_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Soft-delete a contact (sets deleted_at, never hard deletes)."""
     contact = _get_contact_or_404(contact_id, db)
+    old_snapshot = _capture_contact_snapshot(contact)
     contact.deleted_at = _utcnow()
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="contact.delete",
+        entity_type="contact",
+        entity_id=str(contact.id),
+        old_values=old_snapshot,
+        user_id=str(current_user.id),
+    )
     db.commit()
 
 
@@ -380,7 +434,6 @@ def create_contact_activity(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Add a note/activity to a contact's timeline."""
     contact = _get_contact_or_404(contact_id, db)
 
     activity = Activity(
@@ -415,8 +468,6 @@ def get_contact_activities(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Contact activity timeline, newest first."""
-    # Verify contact exists
     _get_contact_or_404(contact_id, db)
 
     query = db.query(Activity).filter(Activity.contact_id == contact_id)
@@ -428,7 +479,6 @@ def get_contact_activities(
         .all()
     )
 
-    # Return raw activity dicts (activity schema TBD in later raider)
     return {
         "data": [
             {
@@ -458,7 +508,6 @@ def remove_tag_from_contact(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Remove a single tag from a contact."""
     contact = _get_contact_or_404(contact_id, db)
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
     if not tag:
@@ -466,7 +515,80 @@ def remove_tag_from_contact(
     if tag in contact.tags:
         contact.tags.remove(tag)
         contact.updated_at = _utcnow()
+        
+        audit_service.log_action_sync(
+            db=db,
+            action="contact.remove_tag",
+            entity_type="contact",
+            entity_id=str(contact.id),
+            old_values={"tag_id": str(tag.id), "tag_name": tag.name},
+            user_id=str(current_user.id),
+        )
         db.commit()
+
+
+# ── Add Tag by ID ──────────────────────────────────────────────────────────
+
+@router.post("/{contact_id}/tags/by-id")
+def add_tag_to_contact_by_id(
+    contact_id: str,
+    tag_id: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = _get_contact_or_404(contact_id, db)
+    tag = db.query(Tag).filter(Tag.id == tag_id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    if tag not in contact.tags:
+        contact.tags.append(tag)
+        contact.updated_at = _utcnow()
+        
+        audit_service.log_action_sync(
+            db=db,
+            action="contact.add_tag",
+            entity_type="contact",
+            entity_id=str(contact.id),
+            new_values={"tag_id": str(tag.id), "tag_name": tag.name},
+            user_id=str(current_user.id),
+        )
+        db.commit()
+    return {"status": "ok", "tag_id": str(tag.id)}
+
+
+# ── Add Tag by Name (create if needed) ─────────────────────────────────────
+
+class TagNameRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+@router.post("/{contact_id}/tags")
+def add_tag_to_contact_by_name(
+    contact_id: str,
+    payload: TagNameRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = _get_contact_or_404(contact_id, db)
+    tag_name = payload.name.strip()
+    tag = db.query(Tag).filter(func.lower(Tag.name) == func.lower(tag_name)).first()
+    if not tag:
+        tag = Tag(name=tag_name)
+        db.add(tag)
+        db.flush()
+    if tag not in contact.tags:
+        contact.tags.append(tag)
+        contact.updated_at = _utcnow()
+        
+        audit_service.log_action_sync(
+            db=db,
+            action="contact.add_tag",
+            entity_type="contact",
+            entity_id=str(contact.id),
+            new_values={"tag_id": str(tag.id), "tag_name": tag.name},
+            user_id=str(current_user.id),
+        )
+    db.commit()
+    return {"status": "ok", "tag": {"id": str(tag.id), "name": tag.name}}
 
 
 # ── Bulk Update ────────────────────────────────────────────────────────────
@@ -477,10 +599,6 @@ def bulk_update_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Bulk update contacts by ID list.
-    Can set: status, assigned_to. Can add: tags (by ID list).
-    """
     contacts = (
         db.query(Contact)
         .filter(
@@ -493,7 +611,6 @@ def bulk_update_contacts(
     if not contacts:
         raise HTTPException(status_code=404, detail="No matching contacts found")
 
-    # Scalar field updates
     update_fields = {}
     if payload.status is not None:
         update_fields["status"] = payload.status
@@ -505,7 +622,6 @@ def bulk_update_contacts(
             setattr(contact, field, value)
         contact.updated_at = _utcnow()
 
-    # Tag additions
     tags_added = 0
     if payload.tag_ids:
         tags = db.query(Tag).filter(Tag.id.in_(payload.tag_ids)).all()
@@ -517,6 +633,21 @@ def bulk_update_contacts(
                     contact.tags.append(tag)
                     tags_added += 1
 
+    # Audit log: bulk update
+    audit_service.log_action_sync(
+        db=db,
+        action="contact.bulk_update",
+        entity_type="contact",
+        entity_id=None,
+        new_values={
+            "contact_count": len(contacts),
+            "contact_ids": [str(c.id) for c in contacts[:10]],
+            "updates": update_fields,
+            "tags_added": tags_added,
+        },
+        user_id=str(current_user.id),
+    )
+    
     db.commit()
 
     return BulkUpdateResponse(updated=len(contacts), tags_added=tags_added)
@@ -526,12 +657,10 @@ def bulk_update_contacts(
 
 @router.post("/bulk-delete", status_code=status.HTTP_200_OK)
 def bulk_delete_contacts(
-    # Admin-only: bulk delete is a destructive operation
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(get_admin_user),
 ):
-    """Soft-delete multiple contacts in a single DB round-trip."""
     contacts = (
         db.query(Contact)
         .filter(
@@ -544,8 +673,21 @@ def bulk_delete_contacts(
         raise HTTPException(status_code=404, detail="No matching contacts found")
 
     now = _utcnow()
+    contact_ids = [str(c.id) for c in contacts]
     for contact in contacts:
         contact.deleted_at = now
 
+    audit_service.log_action_sync(
+        db=db,
+        action="contact.bulk_delete",
+        entity_type="contact",
+        entity_id=None,
+        old_values={
+            "contact_count": len(contacts),
+            "contact_ids": contact_ids[:20],
+        },
+        user_id=str(admin.id),
+    )
+    
     db.commit()
     return {"deleted": len(contacts)}

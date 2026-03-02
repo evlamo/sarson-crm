@@ -14,6 +14,7 @@ import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle,
 import { RepAssignPopover } from '@/components/RepAssignPopover';
 import { EditableField } from '@/components/EditableField';
 import { CompanyCombobox } from '@/components/CompanyCombobox';
+import { ContactActivityPanel } from '@/components/ContactActivityPanel';
 
 interface ContactDetail {
   id: string;
@@ -1080,6 +1081,9 @@ export default function ContactDetailPage() {
               />
             </CardContent>
           </Card>
+
+          {/* Activity & History - Phase 4 */}
+          <ContactActivityPanel contactId={contactId!} isAdmin={true} />
         </div>
       </div>
     </div>

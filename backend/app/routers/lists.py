@@ -16,6 +16,7 @@ from app.schemas.static_list import (
     StaticListListResponse, ContactIdsRequest, StaticListContactsResponse,
 )
 from app.services.segment_service import build_segment_query
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/lists", tags=["static-lists"])
 
@@ -75,6 +76,17 @@ def create_static_list(
     db.add(sl)
     db.commit()
     db.refresh(sl)
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="list.create",
+        entity_type="list",
+        entity_id=str(sl.id),
+        new_values={"name": sl.name, "description": sl.description},
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     return _list_response(sl, db)
 
 
@@ -86,11 +98,29 @@ def update_static_list(
     current_user: User = Depends(get_current_user),
 ):
     sl = _get_list_or_404(list_id, db)
+    old_values = {"name": sl.name, "description": sl.description}
+    
     if payload.name is not None:
         sl.name = payload.name
     if payload.description is not None:
         sl.description = payload.description
     sl.updated_at = utcnow()
+    
+    new_values = {"name": sl.name, "description": sl.description}
+    changes = {k: {"old": old_values[k], "new": new_values[k]} 
+               for k in old_values if old_values[k] != new_values[k]}
+    
+    if changes:
+        audit_service.log_action_sync(
+            db=db,
+            action="list.update",
+            entity_type="list",
+            entity_id=str(sl.id),
+            old_values={k: v["old"] for k, v in changes.items()},
+            new_values={k: v["new"] for k, v in changes.items()},
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     db.refresh(sl)
     return _list_response(sl, db)
@@ -103,6 +133,16 @@ def delete_static_list(
     admin: User = Depends(get_admin_user),
 ):
     sl = _get_list_or_404(list_id, db)
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="list.delete",
+        entity_type="list",
+        entity_id=str(sl.id),
+        old_values={"name": sl.name, "description": sl.description},
+        user_id=str(admin.id),
+    )
+    
     db.delete(sl)
     db.commit()
 
@@ -153,9 +193,8 @@ def add_contacts_to_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _get_list_or_404(list_id, db)
+    sl = _get_list_or_404(list_id, db)
 
-    # Get existing members to avoid duplicates
     existing = set(
         r[0] for r in db.query(StaticListMember.c.contact_id)
         .filter(StaticListMember.c.list_id == list_id)
@@ -164,7 +203,6 @@ def add_contacts_to_list(
 
     new_ids = [cid for cid in payload.contact_ids if cid not in existing]
     if new_ids:
-        # Verify contacts exist
         valid = set(
             r[0] for r in db.query(Contact.id)
             .filter(Contact.id.in_(new_ids), Contact.deleted_at.is_(None))
@@ -173,6 +211,16 @@ def add_contacts_to_list(
         rows = [{"list_id": list_id, "contact_id": cid} for cid in new_ids if cid in valid]
         if rows:
             db.execute(insert(StaticListMember), rows)
+            
+            audit_service.log_action_sync(
+                db=db,
+                action="list.add_contacts",
+                entity_type="list",
+                entity_id=str(list_id),
+                new_values={"added_count": len(rows), "contact_ids": [str(r["contact_id"]) for r in rows[:10]]},
+                user_id=str(current_user.id),
+            )
+            
             db.commit()
 
     return {"added": len(new_ids), "list_id": str(list_id)}
@@ -186,6 +234,16 @@ def remove_contacts_from_list(
     current_user: User = Depends(get_current_user),
 ):
     _get_list_or_404(list_id, db)
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="list.remove_contacts",
+        entity_type="list",
+        entity_id=str(list_id),
+        old_values={"removed_count": len(payload.contact_ids), "contact_ids": [str(cid) for cid in payload.contact_ids[:10]]},
+        user_id=str(current_user.id),
+    )
+    
     db.execute(
         delete(StaticListMember).where(
             StaticListMember.c.list_id == list_id,
@@ -209,11 +267,9 @@ def snapshot_segment_to_list(
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
 
-    # Get all contact IDs from segment
     query = build_segment_query(db, segment.filters)
     contact_ids = [r[0] for r in query.with_entities(Contact.id).all()]
 
-    # Get existing members
     existing = set(
         r[0] for r in db.query(StaticListMember.c.contact_id)
         .filter(StaticListMember.c.list_id == list_id)
@@ -223,6 +279,16 @@ def snapshot_segment_to_list(
     new_ids = [cid for cid in contact_ids if cid not in existing]
     if new_ids:
         db.execute(insert(StaticListMember), [{"list_id": list_id, "contact_id": cid} for cid in new_ids])
+        
+        audit_service.log_action_sync(
+            db=db,
+            action="list.snapshot_segment",
+            entity_type="list",
+            entity_id=str(list_id),
+            new_values={"segment_id": str(segment_id), "segment_name": segment.name, "added_count": len(new_ids)},
+            user_id=str(current_user.id),
+        )
+        
         db.commit()
 
     return _list_response(sl, db)

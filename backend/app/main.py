@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -25,10 +26,44 @@ from app.routers.api_controls import router as api_controls_router
 from app.routers.sales_campaigns import router as sales_campaigns_router
 from app.routers.email_campaigns_hierarchy import router as email_campaigns_hierarchy_router
 from app.routers.dnc import router as dnc_router
+# Phase 4: Audit Trail
+from app.routers.audit import router as audit_router
 from app.models import google_ads as _google_ads_models  # noqa
 from app.models import api_credentials as _api_credentials_models  # noqa
 
+import logging
+logger = logging.getLogger(__name__)
+
 limiter = Limiter(key_func=get_remote_address)
+
+# Scheduler for background tasks
+scheduler = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan - startup and shutdown."""
+    global scheduler
+    # Startup
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from app.tasks.db_snapshot import schedule_snapshot_job
+        
+        scheduler = AsyncIOScheduler()
+        schedule_snapshot_job(scheduler)
+        scheduler.start()
+        logger.info("APScheduler started with snapshot job")
+    except ImportError:
+        logger.warning("APScheduler not installed - snapshot job disabled")
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}")
+    
+    yield
+    
+    # Shutdown
+    if scheduler:
+        scheduler.shutdown()
+        logger.info("APScheduler shutdown")
+
 
 app = FastAPI(
     title="Speranza CRM",
@@ -36,6 +71,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
+    lifespan=lifespan,
 )
 
 app.state.limiter = limiter
@@ -87,6 +123,8 @@ app.include_router(api_controls_router)
 app.include_router(sales_campaigns_router)
 app.include_router(email_campaigns_hierarchy_router)
 app.include_router(dnc_router)
+# Phase 4: Audit Trail
+app.include_router(audit_router)
 
 @app.get("/health")
 def health():

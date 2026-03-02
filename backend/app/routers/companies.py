@@ -12,16 +12,40 @@ from app.models.contact import Contact
 from app.schemas.company import CompanyCreate, CompanyUpdate, CompanyPatch, CompanyResponse, PaginatedCompanies
 from app.schemas.contact import ContactResponse
 from app.models.user import User
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/companies", tags=["companies"])
 
 
+def _capture_company_snapshot(company: Company) -> dict:
+    """Capture current values of a company for audit."""
+    return {
+        "name": company.name,
+        "domain": company.domain,
+        "website": company.website,
+        "industry": company.industry,
+        "phone": company.phone,
+        "address": company.address,
+        "city": company.city,
+        "state": company.state,
+        "country": company.country,
+        "employee_count": company.employee_count,
+        "aum": str(company.aum) if company.aum else None,
+        "notes": company.notes,
+    }
+
+
+def _compute_changes(old: dict, new: dict) -> dict:
+    changes = {}
+    for key in set(old.keys()) | set(new.keys()):
+        old_val = old.get(key)
+        new_val = new.get(key)
+        if old_val != new_val:
+            changes[key] = {"old": old_val, "new": new_val}
+    return changes
+
+
 def _company_response(company: Company, db: Session, contact_count: int | None = None) -> CompanyResponse:
-    """Build CompanyResponse with contact_count.
-    
-    If contact_count is provided (pre-fetched), use it directly.
-    Otherwise query inline (for single-company endpoints).
-    """
     if contact_count is None:
         contact_count = db.query(func.count(Contact.id)).filter(
             Contact.company_id == company.id,
@@ -40,7 +64,6 @@ def list_companies(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Paginated list of companies. Filter by name search."""
     query = db.query(Company).filter(Company.deleted_at.is_(None))
 
     if search:
@@ -54,7 +77,6 @@ def list_companies(
         .all()
     )
 
-    # Pre-fetch contact counts in a single query to avoid N+1
     contact_counts = dict(
         db.query(Contact.company_id, func.count(Contact.id))
         .filter(Contact.company_id.in_([c.id for c in companies]), Contact.deleted_at.is_(None))
@@ -76,7 +98,6 @@ def get_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a single company with contact count."""
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
@@ -92,7 +113,6 @@ def create_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new company."""
     if payload.domain:
         existing = db.query(Company).filter(Company.domain == payload.domain).first()
         if existing:
@@ -102,6 +122,17 @@ def create_company(
     db.add(company)
     db.commit()
     db.refresh(company)
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="company.create",
+        entity_type="company",
+        entity_id=str(company.id),
+        new_values=_capture_company_snapshot(company),
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     return _company_response(company, db)
 
 
@@ -112,7 +143,6 @@ def update_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Full update of a company."""
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
@@ -120,7 +150,8 @@ def update_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Domain uniqueness check (exclude self)
+    old_snapshot = _capture_company_snapshot(company)
+
     if payload.domain:
         conflict = db.query(Company).filter(
             Company.domain == payload.domain,
@@ -133,6 +164,21 @@ def update_company(
         setattr(company, field, value)
 
     company.updated_at = utcnow()
+    
+    new_snapshot = _capture_company_snapshot(company)
+    changes = _compute_changes(old_snapshot, new_snapshot)
+    
+    if changes:
+        audit_service.log_action_sync(
+            db=db,
+            action="company.update",
+            entity_type="company",
+            entity_id=str(company.id),
+            old_values={k: v["old"] for k, v in changes.items()},
+            new_values={k: v["new"] for k, v in changes.items()},
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     db.refresh(company)
     return _company_response(company, db)
@@ -144,7 +190,6 @@ def delete_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
-    """Soft-delete a company."""
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
@@ -152,14 +197,24 @@ def delete_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    # Reset POC status for contacts in this company before nulling company_id
+    old_snapshot = _capture_company_snapshot(company)
+
     db.query(Contact).filter(
         Contact.company_id == company.id,
         Contact.status == 'poc',
     ).update({'status': 'prospect'})
-    # Null out company_id on contacts but keep company text
     db.query(Contact).filter(Contact.company_id == company.id).update({'company_id': None})
     company.deleted_at = utcnow()
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="company.delete",
+        entity_type="company",
+        entity_id=str(company.id),
+        old_values=old_snapshot,
+        user_id=str(current_user.id),
+    )
+    
     db.commit()
 
 
@@ -170,12 +225,6 @@ def patch_company(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Partial update of a company.
-    
-    Note: updating company.name does NOT retroactively update Contact.company text fields.
-    Display uses the relationship (company_obj.name), so UI is correct.
-    The denormalized Contact.company field is only used for import/legacy compatibility.
-    """
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
@@ -183,10 +232,27 @@ def patch_company(
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
+    old_snapshot = _capture_company_snapshot(company)
+
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(company, field, value)
 
     company.updated_at = utcnow()
+    
+    new_snapshot = _capture_company_snapshot(company)
+    changes = _compute_changes(old_snapshot, new_snapshot)
+    
+    if changes:
+        audit_service.log_action_sync(
+            db=db,
+            action="company.update",
+            entity_type="company",
+            entity_id=str(company.id),
+            old_values={k: v["old"] for k, v in changes.items()},
+            new_values={k: v["new"] for k, v in changes.items()},
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     db.refresh(company)
     return _company_response(company, db)
@@ -200,7 +266,6 @@ def get_company_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List contacts belonging to a company."""
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
@@ -245,7 +310,6 @@ def get_company_poc(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get the current POC contact for a company."""
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
@@ -277,12 +341,6 @@ def assign_company_poc(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Assign a contact as POC for a company.
-    If the company already has a POC, that contact's status is automatically
-    demoted to 'active'. The new contact's status is set to 'poc'.
-    Only contacts belonging to this company can be assigned as POC.
-    """
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
@@ -303,7 +361,8 @@ def assign_company_poc(
             detail="Contact does not belong to this company",
         )
 
-    # Demote existing POC → active
+    old_poc_id = company.poc_contact_id
+
     if company.poc_contact_id and str(company.poc_contact_id) != contact_id:
         existing_poc = db.query(Contact).filter(
             Contact.id == company.poc_contact_id,
@@ -312,9 +371,18 @@ def assign_company_poc(
         if existing_poc:
             existing_poc.status = "active"
 
-    # Promote new contact → poc
     new_poc.status = "poc"
     company.poc_contact_id = new_poc.id
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="company.assign_poc",
+        entity_type="company",
+        entity_id=str(company.id),
+        old_values={"poc_contact_id": str(old_poc_id) if old_poc_id else None},
+        new_values={"poc_contact_id": str(new_poc.id)},
+        user_id=str(current_user.id),
+    )
 
     db.commit()
     db.refresh(new_poc)
@@ -335,16 +403,14 @@ def remove_company_poc(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Remove the current POC from a company.
-    The contact's status is demoted to 'active'.
-    """
     company = db.query(Company).filter(
         Company.id == company_id,
         Company.deleted_at.is_(None),
     ).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
+
+    old_poc_id = company.poc_contact_id
 
     if company.poc_contact_id:
         existing_poc = db.query(Contact).filter(
@@ -354,6 +420,15 @@ def remove_company_poc(
         if existing_poc:
             existing_poc.status = "active"
         company.poc_contact_id = None
+        
+        audit_service.log_action_sync(
+            db=db,
+            action="company.remove_poc",
+            entity_type="company",
+            entity_id=str(company.id),
+            old_values={"poc_contact_id": str(old_poc_id)},
+            user_id=str(current_user.id),
+        )
 
     db.commit()
     return {"detail": "POC removed"}

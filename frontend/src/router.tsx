@@ -21,10 +21,10 @@ import CompaniesPage from '@/pages/CompaniesPage';
 import ListsPage from '@/pages/ListsPage';
 import ApiControlsPage from '@/pages/ApiControlsPage';
 import GoogleAdsPage from '@/pages/GoogleAdsPage';
+import ActivityPage from '@/pages/ActivityPage';
 
 import { useEffect } from 'react';
 
-// Placeholder pages for routes without dedicated pages yet
 function PlaceholderPage({ title }: { title: string }) {
   useEffect(() => { document.title = `${title} — Sarson Funds CRM`; }, [title]);
   return (
@@ -35,7 +35,6 @@ function PlaceholderPage({ title }: { title: string }) {
   );
 }
 
-// Unauthorized page for non-admin access attempts
 function UnauthorizedPage() {
   useEffect(() => { document.title = 'Unauthorized — Sarson Funds CRM'; }, []);
   return (
@@ -46,10 +45,8 @@ function UnauthorizedPage() {
   );
 }
 
-// Root route
 const rootRoute = createRootRoute();
 
-// Login route (public — redirect away if already authenticated)
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
@@ -70,7 +67,6 @@ const registerRoute = createRoute({
   },
 });
 
-// Auth guard
 function requireAuth() {
   const token = localStorage.getItem('access_token');
   if (!token) {
@@ -78,7 +74,6 @@ function requireAuth() {
   }
 }
 
-// Layout route (protected)
 const layoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'layout',
@@ -86,7 +81,6 @@ const layoutRoute = createRoute({
   beforeLoad: requireAuth,
 });
 
-// Index → redirect to /contacts
 const indexRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/',
@@ -173,7 +167,6 @@ const campaignStatsRoute = createRoute({
   component: CampaignStatsPage,
 });
 
-// Admin routes — protected by backend but UI also validates
 const usersRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/admin/users',
@@ -192,7 +185,12 @@ const apiControlsRoute = createRoute({
   component: ApiControlsPage,
 });
 
-// Build route tree
+const activityRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/activity',
+  component: ActivityPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   registerRoute,
@@ -212,12 +210,12 @@ const routeTree = rootRoute.addChildren([
     usersRoute,
     invitesRoute,
     apiControlsRoute,
+    activityRoute,
   ]),
 ]);
 
 export const router = createRouter({ routeTree });
 
-// Type safety
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;

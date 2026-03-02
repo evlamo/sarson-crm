@@ -1,6 +1,7 @@
 """
 Audit logging service.
 Phase 1 Foundation — Fire-and-forget audit trail for all actions.
+Phase 4 — Enhanced with sync support + field history tracking.
 """
 from typing import Optional, Any
 import json
@@ -28,30 +29,14 @@ async def log_action(
     user_agent: Optional[str] = None,
 ):
     """
-    Log an action to the audit log.
-    
-    This is fire-and-forget safe — never raises exceptions.
-    Always call this, even if you don't care about the result.
-    
-    Args:
-        db: Database connection (asyncpg or SQLAlchemy session)
-        action: Action identifier (e.g., 'contact.update', 'campaign.delete')
-        entity_type: Entity type (e.g., 'contact', 'campaign', 'user')
-        entity_id: UUID of the affected entity (can be None for actions without a specific entity)
-        old_values: Previous state (for updates/deletes)
-        new_values: New state (for creates/updates)
-        user_id: UUID of the user performing the action
-        ip_address: Client IP address
-        user_agent: Client user agent string
+    Log an action to the audit log (async version).
+    Fire-and-forget safe — never raises exceptions.
     """
     try:
-        # Safely convert UUIDs to strings (handles None, UUID objects, ints, etc.)
         safe_user_id = _safe_uuid_str(user_id)
         safe_entity_id = _safe_uuid_str(entity_id)
         
-        # Handle both asyncpg and SQLAlchemy patterns
         if hasattr(db, 'execute') and not hasattr(db, 'add'):
-            # asyncpg style - pass None directly when entity_id is None
             await db.execute("""
                 INSERT INTO audit_log (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent)
                 VALUES ($1::uuid, $2, $3, $4::uuid, $5::jsonb, $6::jsonb, $7, $8)
@@ -66,7 +51,6 @@ async def log_action(
                 user_agent,
             )
         else:
-            # SQLAlchemy ORM style
             from app.models.audit import AuditLog
             audit_entry = AuditLog(
                 user_id=safe_user_id,
@@ -79,10 +63,46 @@ async def log_action(
                 user_agent=user_agent,
             )
             db.add(audit_entry)
-            await db.commit()
+            # Don't commit here — let the caller handle transaction
     except Exception as e:
         logger.error(f"Audit log error: {e}")
-        # Never raise — audit failures should not break business logic
+
+
+def log_action_sync(
+    db,
+    action: str,
+    entity_type: str,
+    entity_id: Optional[str] = None,
+    old_values: Optional[dict] = None,
+    new_values: Optional[dict] = None,
+    user_id: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+):
+    """
+    Log an action to the audit log (sync version for FastAPI/SQLAlchemy).
+    Fire-and-forget safe — never raises exceptions.
+    """
+    try:
+        from app.models.audit import AuditLog
+        
+        safe_user_id = _safe_uuid_str(user_id)
+        safe_entity_id = _safe_uuid_str(entity_id)
+        
+        audit_entry = AuditLog(
+            user_id=safe_user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=safe_entity_id,
+            old_values=old_values,
+            new_values=new_values,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        db.add(audit_entry)
+        # Don't commit — transaction is managed by caller
+    except Exception as e:
+        logger.error(f"Audit log sync error: {e}")
 
 
 async def log_field_change(
@@ -94,20 +114,8 @@ async def log_field_change(
     changed_by: Optional[str] = None,
     source: str = "manual",
 ):
-    """
-    Log a field-level change for a contact.
-    
-    Args:
-        db: Database connection
-        contact_id: UUID of the contact
-        field_name: Name of the changed field
-        old_value: Previous value (will be stringified)
-        new_value: New value (will be stringified)
-        changed_by: UUID of the user making the change
-        source: Source of change ('manual', 'import', 'sheets_sync', 'api')
-    """
+    """Log a field-level change for a contact (async version)."""
     try:
-        # Safely convert UUIDs
         safe_contact_id = _safe_uuid_str(contact_id)
         safe_changed_by = _safe_uuid_str(changed_by)
         
@@ -134,6 +142,85 @@ async def log_field_change(
                 source=source,
             )
             db.add(history_entry)
-            await db.commit()
     except Exception as e:
         logger.error(f"Field history log error: {e}")
+
+
+def log_field_change_sync(
+    db,
+    contact_id: str,
+    field_name: str,
+    old_value: Any,
+    new_value: Any,
+    changed_by: Optional[str] = None,
+    source: str = "manual",
+):
+    """Log a field-level change for a contact (sync version)."""
+    try:
+        from app.models.audit import ContactFieldHistory
+        
+        safe_contact_id = _safe_uuid_str(contact_id)
+        safe_changed_by = _safe_uuid_str(changed_by)
+        
+        history_entry = ContactFieldHistory(
+            contact_id=safe_contact_id,
+            field_name=field_name,
+            old_value=str(old_value) if old_value is not None else None,
+            new_value=str(new_value) if new_value is not None else None,
+            changed_by=safe_changed_by,
+            source=source,
+        )
+        db.add(history_entry)
+    except Exception as e:
+        logger.error(f"Field history sync log error: {e}")
+
+
+def log_entity_changes_sync(
+    db,
+    entity,
+    changes: dict,
+    action: str,
+    entity_type: str,
+    user_id: str,
+):
+    """
+    Log both audit_log entry and field history (for contacts).
+    Convenience function for update operations.
+    
+    Args:
+        db: SQLAlchemy session
+        entity: The entity being updated
+        changes: Dict of {field: {"old": value, "new": value}}
+        action: Action type (e.g., "contact.update")
+        entity_type: Entity type (e.g., "contact")
+        user_id: User performing the action
+    """
+    if not changes:
+        return
+    
+    old_values = {k: v.get("old") for k, v in changes.items()}
+    new_values = {k: v.get("new") for k, v in changes.items()}
+    
+    # Log to audit_log
+    log_action_sync(
+        db=db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=str(entity.id),
+        old_values=old_values,
+        new_values=new_values,
+        user_id=user_id,
+    )
+    
+    # For contacts, also log field-level history
+    if entity_type == "contact":
+        for field_name, values in changes.items():
+            log_field_change_sync(
+                db=db,
+                contact_id=str(entity.id),
+                field_name=field_name,
+                old_value=values.get("old"),
+                new_value=values.get("new"),
+                changed_by=user_id,
+                source="manual",
+            )
