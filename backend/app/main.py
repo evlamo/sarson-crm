@@ -28,6 +28,8 @@ from app.routers.email_campaigns_hierarchy import router as email_campaigns_hier
 from app.routers.dnc import router as dnc_router
 # Phase 4: Audit Trail
 from app.routers.audit import router as audit_router
+# Phase 5: Google Sheets Sync
+from app.routers.sheets import router as sheets_router
 from app.models import google_ads as _google_ads_models  # noqa
 from app.models import api_credentials as _api_credentials_models  # noqa
 
@@ -125,6 +127,8 @@ app.include_router(email_campaigns_hierarchy_router)
 app.include_router(dnc_router)
 # Phase 4: Audit Trail
 app.include_router(audit_router)
+# Phase 5: Google Sheets Sync
+app.include_router(sheets_router)
 
 @app.get("/health")
 def health():

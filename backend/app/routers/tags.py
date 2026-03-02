@@ -10,6 +10,7 @@ from app.models.contact import Contact
 from app.models.tag import ContactTag
 from app.schemas.tag import TagCreate, TagUpdate, TagResponse
 from app.models.user import User
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1", tags=["tags"])
 
@@ -57,6 +58,18 @@ def create_tag(
     db.add(tag)
     db.commit()
     db.refresh(tag)
+    
+    # Audit: tag created
+    audit_service.log_action_sync(
+        db=db,
+        action="tag.create",
+        entity_type="tag",
+        entity_id=str(tag.id),
+        new_values={"name": tag.name, "color": tag.color},
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     return tag
 
 
@@ -71,10 +84,29 @@ def update_tag(
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
+    
+    old_values = {"name": tag.name, "color": tag.color}
+    
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(tag, key, value)
     db.commit()
     db.refresh(tag)
+    
+    new_values = {"name": tag.name, "color": tag.color}
+    changes = {k: v for k, v in new_values.items() if old_values.get(k) != v}
+    
+    if changes:
+        audit_service.log_action_sync(
+            db=db,
+            action="tag.update",
+            entity_type="tag",
+            entity_id=str(tag.id),
+            old_values={k: old_values[k] for k in changes},
+            new_values=changes,
+            user_id=str(current_user.id),
+        )
+        db.commit()
+    
     return tag
 
 
@@ -88,6 +120,17 @@ def delete_tag(
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
+    
+    # Audit: tag deleted
+    audit_service.log_action_sync(
+        db=db,
+        action="tag.delete",
+        entity_type="tag",
+        entity_id=str(tag.id),
+        old_values={"name": tag.name, "color": tag.color},
+        user_id=str(current_user.id),
+    )
+    
     db.delete(tag)
     db.commit()
 
@@ -111,14 +154,37 @@ def add_tag_to_contact(
 
     # Get or create tag
     tag = db.query(Tag).filter(Tag.name == payload.name).first()
+    created_new_tag = False
     if not tag:
         tag = Tag(**payload.model_dump())
         db.add(tag)
         db.flush()
+        created_new_tag = True
+        
+        # Audit: tag created
+        audit_service.log_action_sync(
+            db=db,
+            action="tag.create",
+            entity_type="tag",
+            entity_id=str(tag.id),
+            new_values={"name": tag.name, "color": tag.color},
+            user_id=str(current_user.id),
+        )
 
     # Check not already attached
     if tag not in contact.tags:
         contact.tags.append(tag)
+        
+        # Audit: tag added to contact
+        audit_service.log_action_sync(
+            db=db,
+            action="contact.add_tag",
+            entity_type="contact",
+            entity_id=str(contact.id),
+            new_values={"tag_id": str(tag.id), "tag_name": tag.name},
+            user_id=str(current_user.id),
+        )
+        
         db.commit()
 
     db.refresh(tag)
@@ -146,6 +212,17 @@ def add_tag_to_contact_by_id(
 
     if tag not in contact.tags:
         contact.tags.append(tag)
+        
+        # Audit: tag added to contact
+        audit_service.log_action_sync(
+            db=db,
+            action="contact.add_tag",
+            entity_type="contact",
+            entity_id=str(contact.id),
+            new_values={"tag_id": str(tag.id), "tag_name": tag.name},
+            user_id=str(current_user.id),
+        )
+        
         db.commit()
 
     db.refresh(tag)
@@ -173,4 +250,15 @@ def remove_tag_from_contact(
 
     if tag in contact.tags:
         contact.tags.remove(tag)
+        
+        # Audit: tag removed from contact
+        audit_service.log_action_sync(
+            db=db,
+            action="contact.remove_tag",
+            entity_type="contact",
+            entity_id=str(contact.id),
+            old_values={"tag_id": str(tag.id), "tag_name": tag.name},
+            user_id=str(current_user.id),
+        )
+        
         db.commit()

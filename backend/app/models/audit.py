@@ -1,7 +1,7 @@
 """
 Audit and history models.
 Phase 1 Foundation — Full audit trail for compliance and debugging.
-Phase 4 — Enhanced with stats-based snapshots.
+Phase 4 — Enhanced with stats-based snapshots + optimized indexes.
 """
 import uuid
 from datetime import datetime, timezone
@@ -25,6 +25,9 @@ class AuditLog(Base):
         Index("idx_audit_log_entity", "entity_type", "entity_id"),
         Index("idx_audit_log_user", "user_id"),
         Index("idx_audit_log_action", "action"),
+        Index("idx_audit_log_created_at", "created_at"),
+        # Composite index for entity + time range queries (common in Activity page)
+        Index("idx_audit_log_entity_time", "entity_type", "created_at"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -49,6 +52,10 @@ class ContactFieldHistory(Base):
     __tablename__ = "contact_field_history"
     __table_args__ = (
         Index("idx_field_history_contact", "contact_id"),
+        Index("idx_field_history_contact_field", "contact_id", "field_name"),
+        Index("idx_field_history_changed_at", "changed_at"),
+        # Composite index for per-contact time-ordered queries
+        Index("idx_field_history_contact_time", "contact_id", "changed_at"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -70,6 +77,10 @@ class DbSnapshot(Base):
     Supports both file-based backups and lightweight stats snapshots.
     """
     __tablename__ = "db_snapshots"
+    __table_args__ = (
+        Index("idx_db_snapshots_created_at", "created_at"),
+        Index("idx_db_snapshots_type", "snapshot_type"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     label = Column(String(255))

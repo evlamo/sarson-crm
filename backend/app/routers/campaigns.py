@@ -29,6 +29,7 @@ from app.schemas.campaign import (
 )
 from app.services.campaign_service import get_campaign_stats
 from app.tasks.send_campaign import send_campaign_task, cancel_campaign_task
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 
@@ -36,6 +37,18 @@ router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _capture_campaign_snapshot(campaign: EmailCampaign) -> dict:
+    """Capture current values for audit comparison."""
+    return {
+        "name": campaign.name,
+        "subject": campaign.subject,
+        "status": campaign.status,
+        "from_name": campaign.from_name,
+        "from_email": campaign.from_email,
+        "segment_id": str(campaign.segment_id) if campaign.segment_id else None,
+    }
 
 
 # ── List Campaigns ─────────────────────────────────────────────────────────
@@ -93,6 +106,18 @@ def create_campaign(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
+    
+    # Audit: campaign created
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.create",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        new_values=_capture_campaign_snapshot(campaign),
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     return campaign
 
 
@@ -125,11 +150,28 @@ def update_campaign(
     if campaign.status != "draft":
         raise HTTPException(status_code=400, detail="Can only edit draft campaigns")
 
+    old_snapshot = _capture_campaign_snapshot(campaign)
+
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(campaign, key, value)
 
     campaign.updated_at = datetime.now(timezone.utc)
+    
+    new_snapshot = _capture_campaign_snapshot(campaign)
+    changes = {k: v for k, v in new_snapshot.items() if old_snapshot.get(k) != v}
+    
+    if changes:
+        audit_service.log_action_sync(
+            db=db,
+            action="campaign.update",
+            entity_type="campaign",
+            entity_id=str(campaign.id),
+            old_values={k: old_snapshot[k] for k in changes},
+            new_values=changes,
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     db.refresh(campaign)
     return campaign
@@ -148,6 +190,16 @@ def delete_campaign(
         raise HTTPException(status_code=404, detail="Campaign not found")
     if campaign.status != "draft":
         raise HTTPException(status_code=400, detail="Can only delete draft campaigns")
+
+    # Audit: campaign deleted
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.delete",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        old_values=_capture_campaign_snapshot(campaign),
+        user_id=str(current_user.id),
+    )
 
     db.delete(campaign)
     db.commit()
@@ -171,6 +223,20 @@ def send_campaign(
         )
     if not campaign.segment_id:
         raise HTTPException(status_code=400, detail="Campaign must have a segment assigned")
+
+    old_status = campaign.status
+    
+    # Audit: campaign send initiated
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.send",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        old_values={"status": old_status},
+        new_values={"status": "sending"},
+        user_id=str(current_user.id),
+    )
+    db.commit()
 
     # Queue the Celery task
     task = send_campaign_task.delay(str(campaign.id))
@@ -199,8 +265,21 @@ def schedule_campaign(
     if data.scheduled_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
 
+    old_status = campaign.status
     campaign.scheduled_at = data.scheduled_at
     campaign.status = "scheduled"
+    
+    # Audit: campaign scheduled
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.schedule",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        old_values={"status": old_status, "scheduled_at": None},
+        new_values={"status": "scheduled", "scheduled_at": data.scheduled_at.isoformat()},
+        user_id=str(current_user.id),
+    )
+    
     db.commit()
 
     # Schedule Celery task with ETA
@@ -232,6 +311,20 @@ def cancel_campaign(
             status_code=400,
             detail=f"Cannot cancel campaign with status '{campaign.status}'",
         )
+
+    old_status = campaign.status
+    
+    # Audit: campaign cancelled
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.cancel",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        old_values={"status": old_status},
+        new_values={"status": "cancelled"},
+        user_id=str(current_user.id),
+    )
+    db.commit()
 
     cancel_campaign_task.delay(str(campaign.id))
     return {"message": "Campaign cancellation requested", "campaign_id": str(campaign.id)}
@@ -306,6 +399,21 @@ def duplicate_campaign(
     db.add(clone)
     db.commit()
     db.refresh(clone)
+    
+    # Audit: campaign duplicated
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.duplicate",
+        entity_type="campaign",
+        entity_id=str(clone.id),
+        new_values={
+            "name": clone.name,
+            "cloned_from": str(original.id),
+        },
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     return clone
 
 
@@ -459,6 +567,21 @@ async def sync_to_mailchimp(
         campaign.mc_segment_id_combined = mc_segment_id
     if data.campaign_list_ids:
         campaign.segment_ids = data.campaign_list_ids
+    
+    # Audit: Mailchimp sync
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.mailchimp_sync",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        new_values={
+            "mailchimp_campaign_id": mc_campaign_id,
+            "synced_count": result["added"] + result["updated"],
+            "recipient_count": len(eligible),
+        },
+        user_id=str(current_user.id),
+    )
+    
     db.commit()
 
     return {
@@ -505,6 +628,18 @@ async def send_test_email_endpoint(
         test_emails=data.test_emails,
         send_type=data.send_type or "html",
     )
+    
+    # Audit: test email sent
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.send_test",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        new_values={"test_emails": data.test_emails},
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     return {"sent": True, "test_emails": data.test_emails}
 
 
@@ -522,10 +657,24 @@ async def send_via_mailchimp(
     if not campaign.mailchimp_campaign_id:
         raise HTTPException(status_code=400, detail="Campaign has not been synced to Mailchimp yet.")
 
+    old_status = campaign.status
+    
     await mailchimp_service.send_mc_campaign(campaign.mailchimp_campaign_id)
     campaign.mailchimp_status = "sending"
     campaign.status = "sending"
     campaign.sent_at = datetime.now(timezone.utc)
+    
+    # Audit: campaign sent via Mailchimp
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.mailchimp_send",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        old_values={"status": old_status},
+        new_values={"status": "sending", "mailchimp_status": "sending"},
+        user_id=str(current_user.id),
+    )
+    
     db.commit()
 
     return {"sent": True, "mailchimp_campaign_id": campaign.mailchimp_campaign_id}
@@ -545,6 +694,8 @@ async def schedule_via_mailchimp(
     if not campaign or not campaign.mailchimp_campaign_id:
         raise HTTPException(status_code=400, detail="Sync campaign to Mailchimp first.")
 
+    old_status = campaign.status
+    
     await mailchimp_service.schedule_mc_campaign(
         mc_campaign_id=campaign.mailchimp_campaign_id,
         schedule_time=data.schedule_time,
@@ -552,6 +703,18 @@ async def schedule_via_mailchimp(
     campaign.mailchimp_status = "scheduled"
     campaign.scheduled_at = datetime.fromisoformat(data.schedule_time)
     campaign.status = "scheduled"
+    
+    # Audit: campaign scheduled via Mailchimp
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign.mailchimp_schedule",
+        entity_type="campaign",
+        entity_id=str(campaign.id),
+        old_values={"status": old_status},
+        new_values={"status": "scheduled", "scheduled_at": data.schedule_time},
+        user_id=str(current_user.id),
+    )
+    
     db.commit()
     return {"scheduled": True, "schedule_time": data.schedule_time}
 

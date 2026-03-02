@@ -18,6 +18,7 @@ import {
   KeyRound,
   Target,
   Clock,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 const navItems = [
@@ -38,6 +39,7 @@ const adminItems = [
   { to: '/admin/users', label: 'Users', icon: Shield },
   { to: '/admin/invites', label: 'Team & Invites', icon: UserPlus },
   { to: '/api-controls', label: 'API Controls', icon: KeyRound },
+  { to: '/sheets', label: 'Sheets Sync', icon: FileSpreadsheet },
 ];
 
 export default function Layout() {

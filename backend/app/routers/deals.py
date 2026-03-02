@@ -14,6 +14,7 @@ from app.models.user import User
 from app.models.deal import Deal
 from app.models.company import Company
 from app.utils.time import utcnow
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/deals", tags=["deals"])
 
@@ -63,6 +64,30 @@ class DealOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+def _capture_deal_snapshot(deal: Deal) -> dict:
+    """Capture current values of a deal for audit comparison."""
+    return {
+        "title": deal.title,
+        "description": deal.description,
+        "stage": deal.stage,
+        "amount": float(deal.amount) if deal.amount else None,
+        "currency": deal.currency,
+        "expected_close": str(deal.expected_close) if deal.expected_close else None,
+        "company_id": str(deal.company_id) if deal.company_id else None,
+        "deal_type": deal.deal_type,
+    }
+
+
+def _compute_changes(old: dict, new: dict) -> dict:
+    changes = {}
+    for key in set(old.keys()) | set(new.keys()):
+        old_val = old.get(key)
+        new_val = new.get(key)
+        if old_val != new_val:
+            changes[key] = {"old": old_val, "new": new_val}
+    return changes
 
 
 def _enrich(deal: Deal) -> dict:
@@ -129,6 +154,18 @@ def create_deal(
     db.add(deal)
     db.commit()
     db.refresh(deal)
+    
+    # Audit: deal created
+    audit_service.log_action_sync(
+        db=db,
+        action="deal.create",
+        entity_type="deal",
+        entity_id=str(deal.id),
+        new_values=_capture_deal_snapshot(deal),
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     # Reload with company relationship
     deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
     return _enrich(deal)
@@ -166,9 +203,26 @@ def update_deal(
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
+    old_snapshot = _capture_deal_snapshot(deal)
+
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(deal, key, value)
     deal.updated_at = utcnow()
+    
+    new_snapshot = _capture_deal_snapshot(deal)
+    changes = _compute_changes(old_snapshot, new_snapshot)
+    
+    if changes:
+        audit_service.log_action_sync(
+            db=db,
+            action="deal.update",
+            entity_type="deal",
+            entity_id=str(deal.id),
+            old_values={k: v["old"] for k, v in changes.items()},
+            new_values={k: v["new"] for k, v in changes.items()},
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     db.refresh(deal)
     deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
@@ -187,8 +241,22 @@ def move_deal_stage(
     deal = db.query(Deal).filter(Deal.id == deal_id, Deal.deleted_at.is_(None)).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
+    
+    old_stage = deal.stage
     deal.stage = data.stage
     deal.updated_at = utcnow()
+    
+    # Audit: stage change (important pipeline event)
+    audit_service.log_action_sync(
+        db=db,
+        action="deal.stage_change",
+        entity_type="deal",
+        entity_id=str(deal.id),
+        old_values={"stage": old_stage},
+        new_values={"stage": data.stage},
+        user_id=str(current_user.id),
+    )
+    
     db.commit()
     db.refresh(deal)
     deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
@@ -206,5 +274,18 @@ def delete_deal(
     deal = db.query(Deal).filter(Deal.id == deal_id, Deal.deleted_at.is_(None)).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
+    
+    old_snapshot = _capture_deal_snapshot(deal)
     deal.deleted_at = utcnow()
+    
+    # Audit: deal deleted
+    audit_service.log_action_sync(
+        db=db,
+        action="deal.delete",
+        entity_type="deal",
+        entity_id=str(deal.id),
+        old_values=old_snapshot,
+        user_id=str(current_user.id),
+    )
+    
     db.commit()

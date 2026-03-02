@@ -15,6 +15,7 @@ from app.schemas.segment import (
 )
 from app.schemas.contact import ContactResponse
 from app.services.segment_service import build_segment_query, count_segment_contacts
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/segments", tags=["segments"])
 
@@ -71,6 +72,22 @@ def create_segment(
     db.add(segment)
     db.commit()
     db.refresh(segment)
+    
+    # Audit: segment created
+    audit_service.log_action_sync(
+        db=db,
+        action="segment.create",
+        entity_type="segment",
+        entity_id=str(segment.id),
+        new_values={
+            "name": segment.name,
+            "description": segment.description,
+            "filters": segment.filters,
+        },
+        user_id=str(current_user.id),
+    )
+    db.commit()
+    
     return _segment_response(segment, db)
 
 
@@ -85,6 +102,12 @@ def update_segment(
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
 
+    old_values = {
+        "name": segment.name,
+        "description": segment.description,
+        "filters": segment.filters,
+    }
+
     if payload.name is not None:
         segment.name = payload.name
     if payload.description is not None:
@@ -93,6 +116,26 @@ def update_segment(
         segment.filters = payload.filter_rules.model_dump()
 
     segment.updated_at = utcnow()
+    
+    new_values = {
+        "name": segment.name,
+        "description": segment.description,
+        "filters": segment.filters,
+    }
+    
+    changes = {k: v for k, v in new_values.items() if old_values.get(k) != v}
+    
+    if changes:
+        audit_service.log_action_sync(
+            db=db,
+            action="segment.update",
+            entity_type="segment",
+            entity_id=str(segment.id),
+            old_values={k: old_values[k] for k in changes},
+            new_values=changes,
+            user_id=str(current_user.id),
+        )
+    
     db.commit()
     db.refresh(segment)
     return _segment_response(segment, db)
@@ -107,6 +150,21 @@ def delete_segment(
     segment = db.query(Segment).filter(Segment.id == segment_id).first()
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
+    
+    # Audit: segment deleted
+    audit_service.log_action_sync(
+        db=db,
+        action="segment.delete",
+        entity_type="segment",
+        entity_id=str(segment.id),
+        old_values={
+            "name": segment.name,
+            "description": segment.description,
+            "filters": segment.filters,
+        },
+        user_id=str(current_user.id),
+    )
+    
     db.delete(segment)
     db.commit()
 

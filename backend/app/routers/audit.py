@@ -5,9 +5,10 @@ Endpoints for viewing audit logs, contact field history, and revert functionalit
 from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
 
@@ -51,9 +52,41 @@ class FieldHistoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# Allowlist of fields that can be reverted (security hardening)
+REVERTABLE_FIELDS = {
+    "first_name", "last_name", "email", "phone", "mobile_phone",
+    "title", "department", "company", "status", "source",
+    "address", "city", "state", "postal_code", "country",
+    "linkedin_url", "twitter_handle", "notes", "lead_score",
+}
+
+
 class RevertFieldRequest(BaseModel):
     field_name: str = Field(..., min_length=1, max_length=100)
     target_value: Optional[str] = None
+    
+    @field_validator('field_name')
+    @classmethod
+    def validate_field_name(cls, v):
+        # Only alphanumeric and underscore allowed
+        if not re.match(r'^[a-z_][a-z0-9_]*$', v):
+            raise ValueError('Invalid field name format')
+        # Check against allowlist
+        if v not in REVERTABLE_FIELDS:
+            raise ValueError(f'Field "{v}" is not revertable')
+        return v
+    
+    @field_validator('target_value')
+    @classmethod
+    def validate_target_value(cls, v):
+        if v is not None:
+            # Prevent excessively long values
+            if len(v) > 10000:
+                raise ValueError('Value too long (max 10000 chars)')
+            # Basic sanitization - no control characters except newline/tab
+            if re.search(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', v):
+                raise ValueError('Invalid characters in value')
+        return v
 
 
 class PaginatedAuditLogs(BaseModel):
@@ -74,9 +107,9 @@ class PaginatedFieldHistory(BaseModel):
 
 @router.get("", response_model=PaginatedAuditLogs)
 def list_audit_logs(
-    entity_type: Optional[str] = Query(None),
+    entity_type: Optional[str] = Query(None, max_length=50),
     entity_id: Optional[UUID] = Query(None),
-    action: Optional[str] = Query(None),
+    action: Optional[str] = Query(None, max_length=100),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -89,11 +122,15 @@ def list_audit_logs(
     query = db.query(AuditLog).options(joinedload(AuditLog.user))
 
     if entity_type:
+        # Validate entity_type to prevent injection
+        if not re.match(r'^[a-z_]+$', entity_type):
+            raise HTTPException(status_code=400, detail="Invalid entity_type format")
         query = query.filter(AuditLog.entity_type == entity_type)
     if entity_id:
         query = query.filter(AuditLog.entity_id == entity_id)
     if action:
-        query = query.filter(AuditLog.action.ilike(f"%{action}%"))
+        # Use exact match for action filtering
+        query = query.filter(AuditLog.action == action)
 
     total = query.count()
     logs = (
@@ -178,7 +215,7 @@ def get_contact_audit_logs(
 @router.get("/contacts/{contact_id}/field-history", response_model=PaginatedFieldHistory)
 def get_contact_field_history(
     contact_id: UUID,
-    field_name: Optional[str] = Query(None),
+    field_name: Optional[str] = Query(None, max_length=100),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -200,6 +237,9 @@ def get_contact_field_history(
     )
 
     if field_name:
+        # Validate field_name format
+        if not re.match(r'^[a-z_][a-z0-9_]*$', field_name):
+            raise HTTPException(status_code=400, detail="Invalid field_name format")
         query = query.filter(ContactFieldHistory.field_name == field_name)
 
     total = query.count()
@@ -230,7 +270,7 @@ def get_contact_field_history(
 # ── Revert Field (Admin Only) ──────────────────────────────────────────────
 
 @router.post("/contacts/{contact_id}/revert-field")
-async def revert_contact_field(
+def revert_contact_field(
     contact_id: UUID,
     payload: RevertFieldRequest,
     db: Session = Depends(get_db),
@@ -239,6 +279,12 @@ async def revert_contact_field(
     """
     Revert a contact field to a previous value.
     Admin only. Logs the revert action to audit_log.
+    
+    Security:
+    - Admin-only access
+    - Field name validated against allowlist
+    - Value sanitized and length-limited
+    - All reverts are logged
     """
     contact = db.query(Contact).filter(
         Contact.id == contact_id,
@@ -250,10 +296,9 @@ async def revert_contact_field(
     field_name = payload.field_name
     target_value = payload.target_value
 
-    # Validate field exists on Contact model
-    valid_fields = {c.key for c in Contact.__table__.columns}
-    if field_name not in valid_fields:
-        raise HTTPException(status_code=400, detail=f"Invalid field: {field_name}")
+    # Double-check field exists on Contact model (belt and suspenders)
+    if not hasattr(contact, field_name):
+        raise HTTPException(status_code=400, detail=f"Field '{field_name}' does not exist on Contact")
 
     # Get current value
     current_value = getattr(contact, field_name)
@@ -267,8 +312,8 @@ async def revert_contact_field(
     setattr(contact, field_name, target_value if target_value else None)
     contact.updated_at = datetime.now(timezone.utc)
 
-    # Log to audit_log
-    await audit_service.log_action(
+    # Log to audit_log (sync version)
+    audit_service.log_action_sync(
         db=db,
         action="contact.revert_field",
         entity_type="contact",
@@ -278,8 +323,8 @@ async def revert_contact_field(
         user_id=str(admin.id),
     )
 
-    # Log to field history
-    await audit_service.log_field_change(
+    # Log to field history (sync version)
+    audit_service.log_field_change_sync(
         db=db,
         contact_id=str(contact_id),
         field_name=field_name,

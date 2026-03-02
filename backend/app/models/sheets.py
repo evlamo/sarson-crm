@@ -1,6 +1,6 @@
 """
 Google Sheets sync models.
-Phase 1 Foundation — Track exports to Sheets and manage import reviews.
+Phase 5 — Track exports to Sheets and manage import reviews with conflict resolution.
 """
 import uuid
 from datetime import datetime, timezone
@@ -18,10 +18,12 @@ class SheetsExport(Base):
     """
     Registry of Google Sheets exports.
     Tracks which filters were used to generate each sheet export.
+    Supports resumable exports via checkpoint tracking.
     """
     __tablename__ = "sheets_exports"
     __table_args__ = (
         Index("idx_sheets_exports_spreadsheet", "spreadsheet_id"),
+        Index("idx_sheets_exports_status", "sync_status"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -33,10 +35,17 @@ class SheetsExport(Base):
     exported_at = Column(DateTime(timezone=True), default=_utcnow)
     exported_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     last_synced_at = Column(DateTime(timezone=True))
-    sync_status = Column(String(50), default="active")  # active, archived, error
+    sync_status = Column(String(50), default="active")  # active, archived, error, processing, partial
+    
+    # Phase 5 additions
+    list_id = Column(UUID(as_uuid=True), ForeignKey("static_lists.id", ondelete="SET NULL"))
+    error_message = Column(Text)
+    contact_ids = Column(JSONB)  # For tracking which contacts were exported
+    checkpoint_row = Column(Integer, default=0)  # For resumable exports
 
     # Relationships
     exporter = relationship("User", foreign_keys=[exported_by])
+    static_list = relationship("StaticList", foreign_keys=[list_id])
     import_reviews = relationship("SheetsImportReview", back_populates="export", cascade="all, delete-orphan")
 
 
@@ -59,6 +68,12 @@ class SheetsImportReview(Base):
     reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     reviewed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+    
+    # Phase 5 additions - stats tracking
+    applied_count = Column(Integer, default=0)
+    new_count = Column(Integer, default=0)
+    conflict_count = Column(Integer, default=0)
+    unchanged_count = Column(Integer, default=0)
 
     # Relationships
     export = relationship("SheetsExport", back_populates="import_reviews")
