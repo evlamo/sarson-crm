@@ -23,6 +23,8 @@ import ApiControlsPage from '@/pages/ApiControlsPage';
 import GoogleAdsPage from '@/pages/GoogleAdsPage';
 import ActivityPage from '@/pages/ActivityPage';
 import SheetsPage from '@/pages/SheetsPage';
+import DocsPage from '@/pages/DocsPage';
+import ChangelogPage from '@/pages/ChangelogPage';
 
 import { useEffect } from 'react';
 
@@ -192,12 +194,24 @@ const activityRoute = createRoute({
   component: ActivityPage,
 });
 
-
 const sheetsRoute = createRoute({
   getParentRoute: () => layoutRoute,
-  path: "/sheets",
+  path: '/sheets',
   component: SheetsPage,
 });
+
+const docsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/admin/docs',
+  component: DocsPage,
+});
+
+const changelogRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/admin/changelog',
+  component: ChangelogPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   registerRoute,
@@ -219,6 +233,8 @@ const routeTree = rootRoute.addChildren([
     apiControlsRoute,
     activityRoute,
     sheetsRoute,
+    docsRoute,
+    changelogRoute,
   ]),
 ]);
 

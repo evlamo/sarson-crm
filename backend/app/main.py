@@ -30,6 +30,8 @@ from app.routers.dnc import router as dnc_router
 from app.routers.audit import router as audit_router
 # Phase 5: Google Sheets Sync
 from app.routers.sheets import router as sheets_router
+# Phase 6: Changelog
+from app.routers.changelog import router as changelog_router
 from app.models import google_ads as _google_ads_models  # noqa
 from app.models import api_credentials as _api_credentials_models  # noqa
 
@@ -129,6 +131,8 @@ app.include_router(dnc_router)
 app.include_router(audit_router)
 # Phase 5: Google Sheets Sync
 app.include_router(sheets_router)
+# Phase 6: Changelog
+app.include_router(changelog_router)
 
 @app.get("/health")
 def health():
