@@ -2,6 +2,13 @@
 Google Sheets two-way sync router.
 Admin-only endpoints for exporting contacts to Sheets and importing changes back.
 
+Security hardened — Phase 5 Audit v2:
+- Input sanitization for CSV injection prevention
+- Email/URL validation on imports
+- Value length limits
+- Optimistic locking on import apply
+- Enhanced error handling
+
 Endpoints:
 - POST /api/v1/sheets/export         — Export contacts/list to a sheet
 - POST /api/v1/sheets/import/preview — Pull sheet data, compare with CRM, return conflicts
@@ -13,6 +20,7 @@ Endpoints:
 - POST /api/v1/sheets/test           — Test connection
 """
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from uuid import UUID
@@ -44,6 +52,109 @@ from app.utils.encryption import encrypt_value, decrypt_value, mask_value
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/sheets", tags=["sheets"])
+
+
+# ── Input Validation & Sanitization ────────────────────────────────────────
+
+# CSV injection prevention characters
+_FORMULA_CHARS = {"=", "+", "-", "@", "\t", "\r"}
+
+# Field length limits (varchar sizes from schema)
+FIELD_MAX_LENGTHS = {
+    "first_name": 100,
+    "last_name": 100,
+    "email": 255,
+    "phone": 50,
+    "company": 255,
+    "title": 255,
+    "status": 50,
+    "tags": 1000,  # Combined tag string
+    "lead_source": 100,
+    "notes": 10000,
+    "sarson_rep": 100,
+    "city": 100,
+    "state": 100,
+    "country": 100,
+    "linkedin_url": 500,
+    "website": 500,
+}
+
+# Basic email regex (RFC 5322 simplified)
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+# URL regex for linkedin/website validation
+URL_REGEX = re.compile(
+    r"^https?://"
+    r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"
+    r"localhost|"
+    r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+    r"(?::\d+)?"
+    r"(?:/?|[/?]\S+)$",
+    re.IGNORECASE,
+)
+
+
+def sanitize_value(value: str) -> str:
+    """
+    Strip CSV injection prefixes and excessive whitespace.
+    Prevents formula injection when values are exported back to sheets.
+    """
+    if not value:
+        return value
+    v = value.strip()
+    # Escape CSV injection characters by prefixing with single quote
+    if v and v[0] in _FORMULA_CHARS:
+        v = "'" + v
+    # Remove any null bytes
+    v = v.replace("\x00", "")
+    return v
+
+
+def validate_email(email: str) -> bool:
+    """Validate email format."""
+    if not email:
+        return True  # Empty is allowed
+    return bool(EMAIL_REGEX.match(email.strip()))
+
+
+def validate_url(url: str) -> bool:
+    """Validate URL format for linkedin/website fields."""
+    if not url:
+        return True  # Empty is allowed
+    return bool(URL_REGEX.match(url.strip()))
+
+
+def truncate_field(value: str, field: str) -> str:
+    """Truncate value to max length for field."""
+    max_len = FIELD_MAX_LENGTHS.get(field, 255)
+    if value and len(value) > max_len:
+        return value[:max_len]
+    return value
+
+
+def sanitize_and_validate_field(field: str, value: str) -> tuple[str, Optional[str]]:
+    """
+    Sanitize and validate a field value.
+    Returns (sanitized_value, error_message or None).
+    """
+    if not value:
+        return "", None
+    
+    # Sanitize first
+    sanitized = sanitize_value(value.strip())
+    
+    # Validate based on field type
+    if field == "email":
+        if not validate_email(sanitized):
+            return "", f"Invalid email format: {sanitized[:50]}"
+    elif field in ("linkedin_url", "website"):
+        if sanitized and not validate_url(sanitized):
+            return "", f"Invalid URL format for {field}: {sanitized[:50]}"
+    
+    # Truncate to max length
+    sanitized = truncate_field(sanitized, field)
+    
+    return sanitized, None
 
 
 # ── Pydantic Schemas ───────────────────────────────────────────────────────
@@ -82,6 +193,7 @@ class NewContactItem(BaseModel):
     last_name: Optional[str]
     company: Optional[str]
     raw_data: Dict[str, str]
+    validation_errors: List[str] = Field(default_factory=list)
 
 
 class OrphanItem(BaseModel):
@@ -111,12 +223,14 @@ class ImportApplyRequest(BaseModel):
     review_id: UUID
     approved_changes: List[ApprovedChange] = Field(default_factory=list)
     import_new_contacts: List[int] = Field(default_factory=list, description="Row indices of new contacts to import")
+    expected_version: Optional[int] = Field(None, description="Optimistic lock version")
 
 
 class ImportApplyResponse(BaseModel):
     changes_applied: int
     contacts_created: int
     errors: List[str]
+    version: int = Field(default=1, description="New version after apply")
 
 
 class ConfigResponse(BaseModel):
@@ -163,7 +277,14 @@ def _get_setting(db: Session, key: str) -> Optional[str]:
     if not result:
         return None
     value, encrypted = result
-    return decrypt_value(value) if encrypted and value else value
+    if encrypted and value:
+        decrypted = decrypt_value(value)
+        # Safety check: if decryption returned the same value, it likely failed
+        if decrypted == value and len(value) > 50:
+            logger.error(f"Decryption may have failed for setting '{key}' — returning None for safety")
+            return None
+        return decrypted
+    return value
 
 
 def _set_setting(db: Session, key: str, value: Optional[str], encrypted: bool = False, user_id: Optional[str] = None):
@@ -188,7 +309,14 @@ def _set_setting(db: Session, key: str, value: Optional[str], encrypted: bool = 
 
 def _get_credentials_json(db: Session) -> Optional[str]:
     """Get decrypted service account JSON."""
-    return _get_setting(db, "sheets_credentials_json")
+    creds = _get_setting(db, "sheets_credentials_json")
+    if not creds:
+        return None
+    # Validate it looks like JSON before returning
+    if not creds.strip().startswith("{"):
+        logger.error("Credentials don't appear to be valid JSON — decryption may have failed")
+        return None
+    return creds
 
 
 # ── Contact Query Helpers ──────────────────────────────────────────────────
@@ -222,6 +350,7 @@ def _build_contact_dict(contact: Contact) -> Dict[str, Any]:
 def _get_contacts_for_export(db: Session, list_id: Optional[UUID] = None) -> List[Dict[str, Any]]:
     """
     Get contacts for export. If list_id provided, export only that list's contacts.
+    Uses yield_per for memory efficiency with large datasets.
     """
     query = (
         db.query(Contact)
@@ -236,7 +365,8 @@ def _get_contacts_for_export(db: Session, list_id: Optional[UUID] = None) -> Lis
         ).subquery()
         query = query.filter(Contact.id.in_(contact_ids))
     
-    contacts = query.order_by(Contact.last_name, Contact.first_name).all()
+    # Use yield_per for memory efficiency with large datasets
+    contacts = query.order_by(Contact.last_name, Contact.first_name).yield_per(500).all()
     return [_build_contact_dict(c) for c in contacts]
 
 
@@ -250,7 +380,7 @@ def get_config(
     """Get current Google Sheets configuration."""
     spreadsheet_id = _get_setting(db, "sheets_spreadsheet_id")
     sheet_name = _get_setting(db, "sheets_default_sheet_name")
-    credentials_set = _get_setting(db, "sheets_credentials_json") is not None
+    credentials_set = _get_credentials_json(db) is not None
     last_tested_at_str = _get_setting(db, "sheets_last_tested_at")
     last_test_status = _get_setting(db, "sheets_last_test_status")
     
@@ -292,7 +422,12 @@ def update_config(
         # Validate it's valid JSON before saving
         try:
             import json
-            json.loads(payload.credentials_json)
+            parsed = json.loads(payload.credentials_json)
+            # Validate it has required service account fields
+            if "type" not in parsed or parsed.get("type") != "service_account":
+                raise HTTPException(status_code=422, detail="JSON must be a Google service account key (type: service_account)")
+            if "client_email" not in parsed:
+                raise HTTPException(status_code=422, detail="Service account JSON missing client_email field")
         except json.JSONDecodeError:
             raise HTTPException(status_code=422, detail="Invalid JSON format for credentials")
         
@@ -324,7 +459,7 @@ def test_sheets_connection(
     spreadsheet_id = _get_setting(db, "sheets_spreadsheet_id")
     
     if not credentials_json:
-        return TestResponse(success=False, message="No service account credentials configured")
+        return TestResponse(success=False, message="No service account credentials configured (or decryption failed)")
     
     if not spreadsheet_id:
         return TestResponse(success=False, message="No spreadsheet ID configured")
@@ -490,6 +625,7 @@ def preview_import(
     """
     Pull sheet data, compare with CRM, and return a preview of changes.
     Identifies conflicts, new contacts, and orphans (deleted in CRM).
+    All values are sanitized during preview.
     """
     credentials_json = _get_credentials_json(db)
     if not credentials_json:
@@ -518,8 +654,19 @@ def preview_import(
             detail="Sheet must have an 'id' column to map back to CRM contacts"
         )
     
+    # Sanitize all sheet values upfront
+    sanitized_rows = []
+    for row in sheet_rows:
+        sanitized_row = {}
+        for key, value in row.items():
+            if isinstance(value, str):
+                sanitized_row[key] = sanitize_value(value.strip())
+            else:
+                sanitized_row[key] = value
+        sanitized_rows.append(sanitized_row)
+    
     # Build lookup of CRM contacts by ID
-    contact_ids = [row.get("id", "").strip() for row in sheet_rows if row.get("id", "").strip()]
+    contact_ids = [row.get("id", "").strip() for row in sanitized_rows if row.get("id", "").strip()]
     
     crm_contacts_by_id = {}
     if contact_ids:
@@ -538,13 +685,27 @@ def preview_import(
     orphans = []
     unchanged_count = 0
     
-    for row_idx, sheet_row in enumerate(sheet_rows):
+    for row_idx, sheet_row in enumerate(sanitized_rows):
         sheet_id = sheet_row.get("id", "").strip()
         
         if not sheet_id:
             # No ID = potentially new contact
-            # Only consider as new if it has an email
             email = sheet_row.get("email", "").strip()
+            
+            # Validate new contact data
+            validation_errors = []
+            if email and not validate_email(email):
+                validation_errors.append(f"Invalid email format: {email[:50]}")
+            
+            linkedin = sheet_row.get("linkedin_url", "").strip()
+            if linkedin and not validate_url(linkedin):
+                validation_errors.append(f"Invalid LinkedIn URL: {linkedin[:50]}")
+            
+            website = sheet_row.get("website", "").strip()
+            if website and not validate_url(website):
+                validation_errors.append(f"Invalid website URL: {website[:50]}")
+            
+            # Only consider as new if it has an email
             if email:
                 new_contacts.append(NewContactItem(
                     row_index=row_idx,
@@ -553,6 +714,7 @@ def preview_import(
                     last_name=sheet_row.get("last_name", "").strip() or None,
                     company=sheet_row.get("company", "").strip() or None,
                     raw_data=sheet_row,
+                    validation_errors=validation_errors,
                 ))
             continue
         
@@ -560,12 +722,6 @@ def preview_import(
         
         if not crm_contact:
             # ID exists in sheet but not in CRM (or was deleted)
-            # Check if it was soft-deleted
-            deleted_contact = db.query(Contact).filter(
-                Contact.id == sheet_id,
-                Contact.deleted_at.isnot(None)
-            ).first()
-            
             orphans.append(OrphanItem(
                 sheet_row_index=row_idx,
                 contact_id=sheet_id,
@@ -591,13 +747,14 @@ def preview_import(
         else:
             unchanged_count += 1
     
-    # Create import review record
+    # Create import review record with version tracking
     review = SheetsImportReview(
         import_data={
             "spreadsheet_id": payload.spreadsheet_id,
             "sheet_name": payload.sheet_name,
             "headers": headers,
-            "rows": sheet_rows,
+            "rows": sanitized_rows,  # Store sanitized rows
+            "version": 1,  # Initial version for optimistic locking
         },
         conflict_data={
             "conflicts": [c.model_dump() for c in conflicts],
@@ -619,7 +776,7 @@ def preview_import(
         conflicts=conflicts,
         orphans=orphans,
         unchanged_count=unchanged_count,
-        total_sheet_rows=len(sheet_rows),
+        total_sheet_rows=len(sanitized_rows),
     )
 
 
@@ -632,16 +789,25 @@ def apply_import(
     """
     Apply approved changes from an import preview.
     Only explicitly approved changes are applied.
+    Uses optimistic locking to prevent concurrent modifications.
     """
     review = db.query(SheetsImportReview).filter(
         SheetsImportReview.id == payload.review_id
-    ).first()
+    ).with_for_update().first()  # Lock the row
     
     if not review:
         raise HTTPException(status_code=404, detail="Import review not found")
     
     if review.status not in ("pending", "partial"):
         raise HTTPException(status_code=400, detail=f"Review is already {review.status}")
+    
+    # Check optimistic lock version
+    current_version = review.import_data.get("version", 1) if review.import_data else 1
+    if payload.expected_version is not None and payload.expected_version != current_version:
+        raise HTTPException(
+            status_code=409, 
+            detail="Import review was modified. Please refresh and try again."
+        )
     
     errors = []
     changes_applied = 0
@@ -650,12 +816,20 @@ def apply_import(
     # Group approved changes by contact
     changes_by_contact: Dict[str, Dict[str, str]] = {}
     for change in payload.approved_changes:
+        # Strict field validation
         if change.field not in EDITABLE_FIELDS:
             errors.append(f"Field '{change.field}' is not editable")
             continue
+        
+        # Validate and sanitize the value
+        sanitized_value, validation_error = sanitize_and_validate_field(change.field, change.new_value)
+        if validation_error:
+            errors.append(validation_error)
+            continue
+        
         if change.contact_id not in changes_by_contact:
             changes_by_contact[change.contact_id] = {}
-        changes_by_contact[change.contact_id][change.field] = change.new_value
+        changes_by_contact[change.contact_id][change.field] = sanitized_value
     
     # Apply changes to existing contacts
     for contact_id, field_changes in changes_by_contact.items():
@@ -679,10 +853,12 @@ def apply_import(
             # Handle special fields
             if field == "tags":
                 # Tags come as comma-separated string
-                tag_names = [t.strip() for t in new_value.split(",") if t.strip()]
+                tag_names = [sanitize_value(t.strip()) for t in new_value.split(",") if t.strip()]
                 # Clear existing tags and add new ones
                 contact.tags = []
                 for tag_name in tag_names:
+                    # Truncate tag name to reasonable length
+                    tag_name = tag_name[:100]
                     tag = db.query(Tag).filter(func.lower(Tag.name) == func.lower(tag_name)).first()
                     if not tag:
                         tag = Tag(name=tag_name)
@@ -720,10 +896,30 @@ def apply_import(
                 errors.append(f"New contact at row {idx} not found in review data")
                 continue
             
+            # Check for pre-existing validation errors
+            if new_data.get("validation_errors"):
+                errors.append(f"Row {idx} has validation errors: {', '.join(new_data['validation_errors'])}")
+                continue
+            
             raw = new_data.get("raw_data", {})
             
+            # Validate and sanitize all fields for new contact
+            email, email_err = sanitize_and_validate_field("email", raw.get("email", ""))
+            if email_err:
+                errors.append(f"Row {idx}: {email_err}")
+                continue
+            
+            linkedin, linkedin_err = sanitize_and_validate_field("linkedin_url", raw.get("linkedin_url", ""))
+            if linkedin_err:
+                errors.append(f"Row {idx}: {linkedin_err}")
+                continue
+            
+            website, website_err = sanitize_and_validate_field("website", raw.get("website", ""))
+            if website_err:
+                errors.append(f"Row {idx}: {website_err}")
+                continue
+            
             # Check for duplicate email
-            email = raw.get("email", "").strip()
             if email:
                 existing = db.query(Contact).filter(
                     Contact.email == email,
@@ -733,23 +929,37 @@ def apply_import(
                     errors.append(f"Contact with email {email} already exists")
                     continue
             
+            # Sanitize and truncate all fields
+            first_name = truncate_field(sanitize_value(raw.get("first_name", "").strip()), "first_name")
+            last_name = truncate_field(sanitize_value(raw.get("last_name", "").strip()), "last_name")
+            phone = truncate_field(sanitize_value(raw.get("phone", "").strip()), "phone")
+            company = truncate_field(sanitize_value(raw.get("company", "").strip()), "company")
+            title = truncate_field(sanitize_value(raw.get("title", "").strip()), "title")
+            status = truncate_field(sanitize_value(raw.get("status", "").strip()), "status") or "active"
+            lead_source = truncate_field(sanitize_value(raw.get("lead_source", "").strip()), "lead_source") or "sheets_import"
+            notes = truncate_field(sanitize_value(raw.get("notes", "").strip()), "notes")
+            sarson_rep = truncate_field(sanitize_value(raw.get("sarson_rep", "").strip()), "sarson_rep")
+            city = truncate_field(sanitize_value(raw.get("city", "").strip()), "city")
+            state = truncate_field(sanitize_value(raw.get("state", "").strip()), "state")
+            country = truncate_field(sanitize_value(raw.get("country", "").strip()), "country")
+            
             # Create contact
             new_contact = Contact(
-                first_name=raw.get("first_name", "").strip() or None,
-                last_name=raw.get("last_name", "").strip() or None,
+                first_name=first_name or None,
+                last_name=last_name or None,
                 email=email or None,
-                phone=raw.get("phone", "").strip() or None,
-                company=raw.get("company", "").strip() or None,
-                title=raw.get("title", "").strip() or None,
-                status=raw.get("status", "").strip() or "active",
-                lead_source=raw.get("lead_source", "").strip() or "sheets_import",
-                notes=raw.get("notes", "").strip() or None,
-                sarson_rep=raw.get("sarson_rep", "").strip() or None,
-                city=raw.get("city", "").strip() or None,
-                state=raw.get("state", "").strip() or None,
-                country=raw.get("country", "").strip() or None,
-                linkedin_url=raw.get("linkedin_url", "").strip() or None,
-                website=raw.get("website", "").strip() or None,
+                phone=phone or None,
+                company=company or None,
+                title=title or None,
+                status=status,
+                lead_source=lead_source,
+                notes=notes or None,
+                sarson_rep=sarson_rep or None,
+                city=city or None,
+                state=state or None,
+                country=country or None,
+                linkedin_url=linkedin or None,
+                website=website or None,
             )
             db.add(new_contact)
             db.flush()
@@ -757,7 +967,7 @@ def apply_import(
             # Handle tags
             tags_str = raw.get("tags", "").strip()
             if tags_str:
-                tag_names = [t.strip() for t in tags_str.split(",") if t.strip()]
+                tag_names = [sanitize_value(t.strip())[:100] for t in tags_str.split(",") if t.strip()]
                 for tag_name in tag_names:
                     tag = db.query(Tag).filter(func.lower(Tag.name) == func.lower(tag_name)).first()
                     if not tag:
@@ -773,8 +983,8 @@ def apply_import(
                 entity_id=str(new_contact.id),
                 new_values={
                     "email": email,
-                    "first_name": raw.get("first_name"),
-                    "last_name": raw.get("last_name"),
+                    "first_name": first_name,
+                    "last_name": last_name,
                     "source": "sheets_import",
                 },
                 user_id=str(admin.id),
@@ -782,11 +992,18 @@ def apply_import(
             
             contacts_created += 1
     
-    # Update review status
+    # Update review status and increment version
     review.status = "approved" if not errors else "partial"
     review.applied_count = changes_applied + contacts_created
     review.reviewed_by = admin.id
     review.reviewed_at = datetime.now(timezone.utc)
+    
+    # Update version for optimistic locking
+    new_version = current_version + 1
+    if review.import_data:
+        review.import_data = {**review.import_data, "version": new_version}
+    else:
+        review.import_data = {"version": new_version}
     
     db.commit()
     
@@ -794,4 +1011,5 @@ def apply_import(
         changes_applied=changes_applied,
         contacts_created=contacts_created,
         errors=errors,
+        version=new_version,
     )
