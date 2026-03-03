@@ -78,10 +78,18 @@ export default function Layout() {
       return;
     }
 
-    // Handle ? for help widget (shift+/ on most keyboards)
-    if (e.key === '?' && e.shiftKey) {
+    // Handle ? key (requires Shift on US keyboards)
+    // Ctrl+? or Cmd+? opens shortcuts modal
+    // Plain ? toggles help panel
+    if (e.key === '?') {
       e.preventDefault();
-      setIsShortcutsOpen(true);
+      if (e.ctrlKey || e.metaKey) {
+        // Ctrl+? or Cmd+? for shortcuts modal
+        setIsShortcutsOpen(true);
+      } else {
+        // Plain ? toggles help panel
+        setIsHelpOpen(prev => !prev);
+      }
       return;
     }
 
@@ -96,7 +104,7 @@ export default function Layout() {
     }
 
     // Handle G prefix for navigation
-    if (e.key.toLowerCase() === 'g' && !gPressed) {
+    if (e.key.toLowerCase() === 'g' && !gPressed && !e.ctrlKey && !e.metaKey) {
       setGPressed(true);
       setTimeout(() => setGPressed(false), 1000); // Reset after 1 second
       return;

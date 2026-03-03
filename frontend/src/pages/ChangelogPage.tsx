@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, GitCommit, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 
 interface CommitEntry {
@@ -11,14 +12,29 @@ interface CommitEntry {
 }
 
 export default function ChangelogPage() {
+  const isAdmin = useAuth((s) => s.isAdmin);
   const [commits, setCommits] = useState<CommitEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = 'Changelog — Sarson Funds CRM';
-    fetchChangelog();
-  }, []);
+    if (isAdmin) {
+      fetchChangelog();
+    } else {
+      setLoading(false);
+    }
+  }, [isAdmin]);
+
+  // Admin check - show access denied if not admin
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+        <p className="text-lg font-semibold">Access Denied</p>
+        <p className="text-sm mt-1">You don't have permission to view this page.</p>
+      </div>
+    );
+  }
 
   const fetchChangelog = async () => {
     setLoading(true);

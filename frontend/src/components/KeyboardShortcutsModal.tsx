@@ -29,7 +29,7 @@ const shortcuts: { category: string; items: Shortcut[] }[] = [
   {
     category: 'Actions',
     items: [
-      { keys: ['N'], description: 'New contact' },
+      { keys: ['N'], description: 'New contact (on Contacts page)' },
       { keys: ['/'], description: 'Focus search' },
       { keys: ['Esc'], description: 'Close modal / Clear search' },
     ],
@@ -38,7 +38,7 @@ const shortcuts: { category: string; items: Shortcut[] }[] = [
     category: 'Help',
     items: [
       { keys: ['?'], description: 'Toggle help panel' },
-      { keys: ['Shift', '?'], description: 'Show keyboard shortcuts' },
+      { keys: ['⌘', '?'], description: 'Show keyboard shortcuts' },
     ],
   },
 ];

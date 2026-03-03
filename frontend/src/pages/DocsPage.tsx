@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Copy, Check, Loader2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 interface OpenAPISpec {
   openapi: string;
@@ -67,6 +68,7 @@ const methodColors: Record<string, string> = {
 };
 
 export default function DocsPage() {
+  const isAdmin = useAuth((s) => s.isAdmin);
   const [spec, setSpec] = useState<OpenAPISpec | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,8 +77,22 @@ export default function DocsPage() {
 
   useEffect(() => {
     document.title = 'API Documentation — Sarson Funds CRM';
-    fetchSpec();
-  }, []);
+    if (isAdmin) {
+      fetchSpec();
+    } else {
+      setLoading(false);
+    }
+  }, [isAdmin]);
+
+  // Admin check - show access denied if not admin
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+        <p className="text-lg font-semibold">Access Denied</p>
+        <p className="text-sm mt-1">You don't have permission to view this page.</p>
+      </div>
+    );
+  }
 
   const fetchSpec = async () => {
     try {
