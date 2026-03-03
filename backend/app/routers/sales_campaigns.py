@@ -19,6 +19,7 @@ from app.models.contact import Contact
 from app.models.tag import Tag
 from app.models.static_list import StaticListMember
 from app.models.sales_campaign import SalesCampaign, CampaignContact
+from app.models.campaign_segment import CampaignSegment
 from app.models.campaign import EmailCampaign
 from app.services import audit_service
 
@@ -365,12 +366,13 @@ def search_contacts_for_campaign(
     if tag_id:
         query = query.filter(Contact.tags.any(Tag.id == tag_id))
     
-    # Filter by static list
+    # Filter by campaign list
     if list_id:
-        list_contact_ids = db.query(StaticListMember.c.contact_id).filter(
-            StaticListMember.c.list_id == list_id
-        ).subquery()
-        query = query.filter(Contact.id.in_(list_contact_ids))
+        segment = db.query(CampaignSegment).filter(CampaignSegment.id == list_id).first()
+        if segment and segment.contact_ids:
+            query = query.filter(Contact.id.in_(segment.contact_ids))
+        else:
+            query = query.filter(False)
     
     # Get total before pagination
     total = query.count()

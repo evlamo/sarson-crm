@@ -238,8 +238,8 @@ function AddContactsDrawer({
   onSuccess: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTagId, setSelectedTagId] = useState<string>('');
-  const [selectedListId, setSelectedListId] = useState<string>('');
+  const [selectedTagId, setSelectedTagId] = useState<string>('all');
+  const [selectedListId, setSelectedListId] = useState<string>('all');
   const [initialStatus, setInitialStatus] = useState('active');
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
@@ -248,8 +248,8 @@ function AddContactsDrawer({
   useEffect(() => {
     if (open) {
       setSearchQuery('');
-      setSelectedTagId('');
-      setSelectedListId('');
+      setSelectedTagId('all');
+      setSelectedListId('all');
       setInitialStatus('active');
       setSelectedContacts(new Set());
       setPage(1);
@@ -267,10 +267,10 @@ function AddContactsDrawer({
   });
 
   // Fetch lists for filter dropdown
-  const { data: listsData } = useQuery<{ data: ListItem[] }>({
+  const { data: listsData } = useQuery<ListItem[]>({
     queryKey: ['lists'],
     queryFn: async () => {
-      const res = await api.get('/lists');
+      const res = await api.get('/campaign-lists');
       return res.data;
     },
     enabled: open,
@@ -286,8 +286,8 @@ function AddContactsDrawer({
         per_page: 50,
       };
       if (searchQuery.trim()) params.q = searchQuery.trim();
-      if (selectedTagId) params.tag_id = selectedTagId;
-      if (selectedListId) params.list_id = selectedListId;
+      if (selectedTagId && selectedTagId !== 'all') params.tag_id = selectedTagId;
+      if (selectedListId && selectedListId !== 'all') params.list_id = selectedListId;
       
       const res = await api.get(`/sales-campaigns/${campaignId}/contacts/search`, { params });
       return res.data;
@@ -381,8 +381,8 @@ function AddContactsDrawer({
               <SelectTrigger>
                 <SelectValue placeholder="Filter by tag" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">All tags</SelectItem>
+              <SelectContent align="end">
+                <SelectItem value="all">All tags</SelectItem>
                 {tagsData?.map(tag => (
                   <SelectItem key={tag.id} value={tag.id}>{tag.name}</SelectItem>
                 ))}
@@ -393,8 +393,8 @@ function AddContactsDrawer({
                 <SelectValue placeholder="Filter by list" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All lists</SelectItem>
-                {listsData?.data?.map(list => (
+                <SelectItem value="all">All lists</SelectItem>
+                {listsData?.map(list => (
                   <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -408,7 +408,7 @@ function AddContactsDrawer({
             <LoadingSpinner text="Searching contacts..." />
           ) : contacts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchQuery || selectedTagId || selectedListId 
+              {searchQuery || (selectedTagId && selectedTagId !== 'all') || (selectedListId && selectedListId !== 'all')
                 ? 'No matching contacts found' 
                 : 'Enter search criteria to find contacts'}
             </div>
