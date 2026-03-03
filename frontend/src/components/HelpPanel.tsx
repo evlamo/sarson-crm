@@ -1,17 +1,12 @@
+import type { HelpArticle } from '@/lib/help-articles';
 import { useState, useMemo } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Search, ChevronLeft, ChevronRight, BookOpen, FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  HelpArticle,
-  helpArticles,
-  categories,
-  getArticlesByCategory,
-  searchArticles,
-  getContextualArticles,
-} from '@/lib/help-articles';
+import { helpArticles, categories, getArticlesByCategory, searchArticles, getContextualArticles } from '@/lib/help-articles';
 import { cn } from '@/lib/utils';
+
 
 interface HelpPanelProps {
   onClose: () => void;

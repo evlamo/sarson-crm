@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import type { AuditLogEntry, FieldHistoryEntry } from '@/lib/auditApi';
+import { fetchContactAuditLogs, fetchContactFieldHistory, revertContactField } from '@/lib/auditApi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import { History, RotateCcw, ChevronDown, ChevronUp, User, Clock } from 'lucide-react';
@@ -6,13 +8,6 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  fetchContactAuditLogs,
-  fetchContactFieldHistory,
-  revertContactField,
-  AuditLogEntry,
-  FieldHistoryEntry,
-} from '@/lib/auditApi';
 
 interface Props {
   contactId: string;

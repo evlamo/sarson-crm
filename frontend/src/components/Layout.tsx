@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import HelpWidget from './HelpWidget';
+
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
 import {
   Users,
@@ -230,7 +230,7 @@ export default function Layout() {
       </main>
 
       {/* Help Widget - mounted globally */}
-      <HelpWidget isOpen={isHelpOpen} onOpenChange={setIsHelpOpen} />
+      
 
       {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal 

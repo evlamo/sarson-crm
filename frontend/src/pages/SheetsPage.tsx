@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  Sheet,
   FileSpreadsheet,
   Upload,
   Download,
@@ -43,6 +42,7 @@ import {
   ArrowRight,
   Check,
   X,
+  Tag,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -71,6 +71,19 @@ interface ExportRecord {
   exported_by_name: string | null;
   sync_status: string | null;
   list_name: string | null;
+}
+
+interface ImportHistoryRecord {
+  id: string;
+  status: string;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by_name: string | null;
+  new_count: number;
+  conflict_count: number;
+  unchanged_count: number;
+  applied_count: number;
+  import_tags: string[];
 }
 
 interface ConflictItem {
@@ -104,6 +117,7 @@ interface ImportPreview {
   orphans: OrphanItem[];
   unchanged_count: number;
   total_sheet_rows: number;
+  import_tags: string[];
 }
 
 // ── Helper Components ─────────────────────────────────────────────────────
@@ -139,10 +153,74 @@ function StatusBadge({ status }: { status: string | null }) {
     partial: { variant: 'outline', label: 'Partial' },
     error: { variant: 'destructive', label: 'Error' },
     archived: { variant: 'secondary', label: 'Archived' },
+    pending: { variant: 'secondary', label: 'Pending' },
+    approved: { variant: 'default', label: 'Applied' },
   };
   
   const config = variants[status] || { variant: 'secondary', label: status };
   return <Badge variant={config.variant}>{config.label}</Badge>;
+}
+
+// Simple tag input component
+function TagInput({ 
+  value, 
+  onChange, 
+  placeholder 
+}: { 
+  value: string[]; 
+  onChange: (tags: string[]) => void; 
+  placeholder?: string;
+}) {
+  const [inputValue, setInputValue] = useState('');
+
+  const addTag = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed && !value.includes(trimmed)) {
+      onChange([...value, trimmed]);
+      setInputValue('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    onChange(value.filter(t => t !== tagToRemove));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTag();
+    }
+    if (e.key === 'Backspace' && !inputValue && value.length > 0) {
+      removeTag(value[value.length - 1]);
+    }
+  };
+
+  return (
+    <div className="border rounded-md p-2 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+      <div className="flex flex-wrap gap-1.5 mb-1.5">
+        {value.map((tag) => (
+          <Badge key={tag} variant="secondary" className="gap-1 text-xs">
+            {tag}
+            <button
+              type="button"
+              onClick={() => removeTag(tag)}
+              className="ml-1 hover:text-destructive"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ))}
+      </div>
+      <Input
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={addTag}
+        placeholder={value.length === 0 ? placeholder : 'Add another tag...'}
+        className="border-0 p-0 h-7 focus-visible:ring-0 focus-visible:ring-offset-0"
+      />
+    </div>
+  );
 }
 
 // ── Export Tab ────────────────────────────────────────────────────────────
@@ -277,6 +355,7 @@ function ImportTab({ config }: { config: SheetsConfig | undefined }) {
   const queryClient = useQueryClient();
   const [spreadsheetId, setSpreadsheetId] = useState('');
   const [sheetName, setSheetName] = useState('CRM Export');
+  const [importTags, setImportTags] = useState<string[]>([]);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   
   // Track user decisions
@@ -293,6 +372,7 @@ function ImportTab({ config }: { config: SheetsConfig | undefined }) {
       const res = await api.post('/sheets/import/preview', {
         spreadsheet_id: spreadsheetId,
         sheet_name: sheetName,
+        import_tags: importTags,
       });
       return res.data as ImportPreview;
     },
@@ -335,12 +415,18 @@ function ImportTab({ config }: { config: SheetsConfig | undefined }) {
       return res.data;
     },
     onSuccess: (data) => {
-      toast.success(`Applied ${data.changes_applied} changes, created ${data.contacts_created} contacts`);
+      let msg = `Applied ${data.changes_applied} changes, created ${data.contacts_created} contacts`;
+      if (data.tags_added > 0) {
+        msg += `, added ${data.tags_added} tag assignments`;
+      }
+      toast.success(msg);
       if (data.errors.length > 0) {
         toast.warning(`${data.errors.length} errors occurred`);
       }
       setPreview(null);
+      setImportTags([]);
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['sheets-imports'] });
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
       toast.error(err.response?.data?.detail || 'Apply failed');
@@ -422,6 +508,22 @@ function ImportTab({ config }: { config: SheetsConfig | undefined }) {
             </div>
           </div>
 
+          {/* Import Tags Field */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Tag className="h-4 w-4" />
+              Auto-apply tags to all imported contacts (optional)
+            </Label>
+            <TagInput
+              value={importTags}
+              onChange={setImportTags}
+              placeholder="e.g. cold-outreach-jan2026, trade-show-lead"
+            />
+            <p className="text-xs text-muted-foreground">
+              These tags will be added to every contact in this import batch (new and updated)
+            </p>
+          </div>
+
           <Button
             onClick={() => previewMutation.mutate()}
             disabled={!isReady || previewMutation.isPending}
@@ -464,6 +566,25 @@ function ImportTab({ config }: { config: SheetsConfig | undefined }) {
               </CardContent>
             </Card>
           </div>
+
+          {/* Import Tags Preview */}
+          {preview.import_tags.length > 0 && (
+            <Card className="bg-purple-50 border-purple-200">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-2 text-purple-700 mb-2">
+                  <Tag className="h-4 w-4" />
+                  <span className="font-medium">Tags to apply:</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {preview.import_tags.map((tag) => (
+                    <Badge key={tag} className="bg-purple-100 text-purple-800 border-purple-300">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Conflicts Section */}
           {preview.conflicts.length > 0 && (
@@ -632,6 +753,7 @@ function ImportTab({ config }: { config: SheetsConfig | undefined }) {
               <p className="font-medium">Ready to apply?</p>
               <p className="text-sm text-muted-foreground">
                 {pendingSheetChanges} field(s) will be updated from sheet, {selectedNewContacts.size} new contact(s) will be created
+                {preview.import_tags.length > 0 && `, ${preview.import_tags.length} tag(s) will be applied`}
               </p>
             </div>
             <Button
@@ -651,10 +773,18 @@ function ImportTab({ config }: { config: SheetsConfig | undefined }) {
 // ── History Tab ───────────────────────────────────────────────────────────
 
 function HistoryTab() {
-  const { data: exports, isLoading } = useQuery<ExportRecord[]>({
+  const { data: exports, isLoading: exportsLoading } = useQuery<ExportRecord[]>({
     queryKey: ['sheets-exports'],
     queryFn: async () => {
       const res = await api.get('/sheets/exports');
+      return res.data;
+    },
+  });
+
+  const { data: imports, isLoading: importsLoading } = useQuery<ImportHistoryRecord[]>({
+    queryKey: ['sheets-imports'],
+    queryFn: async () => {
+      const res = await api.get('/sheets/imports');
       return res.data;
     },
   });
@@ -673,58 +803,124 @@ function HistoryTab() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <History className="h-5 w-5" />
-          Export History
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : exports && exports.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Sheet</TableHead>
-                <TableHead>Contacts</TableHead>
-                <TableHead>List</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>By</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {exports.map((exp) => (
-                <TableRow key={exp.id}>
-                  <TableCell className="text-sm">{relativeTime(exp.exported_at)}</TableCell>
-                  <TableCell className="font-mono text-sm">{exp.sheet_name || '—'}</TableCell>
-                  <TableCell>{exp.contact_count?.toLocaleString() || '—'}</TableCell>
-                  <TableCell>{exp.list_name || 'All'}</TableCell>
-                  <TableCell><StatusBadge status={exp.sync_status} /></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{exp.exported_by_name || '—'}</TableCell>
-                  <TableCell>
-                    {exp.spreadsheet_url && (
-                      <Button size="sm" variant="ghost" asChild>
-                        <a href={exp.spreadsheet_url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </Button>
-                    )}
-                  </TableCell>
+    <div className="space-y-6">
+      {/* Export History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Download className="h-5 w-5" />
+            Export History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {exportsLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : exports && exports.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Sheet</TableHead>
+                  <TableHead>Contacts</TableHead>
+                  <TableHead>List</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>By</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <p className="text-center text-muted-foreground py-8">No exports yet</p>
-        )}
-      </CardContent>
-    </Card>
+              </TableHeader>
+              <TableBody>
+                {exports.map((exp) => (
+                  <TableRow key={exp.id}>
+                    <TableCell className="text-sm">{relativeTime(exp.exported_at)}</TableCell>
+                    <TableCell className="font-mono text-sm">{exp.sheet_name || '—'}</TableCell>
+                    <TableCell>{exp.contact_count?.toLocaleString() || '—'}</TableCell>
+                    <TableCell>{exp.list_name || 'All'}</TableCell>
+                    <TableCell><StatusBadge status={exp.sync_status} /></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{exp.exported_by_name || '—'}</TableCell>
+                    <TableCell>
+                      {exp.spreadsheet_url && (
+                        <Button size="sm" variant="ghost" asChild>
+                          <a href={exp.spreadsheet_url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">No exports yet</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Import History */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Upload className="h-5 w-5" />
+            Import History
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {importsLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : imports && imports.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>New</TableHead>
+                  <TableHead>Conflicts</TableHead>
+                  <TableHead>Applied</TableHead>
+                  <TableHead>Tags</TableHead>
+                  <TableHead>By</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {imports.map((imp) => (
+                  <TableRow key={imp.id}>
+                    <TableCell className="text-sm">{relativeTime(imp.created_at)}</TableCell>
+                    <TableCell><StatusBadge status={imp.status} /></TableCell>
+                    <TableCell>{imp.new_count}</TableCell>
+                    <TableCell>{imp.conflict_count}</TableCell>
+                    <TableCell>{imp.applied_count}</TableCell>
+                    <TableCell>
+                      {imp.import_tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {imp.import_tags.slice(0, 2).map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                          {imp.import_tags.length > 2 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{imp.import_tags.length - 2}
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{imp.reviewed_by_name || '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">No imports yet</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

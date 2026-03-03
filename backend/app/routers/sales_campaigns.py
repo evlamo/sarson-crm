@@ -9,13 +9,15 @@ import uuid as uuid_mod
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user, require_not_restricted
 from app.models.user import User
 from app.models.contact import Contact
+from app.models.tag import Tag
+from app.models.static_list import StaticListMember
 from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.campaign import EmailCampaign
 from app.services import audit_service
@@ -59,6 +61,11 @@ class CampaignContactCreate(BaseModel):
     contact_ids: List[UUID] = Field(..., min_length=1, max_length=1000)
 
 
+class BulkAddContactsRequest(BaseModel):
+    contact_ids: List[UUID] = Field(..., min_length=1, max_length=1000)
+    initial_status: str = Field(default="active", pattern="^(active|paused|complete|no|excluded)$")
+
+
 class CampaignContactStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(active|complete|no|excluded)$")
 
@@ -98,6 +105,26 @@ class AddContactsResult(BaseModel):
     skipped_dnc: int
     skipped_existing: int
     dnc_contacts: List[str] = []
+
+
+# ── Search endpoint schemas ────────────────────────────────────────────────
+
+class ContactSearchResult(BaseModel):
+    id: UUID
+    full_name: str
+    email: Optional[str]
+    company: Optional[str]
+    tags: List[str] = []
+    master_dnc: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class PaginatedContactSearch(BaseModel):
+    data: List[ContactSearchResult]
+    total: int
+    page: int
+    per_page: int
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -209,12 +236,12 @@ def create_sales_campaign(
         owner_id=current_user.id,
     )
     db.add(campaign)
+    db.commit()
+    db.refresh(campaign)
     
     _log_audit(db, "sales_campaign.create", "sales_campaign", str(campaign.id), 
                str(current_user.id), new_values={"name": data.name, "status": data.status})
     
-    db.commit()
-    db.refresh(campaign)
     return _build_campaign_out(campaign, db)
 
 
@@ -280,6 +307,100 @@ def delete_sales_campaign(
                str(current_user.id), new_values={"status": "archived"})
     
     db.commit()
+
+
+# ── Search Contacts to Add ─────────────────────────────────────────────────
+
+@router.get("/{campaign_id}/contacts/search", response_model=PaginatedContactSearch)
+def search_contacts_for_campaign(
+    campaign_id: UUID,
+    q: Optional[str] = Query(None, max_length=300, description="Search name, email, company"),
+    tag: Optional[str] = Query(None, max_length=100, description="Filter by tag name"),
+    tag_id: Optional[UUID] = Query(None, description="Filter by tag ID"),
+    list_id: Optional[UUID] = Query(None, description="Filter by static list ID"),
+    exclude_existing: bool = Query(True, description="Exclude contacts already in campaign"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Search contacts to add to a campaign.
+    Supports filtering by text search, tag, and list.
+    """
+    # Verify campaign exists
+    _get_campaign_or_404(campaign_id, db)
+    
+    query = (
+        db.query(Contact)
+        .options(joinedload(Contact.tags))
+        .filter(Contact.deleted_at.is_(None))
+    )
+    
+    # Exclude contacts already in this campaign
+    if exclude_existing:
+        existing_contact_ids = db.query(CampaignContact.contact_id).filter(
+            CampaignContact.sales_campaign_id == campaign_id
+        ).subquery()
+        query = query.filter(~Contact.id.in_(existing_contact_ids))
+    
+    # Text search
+    if q:
+        search_clean = q.strip()
+        search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
+        query = query.filter(
+            or_(
+                Contact.first_name.ilike(f"%{search_escaped}%"),
+                Contact.last_name.ilike(f"%{search_escaped}%"),
+                Contact.email.ilike(f"%{search_escaped}%"),
+                Contact.company.ilike(f"%{search_escaped}%"),
+            )
+        )
+    
+    # Filter by tag name
+    if tag:
+        query = query.filter(Contact.tags.any(func.lower(Tag.name) == func.lower(tag.strip())))
+    
+    # Filter by tag ID
+    if tag_id:
+        query = query.filter(Contact.tags.any(Tag.id == tag_id))
+    
+    # Filter by static list
+    if list_id:
+        list_contact_ids = db.query(StaticListMember.c.contact_id).filter(
+            StaticListMember.c.list_id == list_id
+        ).subquery()
+        query = query.filter(Contact.id.in_(list_contact_ids))
+    
+    # Get total before pagination
+    total = query.count()
+    
+    # Apply pagination
+    contacts = (
+        query.order_by(Contact.last_name.asc().nullslast(), Contact.first_name.asc().nullslast())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    
+    # Build response
+    data = []
+    for contact in contacts:
+        data.append(ContactSearchResult(
+            id=contact.id,
+            full_name=contact.full_name or f"{contact.first_name or ''} {contact.last_name or ''}".strip(),
+            email=contact.email,
+            company=contact.company,
+            tags=[t.name for t in contact.tags] if contact.tags else [],
+            master_dnc=contact.master_dnc or False,
+        ))
+    
+    return PaginatedContactSearch(
+        data=data,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
 
 
 # ── List Campaign Contacts ─────────────────────────────────────────────────
@@ -385,6 +506,75 @@ def add_contacts_to_campaign(
     if added > 0:
         _log_audit(db, "sales_campaign.add_contacts", "sales_campaign", str(campaign_id),
                    str(current_user.id), new_values={"added": added, "skipped_dnc": skipped_dnc})
+        db.commit()
+    
+    return AddContactsResult(
+        added=added,
+        skipped_dnc=skipped_dnc,
+        skipped_existing=skipped_existing,
+        dnc_contacts=dnc_contacts,
+    )
+
+
+# ── Bulk Add Contacts with Initial Status ──────────────────────────────────
+
+@router.post("/{campaign_id}/contacts/bulk", response_model=AddContactsResult, status_code=201)
+def bulk_add_contacts_to_campaign(
+    campaign_id: UUID,
+    data: BulkAddContactsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Bulk add contacts to a sales campaign with custom initial status.
+    DNC contacts are skipped silently.
+    """
+    _check_campaign_permission(current_user)
+    campaign = _get_campaign_or_404(campaign_id, db)
+    
+    # Get existing contact IDs in this campaign
+    existing_ids = set(
+        row[0] for row in db.query(CampaignContact.contact_id)
+        .filter(CampaignContact.sales_campaign_id == campaign_id)
+        .all()
+    )
+    
+    # Fetch all contacts
+    contacts = db.query(Contact).filter(
+        Contact.id.in_(data.contact_ids),
+        Contact.deleted_at.is_(None)
+    ).all()
+    
+    added = 0
+    skipped_dnc = 0
+    skipped_existing = 0
+    dnc_contacts = []
+    
+    for contact in contacts:
+        if contact.id in existing_ids:
+            skipped_existing += 1
+            continue
+        
+        if _is_contact_dnc(contact):
+            skipped_dnc += 1
+            dnc_contacts.append(contact.full_name or str(contact.id))
+            continue
+        
+        cc = CampaignContact(
+            contact_id=contact.id,
+            sales_campaign_id=campaign_id,
+            status=data.initial_status,
+        )
+        db.add(cc)
+        added += 1
+    
+    if added > 0:
+        _log_audit(db, "sales_campaign.bulk_add_contacts", "sales_campaign", str(campaign_id),
+                   str(current_user.id), new_values={
+                       "added": added, 
+                       "skipped_dnc": skipped_dnc,
+                       "initial_status": data.initial_status
+                   })
         db.commit()
     
     return AddContactsResult(

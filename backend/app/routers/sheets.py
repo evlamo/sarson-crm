@@ -176,6 +176,7 @@ class ExportResponse(BaseModel):
 class ImportPreviewRequest(BaseModel):
     spreadsheet_id: str = Field(..., min_length=10, max_length=100)
     sheet_name: str = Field(default="CRM Export", min_length=1, max_length=100)
+    import_tags: List[str] = Field(default_factory=list, description="Tags to auto-apply to all imported contacts")
 
 
 class ConflictItem(BaseModel):
@@ -211,6 +212,7 @@ class ImportPreviewResponse(BaseModel):
     orphans: List[OrphanItem]
     unchanged_count: int
     total_sheet_rows: int
+    import_tags: List[str] = Field(default_factory=list)
 
 
 class ApprovedChange(BaseModel):
@@ -229,6 +231,7 @@ class ImportApplyRequest(BaseModel):
 class ImportApplyResponse(BaseModel):
     changes_applied: int
     contacts_created: int
+    tags_added: int = 0
     errors: List[str]
     version: int = Field(default=1, description="New version after apply")
 
@@ -264,6 +267,19 @@ class ExportListItem(BaseModel):
     exported_by_name: Optional[str]
     sync_status: Optional[str]
     list_name: Optional[str]
+
+
+class ImportHistoryItem(BaseModel):
+    id: UUID
+    status: str
+    created_at: datetime
+    reviewed_at: Optional[datetime]
+    reviewed_by_name: Optional[str]
+    new_count: int
+    conflict_count: int
+    unchanged_count: int
+    applied_count: int
+    import_tags: List[str] = Field(default_factory=list)
 
 
 # ── Settings Helpers ───────────────────────────────────────────────────────
@@ -368,6 +384,38 @@ def _get_contacts_for_export(db: Session, list_id: Optional[UUID] = None) -> Lis
     # Use yield_per for memory efficiency with large datasets
     contacts = query.order_by(Contact.last_name, Contact.first_name).yield_per(500).all()
     return [_build_contact_dict(c) for c in contacts]
+
+
+def _get_or_create_tag(db: Session, tag_name: str) -> Tag:
+    """Get existing tag or create a new one."""
+    tag_name = tag_name.strip()[:100]  # Truncate to reasonable length
+    tag = db.query(Tag).filter(func.lower(Tag.name) == func.lower(tag_name)).first()
+    if not tag:
+        tag = Tag(name=tag_name)
+        db.add(tag)
+        db.flush()
+    return tag
+
+
+def _add_import_tags_to_contact(db: Session, contact: Contact, import_tags: List[str]) -> int:
+    """Add import tags to a contact, returning count of tags actually added."""
+    if not import_tags:
+        return 0
+    
+    added = 0
+    existing_tag_names = {t.name.lower() for t in contact.tags} if contact.tags else set()
+    
+    for tag_name in import_tags:
+        if not tag_name.strip():
+            continue
+        if tag_name.strip().lower() in existing_tag_names:
+            continue
+        
+        tag = _get_or_create_tag(db, tag_name.strip())
+        contact.tags.append(tag)
+        added += 1
+    
+    return added
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
@@ -616,6 +664,46 @@ def list_exports(
     return result
 
 
+@router.get("/imports", response_model=List[ImportHistoryItem])
+def list_imports(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """List past import reviews with pagination."""
+    reviews = (
+        db.query(SheetsImportReview)
+        .options(joinedload(SheetsImportReview.reviewer))
+        .order_by(SheetsImportReview.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    
+    result = []
+    for review in reviews:
+        # Extract import_tags from import_data
+        import_tags = []
+        if review.import_data and isinstance(review.import_data, dict):
+            import_tags = review.import_data.get("import_tags", [])
+        
+        result.append(ImportHistoryItem(
+            id=review.id,
+            status=review.status,
+            created_at=review.created_at,
+            reviewed_at=review.reviewed_at,
+            reviewed_by_name=review.reviewer.full_name if review.reviewer else None,
+            new_count=review.new_count or 0,
+            conflict_count=review.conflict_count or 0,
+            unchanged_count=review.unchanged_count or 0,
+            applied_count=review.applied_count or 0,
+            import_tags=import_tags,
+        ))
+    
+    return result
+
+
 @router.post("/import/preview", response_model=ImportPreviewResponse)
 def preview_import(
     payload: ImportPreviewRequest,
@@ -653,6 +741,13 @@ def preview_import(
             status_code=400, 
             detail="Sheet must have an 'id' column to map back to CRM contacts"
         )
+    
+    # Sanitize import_tags
+    sanitized_import_tags = [
+        sanitize_value(tag.strip())[:100] 
+        for tag in payload.import_tags 
+        if tag.strip()
+    ]
     
     # Sanitize all sheet values upfront
     sanitized_rows = []
@@ -755,6 +850,7 @@ def preview_import(
             "headers": headers,
             "rows": sanitized_rows,  # Store sanitized rows
             "version": 1,  # Initial version for optimistic locking
+            "import_tags": sanitized_import_tags,  # Store import tags
         },
         conflict_data={
             "conflicts": [c.model_dump() for c in conflicts],
@@ -777,6 +873,7 @@ def preview_import(
         orphans=orphans,
         unchanged_count=unchanged_count,
         total_sheet_rows=len(sanitized_rows),
+        import_tags=sanitized_import_tags,
     )
 
 
@@ -790,6 +887,7 @@ def apply_import(
     Apply approved changes from an import preview.
     Only explicitly approved changes are applied.
     Uses optimistic locking to prevent concurrent modifications.
+    Applies import_tags to all created/updated contacts.
     """
     review = db.query(SheetsImportReview).filter(
         SheetsImportReview.id == payload.review_id
@@ -809,9 +907,13 @@ def apply_import(
             detail="Import review was modified. Please refresh and try again."
         )
     
+    # Get import tags from the review
+    import_tags = review.import_data.get("import_tags", []) if review.import_data else []
+    
     errors = []
     changes_applied = 0
     contacts_created = 0
+    total_tags_added = 0
     
     # Group approved changes by contact
     changes_by_contact: Dict[str, Dict[str, str]] = {}
@@ -833,7 +935,7 @@ def apply_import(
     
     # Apply changes to existing contacts
     for contact_id, field_changes in changes_by_contact.items():
-        contact = db.query(Contact).filter(
+        contact = db.query(Contact).options(joinedload(Contact.tags)).filter(
             Contact.id == contact_id,
             Contact.deleted_at.is_(None)
         ).first()
@@ -871,6 +973,13 @@ def apply_import(
                 new_values[field] = new_value
             
             changes_applied += 1
+        
+        # Apply import tags to updated contacts
+        if import_tags:
+            tags_added = _add_import_tags_to_contact(db, contact, import_tags)
+            total_tags_added += tags_added
+            if tags_added > 0:
+                new_values["import_tags_added"] = import_tags
         
         contact.updated_at = datetime.now(timezone.utc)
         
@@ -964,7 +1073,7 @@ def apply_import(
             db.add(new_contact)
             db.flush()
             
-            # Handle tags
+            # Handle tags from sheet
             tags_str = raw.get("tags", "").strip()
             if tags_str:
                 tag_names = [sanitize_value(t.strip())[:100] for t in tags_str.split(",") if t.strip()]
@@ -976,6 +1085,11 @@ def apply_import(
                         db.flush()
                     new_contact.tags.append(tag)
             
+            # Apply import tags to new contacts
+            if import_tags:
+                tags_added = _add_import_tags_to_contact(db, new_contact, import_tags)
+                total_tags_added += tags_added
+            
             audit_service.log_action_sync(
                 db=db,
                 action="sheets.import_create",
@@ -986,6 +1100,7 @@ def apply_import(
                     "first_name": first_name,
                     "last_name": last_name,
                     "source": "sheets_import",
+                    "import_tags": import_tags if import_tags else None,
                 },
                 user_id=str(admin.id),
             )
@@ -1010,6 +1125,7 @@ def apply_import(
     return ImportApplyResponse(
         changes_applied=changes_applied,
         contacts_created=contacts_created,
+        tags_added=total_tags_added,
         errors=errors,
         version=new_version,
     )

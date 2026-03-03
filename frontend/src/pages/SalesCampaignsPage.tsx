@@ -31,9 +31,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Users, Mail, BarChart3, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from '@/components/ui/sheet';
+import { Plus, Users, Mail, BarChart3, AlertCircle, Loader2, Search, UserPlus, AlertTriangle } from 'lucide-react';
 
-// Fix 6: Proper TypeScript interfaces
+// TypeScript interfaces
 interface SalesCampaign {
   id: string;
   name: string;
@@ -95,13 +102,47 @@ interface SalesCampaignsResponse {
   per_page: number;
 }
 
+interface ContactSearchResult {
+  id: string;
+  full_name: string;
+  email: string | null;
+  company: string | null;
+  tags: string[];
+  master_dnc: boolean;
+}
+
+interface ContactSearchResponse {
+  data: ContactSearchResult[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+interface TagItem {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+interface ListItem {
+  id: string;
+  name: string;
+  member_count?: number;
+}
+
+interface AddContactsResult {
+  added: number;
+  skipped_dnc: number;
+  skipped_existing: number;
+  dnc_contacts: string[];
+}
+
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-green-100 text-green-700 border-green-200',
   paused: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   completed: 'bg-blue-100 text-blue-700 border-blue-200',
 };
 
-// Fix 5: Loading spinner component
 function LoadingSpinner({ text = 'Loading...' }: { text?: string }) {
   return (
     <div className="flex flex-col items-center justify-center p-8 gap-3">
@@ -184,11 +225,334 @@ function CreateCampaignModal({ open, onClose, onSuccess }: { open: boolean; onCl
   );
 }
 
+// Add Contacts Drawer Component
+function AddContactsDrawer({ 
+  open, 
+  onClose, 
+  campaignId, 
+  onSuccess 
+}: { 
+  open: boolean; 
+  onClose: () => void; 
+  campaignId: string;
+  onSuccess: () => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTagId, setSelectedTagId] = useState<string>('');
+  const [selectedListId, setSelectedListId] = useState<string>('');
+  const [initialStatus, setInitialStatus] = useState('active');
+  const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+
+  // Reset state when drawer opens/closes
+  useEffect(() => {
+    if (open) {
+      setSearchQuery('');
+      setSelectedTagId('');
+      setSelectedListId('');
+      setInitialStatus('active');
+      setSelectedContacts(new Set());
+      setPage(1);
+    }
+  }, [open]);
+
+  // Fetch tags for filter dropdown
+  const { data: tagsData } = useQuery<TagItem[]>({
+    queryKey: ['tags'],
+    queryFn: async () => {
+      const res = await api.get('/tags');
+      return res.data;
+    },
+    enabled: open,
+  });
+
+  // Fetch lists for filter dropdown
+  const { data: listsData } = useQuery<{ data: ListItem[] }>({
+    queryKey: ['lists'],
+    queryFn: async () => {
+      const res = await api.get('/lists');
+      return res.data;
+    },
+    enabled: open,
+  });
+
+  // Search contacts
+  const { data: searchResults, isLoading: isSearching, isFetching } = useQuery<ContactSearchResponse>({
+    queryKey: ['campaign-contacts-search', campaignId, searchQuery, selectedTagId, selectedListId, page],
+    queryFn: async () => {
+      const params: Record<string, string | number | boolean> = {
+        exclude_existing: true,
+        page,
+        per_page: 50,
+      };
+      if (searchQuery.trim()) params.q = searchQuery.trim();
+      if (selectedTagId) params.tag_id = selectedTagId;
+      if (selectedListId) params.list_id = selectedListId;
+      
+      const res = await api.get(`/sales-campaigns/${campaignId}/contacts/search`, { params });
+      return res.data;
+    },
+    enabled: open,
+  });
+
+  // Add contacts mutation
+  const addMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`/sales-campaigns/${campaignId}/contacts/bulk`, {
+        contact_ids: Array.from(selectedContacts),
+        initial_status: initialStatus,
+      });
+      return res.data as AddContactsResult;
+    },
+    onSuccess: (result) => {
+      const messages: string[] = [];
+      if (result.added > 0) {
+        messages.push(`${result.added} contact${result.added !== 1 ? 's' : ''} added`);
+      }
+      if (result.skipped_dnc > 0) {
+        messages.push(`${result.skipped_dnc} DNC skipped`);
+      }
+      if (result.skipped_existing > 0) {
+        messages.push(`${result.skipped_existing} already in campaign`);
+      }
+      toast.success(messages.join(', ') || 'Contacts processed');
+      setSelectedContacts(new Set());
+      onSuccess();
+      onClose();
+    },
+    onError: () => {
+      toast.error('Failed to add contacts');
+    },
+  });
+
+  const contacts = searchResults?.data || [];
+  const totalResults = searchResults?.total || 0;
+  const totalPages = Math.ceil(totalResults / 50);
+
+  const toggleContact = (id: string) => {
+    const newSet = new Set(selectedContacts);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedContacts(newSet);
+  };
+
+  const selectAll = () => {
+    const newSet = new Set(selectedContacts);
+    contacts.forEach(c => newSet.add(c.id));
+    setSelectedContacts(newSet);
+  };
+
+  const clearSelection = () => {
+    setSelectedContacts(new Set());
+  };
+
+  // Count DNC contacts in selection
+  const selectedDncCount = contacts.filter(c => selectedContacts.has(c.id) && c.master_dnc).length;
+
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent className="w-full sm:max-w-lg flex flex-col h-full" showCloseButton={true}>
+        <SheetHeader className="pb-4 border-b">
+          <SheetTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5" />
+            Add Contacts to Campaign
+          </SheetTitle>
+        </SheetHeader>
+
+        {/* Filters Section */}
+        <div className="space-y-3 py-4 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search name, email, company..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
+              className="pl-9"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={selectedTagId} onValueChange={(v) => { setSelectedTagId(v); setPage(1); }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by tag" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All tags</SelectItem>
+                {tagsData?.map(tag => (
+                  <SelectItem key={tag.id} value={tag.id}>{tag.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedListId} onValueChange={(v) => { setSelectedListId(v); setPage(1); }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by list" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All lists</SelectItem>
+                {listsData?.data?.map(list => (
+                  <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Results Section */}
+        <div className="flex-1 overflow-auto py-2">
+          {isSearching ? (
+            <LoadingSpinner text="Searching contacts..." />
+          ) : contacts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {searchQuery || selectedTagId || selectedListId 
+                ? 'No matching contacts found' 
+                : 'Enter search criteria to find contacts'}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between px-2 py-1 text-sm text-muted-foreground">
+                <span>
+                  {totalResults} result{totalResults !== 1 ? 's' : ''}
+                  {isFetching && <Loader2 className="h-3 w-3 ml-2 inline animate-spin" />}
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={selectAll} className="h-7 text-xs">
+                    Select Page
+                  </Button>
+                  {selectedContacts.size > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearSelection} className="h-7 text-xs">
+                      Clear ({selectedContacts.size})
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {contacts.map(contact => (
+                <div 
+                  key={contact.id}
+                  className={`flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer ${
+                    selectedContacts.has(contact.id) ? 'bg-muted' : ''
+                  } ${contact.master_dnc ? 'opacity-60' : ''}`}
+                  onClick={() => toggleContact(contact.id)}
+                >
+                  <Checkbox 
+                    checked={selectedContacts.has(contact.id)} 
+                    onCheckedChange={() => toggleContact(contact.id)}
+                    className="mt-1"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm truncate">{contact.full_name}</span>
+                      {contact.master_dnc && (
+                        <Badge variant="destructive" className="text-xs">DNC</Badge>
+                      )}
+                    </div>
+                    {contact.email && (
+                      <div className="text-xs text-muted-foreground truncate">{contact.email}</div>
+                    )}
+                    {contact.company && (
+                      <div className="text-xs text-muted-foreground truncate">{contact.company}</div>
+                    )}
+                    {contact.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {contact.tags.slice(0, 3).map(tag => (
+                          <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0">
+                            {tag}
+                          </Badge>
+                        ))}
+                        {contact.tags.length > 3 && (
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                            +{contact.tags.length - 3}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-4">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {page} of {totalPages}
+                  </span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer / Add Section */}
+        <SheetFooter className="border-t pt-4 flex-col gap-3">
+          {selectedDncCount > 0 && (
+            <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 p-2 rounded w-full">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>{selectedDncCount} selected contact{selectedDncCount !== 1 ? 's are' : ' is'} on the DNC list and will be skipped</span>
+            </div>
+          )}
+          <div className="flex items-center gap-3 w-full">
+            <div className="flex-1">
+              <Label className="text-xs text-muted-foreground mb-1 block">Initial Status</Label>
+              <Select value={initialStatus} onValueChange={setInitialStatus}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="complete">Complete</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                  <SelectItem value="excluded">Excluded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button 
+              onClick={() => addMutation.mutate()}
+              disabled={selectedContacts.size === 0 || addMutation.isPending}
+              className="h-9"
+            >
+              {addMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>Add {selectedContacts.size > 0 ? selectedContacts.size : ''} Contact{selectedContacts.size !== 1 ? 's' : ''}</>
+              )}
+            </Button>
+          </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function ContactsTab({ campaignId }: { campaignId: string }) {
   const isRestricted = useAuth((s) => s.isRestricted);
   const queryClient = useQueryClient();
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState('');
+  const [addDrawerOpen, setAddDrawerOpen] = useState(false);
 
   const { data, isLoading, isFetching } = useQuery<ContactsResponse>({
     queryKey: ['sales-campaign-contacts', campaignId],
@@ -214,6 +578,7 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-campaign-contacts', campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['sales-campaigns'] });
       toast.success('Contact removed');
     },
   });
@@ -227,22 +592,35 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
     setBulkStatus('');
   };
 
+  const handleAddSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['sales-campaign-contacts', campaignId] });
+    queryClient.invalidateQueries({ queryKey: ['sales-campaigns'] });
+  };
+
   const contacts: CampaignContact[] = data?.data || [];
 
-  // Fix 5: Better loading state with spinner
   if (isLoading) {
     return <LoadingSpinner text="Loading contacts..." />;
   }
 
   return (
     <div className="space-y-4">
-      {/* Show subtle loading indicator when refetching */}
-      {isFetching && !isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Refreshing...
+      {/* Action bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {isFetching && !isLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Refreshing...
+            </div>
+          )}
         </div>
-      )}
+        <Button onClick={() => setAddDrawerOpen(true)}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Add Contacts
+        </Button>
+      </div>
+
       {selectedContacts.size > 0 && (
         <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
           <span className="text-sm font-medium">{selectedContacts.size} selected</span>
@@ -259,8 +637,13 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
           <Button size="sm" variant="ghost" onClick={() => setSelectedContacts(new Set())}>Clear</Button>
         </div>
       )}
+      
       {contacts.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">No contacts yet</div>
+        <div className="text-center py-8 text-muted-foreground">
+          <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>No contacts yet</p>
+          <p className="text-sm mt-1">Click "Add Contacts" to get started</p>
+        </div>
       ) : (
         <Table>
           <TableHeader>
@@ -322,6 +705,13 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
           </TableBody>
         </Table>
       )}
+
+      <AddContactsDrawer 
+        open={addDrawerOpen} 
+        onClose={() => setAddDrawerOpen(false)} 
+        campaignId={campaignId}
+        onSuccess={handleAddSuccess}
+      />
     </div>
   );
 }
@@ -337,7 +727,6 @@ function EmailCampaignsTab({ campaignId }: { campaignId: string }) {
 
   const campaigns: EmailCampaign[] = data?.data || [];
 
-  // Fix 5: Better loading state with spinner
   if (isLoading) {
     return <LoadingSpinner text="Loading email campaigns..." />;
   }
@@ -384,7 +773,6 @@ function StatsTab({ campaignId }: { campaignId: string }) {
     },
   });
 
-  // Fix 5: Better loading state with spinner
   if (isLoading) {
     return <LoadingSpinner text="Loading stats..." />;
   }
