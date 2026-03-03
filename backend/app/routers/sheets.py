@@ -176,7 +176,7 @@ class ExportResponse(BaseModel):
 class ImportPreviewRequest(BaseModel):
     spreadsheet_id: str = Field(..., min_length=10, max_length=100)
     sheet_name: str = Field(default="CRM Export", min_length=1, max_length=100)
-    import_tags: List[str] = Field(default_factory=list, description="Tags to auto-apply to all imported contacts")
+    import_tags: List[str] = Field(default_factory=list, max_length=20, description="Tags to auto-apply to all imported contacts (max 20)")
 
 
 class ConflictItem(BaseModel):

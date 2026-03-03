@@ -150,7 +150,7 @@ def _is_contact_dnc(contact: Contact) -> bool:
     return contact.master_dnc is True
 
 
-def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_id: str, old_values: dict = None, new_values: dict = None):
+def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_id: str, old_values: Optional[dict] = None, new_values: Optional[dict] = None):
     """Sync audit logging - fire and forget."""
     audit_service.log_action_sync(
         db=db,
