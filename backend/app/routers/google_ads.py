@@ -13,7 +13,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, get_admin_user
+from app.auth.dependencies import get_current_user, get_admin_user, require_not_restricted
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.google_ads import ConversionSyncHistory, GoogleAdsConversionAction
@@ -117,6 +117,7 @@ def update_conversion_action(
 def delete_conversion_action(
     action_id: str, db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
+    _: User = Depends(require_not_restricted),
 ):
     action = db.query(GoogleAdsConversionAction).filter(GoogleAdsConversionAction.id == action_id).first()
     if not action:

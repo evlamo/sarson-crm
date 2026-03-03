@@ -21,7 +21,12 @@ PROVIDER_FIELDS = {
         "from_email": {"label": "Default From Email", "sensitive": False, "placeholder": "info@sarsonfunds.com", "help": "Must be a verified email in your Mailchimp account", "required": True},
         "from_name": {"label": "Default From Name", "sensitive": False, "placeholder": "Sarson Funds", "help": "Sender name shown in recipient inboxes", "required": True},
         "webhook_secret": {"label": "Webhook Secret", "sensitive": True, "placeholder": "random-secret-string", "help": "A secret token you generate — appended to Mailchimp webhook URL for verification", "required": False},
-    }
+    },
+    "google_oauth": {
+        "client_id": {"label": "Client ID", "sensitive": False, "placeholder": "123456789.apps.googleusercontent.com", "help": "Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID", "required": True},
+        "client_secret": {"label": "Client Secret", "sensitive": True, "placeholder": "GOCSPX-...", "help": "Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client Secret", "required": True},
+        "allowed_domains": {"label": "Allowed Domains", "sensitive": False, "placeholder": "sarsonfunds.com", "help": "Comma-separated list of allowed email domains. Users from these domains can sign in with Google. Individual invitations bypass this restriction.", "required": False},
+    },
 }
 
 
@@ -58,7 +63,13 @@ def update_credentials(db: Session, provider: str, fields: Dict[str, Optional[st
         elif value == "":
             current.pop(field, None)
         else:
-            current[field] = encrypt_value(value)
+            # Only encrypt sensitive fields
+            provider_fields = PROVIDER_FIELDS.get(provider, {})
+            field_def = provider_fields.get(field, {})
+            if field_def.get("sensitive", True):
+                current[field] = encrypt_value(value)
+            else:
+                current[field] = value
 
     creds.credentials = current
     provider_fields = PROVIDER_FIELDS.get(provider, {})
@@ -76,13 +87,15 @@ def get_masked_fields(creds: ApiCredentials, provider: str) -> Dict[str, str]:
         return {}
     provider_fields = PROVIDER_FIELDS.get(provider, {})
     result = {}
-    for field, raw_encrypted in creds.credentials.items():
-        if not raw_encrypted:
+    for field, raw_value in creds.credentials.items():
+        if not raw_value:
             continue
-        decrypted = decrypt_value(raw_encrypted)
         field_def = provider_fields.get(field, {})
+        # Decrypt sensitive fields, pass through non-sensitive
         if field_def.get("sensitive", True):
+            decrypted = decrypt_value(raw_value)
             result[field] = mask_value(decrypted, show_chars=4)
         else:
-            result[field] = decrypted
+            # Non-sensitive fields stored in plaintext
+            result[field] = raw_value
     return result

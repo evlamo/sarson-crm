@@ -10,7 +10,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_not_restricted
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.campaign import EmailTemplate
@@ -163,6 +163,7 @@ def delete_template(
     template_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     template = db.query(EmailTemplate).filter(EmailTemplate.id == template_id).first()
     if not template:

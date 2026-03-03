@@ -436,7 +436,7 @@ function ConvertDialog({ contact, onClose, onSuccess }: { contact: TrackedContac
       toast.success('Conversion synced to Google Ads');
       onSuccess();
     },
-    onError: (err: any) => {
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
       toast.error(err?.response?.data?.detail || 'Failed to sync conversion');
     },
   });
@@ -501,6 +501,7 @@ function ConversionActionsSection() {
     queryFn: () => api.get('/google-ads/conversion-actions').then((r) => r.data),
   });
 
+  const isRestricted = useAuth((s) => s.isRestricted);
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/google-ads/conversion-actions/${id}`),
     onSuccess: () => {
@@ -583,7 +584,7 @@ function ActionFormDialog({ action, onClose, onSaved }: { action: ConversionActi
         : api.post('/google-ads/conversion-actions', payload);
     },
     onSuccess: () => { toast.success('Saved'); onSaved(); },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || 'Failed'),
+    onError: (err: { response?: { data?: { detail?: string } } }) => toast.error(err?.response?.data?.detail || 'Failed'),
   });
 
   return (
@@ -623,11 +624,11 @@ function ApiConfigSection() {
 
   const testMutation = useMutation({
     mutationFn: () => api.post('/google-ads/auth/test').then((r) => r.data),
-    onSuccess: (data: any) => {
+    onSuccess: (data: { success?: boolean }) => {
       if (data.connected) toast.success(`Connected: ${data.message}`);
       else toast.error(`Connection failed: ${data.message}`);
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || 'Test failed'),
+    onError: (err: { response?: { data?: { detail?: string } } }) => toast.error(err?.response?.data?.detail || 'Test failed'),
   });
 
   return (

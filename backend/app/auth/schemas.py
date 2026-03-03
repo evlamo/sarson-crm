@@ -3,39 +3,50 @@ from typing import Optional
 from datetime import datetime
 import uuid
 
+
 class LoginRequest(BaseModel):
     email: str
     password: str
+
 
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
 
+
 class RefreshRequest(BaseModel):
     refresh_token: str
+
 
 class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     name: str
     role: str
-    avatar_url: Optional[str]
+    avatar_url: Optional[str] = None
     is_active: bool
+    is_restricted: bool = False
     created_at: datetime
-    last_login: Optional[datetime]
+    last_login: Optional[datetime] = None
+    # OAuth fields (Phase 7)
+    auth_provider: str = "local"
+    google_id: Optional[str] = None
 
     class Config:
         from_attributes = True
+
 
 class UserSummary(BaseModel):
     id: uuid.UUID
     email: str
     name: str
     role: str
+    is_restricted: bool = False
 
     class Config:
         from_attributes = True
+
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -44,16 +55,17 @@ class UserCreate(BaseModel):
     role: str = "user"
     invite_token: Optional[str] = None
 
-    @field_validator('password')
+    @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
         if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters')
+            raise ValueError("Password must be at least 8 characters")
         if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
+            raise ValueError("Password must contain at least one uppercase letter")
         if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one number')
+            raise ValueError("Password must contain at least one number")
         return v
+
 
 class PasswordResetRequest(BaseModel):
     new_password: str
@@ -65,6 +77,7 @@ class PasswordResetRequest(BaseModel):
             raise ValueError("Password must be at least 8 characters")
         return v
 
+
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -72,3 +85,15 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     avatar_url: Optional[str] = None
+
+
+class GoogleOAuthStatus(BaseModel):
+    """Response for Google OAuth configuration status."""
+    enabled: bool
+    login_url: Optional[str] = None
+
+
+class GoogleOAuthError(BaseModel):
+    """Error response from Google OAuth callback."""
+    error: str
+    message: str

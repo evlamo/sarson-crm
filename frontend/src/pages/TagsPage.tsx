@@ -1,3 +1,4 @@
+import { useAuth } from "@/hooks/useAuth";
 import { useState, useRef, useEffect, useCallback, type RefObject } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -347,6 +348,7 @@ export default function TagsPage() {
   const [newTagName, setNewTagName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const isRestricted = useAuth((s) => s.isRestricted);
   const [deleteTarget, setDeleteTarget] = useState<TagWithCount | null>(null);
   const [selectedTag, setSelectedTag] = useState<TagWithCount | null>(null);
   const [colorPopoverOpen, setColorPopoverOpen] = useState<string | null>(null);
@@ -528,7 +530,7 @@ export default function TagsPage() {
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                      onClick={() => setDeleteTarget(tag)}
+                      onClick={() => setDeleteTarget(tag)} style={{ display: isRestricted ? "none" : undefined }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>

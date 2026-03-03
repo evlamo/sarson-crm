@@ -4,7 +4,7 @@ from sqlalchemy import func
 from typing import List, Optional
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_not_restricted
 from app.models.tag import Tag
 from app.models.contact import Contact
 from app.models.tag import ContactTag
@@ -115,6 +115,7 @@ def delete_tag(
     tag_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     """Delete a tag (cascade removes from all contacts)."""
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
@@ -235,6 +236,7 @@ def remove_tag_from_contact(
     tag_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     """Remove a tag from a contact."""
     contact = db.query(Contact).filter(

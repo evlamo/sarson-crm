@@ -5,7 +5,7 @@ from app.utils.time import utcnow
 import uuid
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_not_restricted
 from app.models.segment import Segment
 from app.models.contact import Contact
 from app.models.user import User
@@ -146,6 +146,7 @@ def delete_segment(
     segment_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     segment = db.query(Segment).filter(Segment.id == segment_id).first()
     if not segment:

@@ -8,6 +8,7 @@ from app.auth.security import decode_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -29,11 +30,26 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
+
 def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     """Require admin or owner role for access."""
     if current_user.role not in ("admin", "owner"):
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
+
+
+def require_not_restricted(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Block restricted users from destructive actions (DELETE endpoints).
+    Restricted users are outside-org users who got access via invite bypass.
+    """
+    if current_user.is_restricted:
+        raise HTTPException(
+            status_code=403,
+            detail="This action is not permitted for your account type."
+        )
+    return current_user
+
 
 # Alias for consistency with Phase 3 naming
 require_admin = get_admin_user

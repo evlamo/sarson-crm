@@ -10,7 +10,7 @@ from uuid import UUID
 from app.database import get_db
 from app.models.user import User
 from app.models.import_job import ImportJob
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_not_restricted
 from app.schemas.import_schema import (
     ImportUploadResponse, ImportStatusResponse,
     ImportExecuteRequest, ImportListResponse,
@@ -235,6 +235,7 @@ def delete_import_job(
     import_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     """Issue #18: Delete a staged import job and its uploaded file."""
     job = db.query(ImportJob).filter(ImportJob.id == import_id).first()

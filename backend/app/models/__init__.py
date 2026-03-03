@@ -15,3 +15,6 @@ from app.models.user_invite import UserInvite, InviteStatus
 from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.audit import AuditLog, ContactFieldHistory, DbSnapshot
 from app.models.sheets import SheetsExport, SheetsImportReview
+
+# ========== Phase 7 OAuth ==========
+from app.models.oauth_state import OAuthState

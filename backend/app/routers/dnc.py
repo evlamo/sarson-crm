@@ -12,7 +12,7 @@ from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, get_admin_user
+from app.auth.dependencies import get_current_user, get_admin_user, require_not_restricted
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.sales_campaign import CampaignContact
@@ -204,6 +204,7 @@ def remove_contact_dnc(
     contact_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
+    _: User = Depends(require_not_restricted),
 ):
     """Remove master DNC status from a contact. Admin only."""
     contact = _get_contact_or_404(contact_id, db)

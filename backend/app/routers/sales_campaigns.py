@@ -13,7 +13,7 @@ from sqlalchemy import func, desc
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_not_restricted
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.sales_campaign import SalesCampaign, CampaignContact
@@ -267,6 +267,7 @@ def delete_sales_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     """Soft delete (archive) a sales campaign."""
     _check_campaign_permission(current_user)
@@ -467,6 +468,7 @@ def remove_contact_from_campaign(
     contact_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     """Remove a contact from a sales campaign."""
     _check_campaign_permission(current_user)

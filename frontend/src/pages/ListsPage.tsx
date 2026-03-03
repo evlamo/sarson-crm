@@ -1,3 +1,4 @@
+import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -823,6 +824,7 @@ export default function ListsPage() {
   const [editList, setEditList] = useState<CampaignList | null>(null);
   const [membersDrawerList, setMembersDrawerList] = useState<CampaignList | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const isRestricted = useAuth((s) => s.isRestricted);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => { document.title = 'Lists — Sarson Funds CRM'; }, []);
@@ -950,9 +952,9 @@ export default function ListsPage() {
                       <Button size="sm" variant="outline" onClick={() => syncToMailchimp(list.id)} disabled={syncingId === list.id}>
                         {syncingId === list.id ? '⟳' : '↑'} Sync
                       </Button>
-                      <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => setDeleteConfirm(list.id)}>
+                      {!isRestricted && <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => setDeleteConfirm(list.id)}>
                         Delete
-                      </Button>
+                      </Button>}
                     </div>
                   </td>
                 </tr>

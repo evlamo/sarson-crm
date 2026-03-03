@@ -11,7 +11,7 @@ from typing import Optional
 from app.database import get_db
 from app.models.user import User
 from app.models.user_invite import UserInvite, InviteStatus
-from app.auth.dependencies import get_admin_user, get_current_user
+from app.auth.dependencies import get_admin_user, require_not_restricted, get_current_user
 from app.config import settings
 
 router = APIRouter(prefix="/invites", tags=["invites"])
@@ -151,6 +151,7 @@ def revoke_invite(
     invite_id: uuid.UUID,
     db: Session = Depends(get_db),
     admin: User = Depends(get_admin_user),
+    _: User = Depends(require_not_restricted),
 ):
     invite = db.query(UserInvite).filter(UserInvite.id == invite_id).first()
     if not invite:

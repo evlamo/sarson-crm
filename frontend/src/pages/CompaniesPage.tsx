@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import api from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import type { Company, PaginatedResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,6 +45,7 @@ interface CompanyPOC {
 export default function CompaniesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const isRestricted = useAuth((s) => s.isRestricted);
   const searchParams = useSearch({ strict: false }) as { q?: string; openId?: string };
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState(searchParams.q || '');
@@ -161,7 +163,7 @@ export default function CompaniesPage() {
                     ) : '—'}
                   </TableCell>
                   <TableCell>
-                    <DeleteCompanyButton companyId={co.id} />
+                    {!isRestricted && <DeleteCompanyButton companyId={co.id} />}
                   </TableCell>
                 </TableRow>
               ))
@@ -240,7 +242,7 @@ function AddCompanyModal({ open, onClose }: { open: boolean; onClose: () => void
       setForm({ name: '', website: '', industry: '', city: '', state: '', country: '', notes: '' });
       onClose();
     },
-    onError: (err: any) => {
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
       toast.error(err?.response?.data?.detail || 'Failed to create company');
     },
   });
@@ -283,6 +285,7 @@ function AddCompanyModal({ open, onClose }: { open: boolean; onClose: () => void
 function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () => void }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const isRestricted = useAuth((s) => s.isRestricted);
 
   const { data: company } = useQuery({
     queryKey: ['company', companyId],
@@ -317,7 +320,7 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
       queryClient.invalidateQueries({ queryKey: ['companies'] });
       toast.success('POC assigned');
     },
-    onError: (err: any) => toast.error(err?.response?.data?.detail || 'Failed to assign POC'),
+    onError: (err: { response?: { data?: { detail?: string } } }) => toast.error(err?.response?.data?.detail || 'Failed to assign POC'),
   });
 
   const removePocMutation = useMutation({
@@ -337,7 +340,7 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
       queryClient.invalidateQueries({ queryKey: ['company', companyId] });
       queryClient.invalidateQueries({ queryKey: ['companies'] });
       toast.success('Updated');
-    } catch (err: any) {
+    } catch (err: { response?: { data?: { detail?: string } } }) {
       toast.error(err?.response?.data?.detail || 'Failed to update');
       throw err;
     }

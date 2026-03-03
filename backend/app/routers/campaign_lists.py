@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_not_restricted
 from app.database import get_db
 from app.models.campaign_segment import CampaignSegment
 from app.models.user import User
@@ -184,6 +184,7 @@ def delete_campaign_segment(
     segment_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     seg = db.query(CampaignSegment).filter(CampaignSegment.id == segment_id).first()
     if not seg:

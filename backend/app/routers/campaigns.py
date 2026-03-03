@@ -10,7 +10,7 @@ from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, get_admin_user
+from app.auth.dependencies import get_current_user, require_not_restricted, get_admin_user
 from app.models.user import User
 from app.models.campaign import EmailCampaign, EmailSend
 from app.models.segment import Segment
@@ -184,6 +184,7 @@ def delete_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
     if not campaign:

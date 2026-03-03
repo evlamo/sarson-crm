@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 import uuid
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, get_admin_user
+from app.auth.dependencies import get_current_user, get_admin_user, require_not_restricted
 from app.models.contact import Contact
 from app.models.company import Company
 from app.models.tag import Tag
@@ -168,6 +168,7 @@ def list_contacts(
     order: Optional[str] = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     query = (
         db.query(Contact)
@@ -262,6 +263,7 @@ def get_contact(
     contact_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     return _build_response(_get_contact_or_404(contact_id, db))
 
@@ -273,6 +275,7 @@ def create_contact(
     payload: ContactCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     data = payload.model_dump(exclude_unset=True)
     if 'source' in data:
@@ -313,6 +316,7 @@ def update_contact(
     payload: ContactUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contact = _get_contact_or_404(contact_id, db)
     old_snapshot = _capture_contact_snapshot(contact)
@@ -350,6 +354,7 @@ def patch_contact(
     payload: ContactPatch,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contact = _get_contact_or_404(contact_id, db)
     old_snapshot = _capture_contact_snapshot(contact)
@@ -409,6 +414,7 @@ def delete_contact(
     contact_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contact = _get_contact_or_404(contact_id, db)
     old_snapshot = _capture_contact_snapshot(contact)
@@ -433,6 +439,7 @@ def create_contact_activity(
     body: ActivityCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contact = _get_contact_or_404(contact_id, db)
 
@@ -467,6 +474,7 @@ def get_contact_activities(
     per_page: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     _get_contact_or_404(contact_id, db)
 
@@ -507,6 +515,7 @@ def remove_tag_from_contact(
     tag_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contact = _get_contact_or_404(contact_id, db)
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
@@ -535,6 +544,7 @@ def add_tag_to_contact_by_id(
     tag_id: str = Query(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contact = _get_contact_or_404(contact_id, db)
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
@@ -567,6 +577,7 @@ def add_tag_to_contact_by_name(
     payload: TagNameRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contact = _get_contact_or_404(contact_id, db)
     tag_name = payload.name.strip()
@@ -598,6 +609,7 @@ def bulk_update_contacts(
     payload: BulkUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     contacts = (
         db.query(Contact)
@@ -660,6 +672,7 @@ def bulk_delete_contacts(
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(get_admin_user),
+    _: User = Depends(require_not_restricted),
 ):
     contacts = (
         db.query(Contact)

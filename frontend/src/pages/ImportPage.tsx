@@ -110,7 +110,7 @@ export default function ImportPage() {
       setColumnMap(map);
       setStep(2);
     },
-    onError: (err: any) => {
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
       toast.error(err?.response?.data?.detail || 'Upload failed');
     },
   });

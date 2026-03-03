@@ -6,7 +6,7 @@ from app.utils.time import utcnow
 from typing import Optional
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, get_admin_user
+from app.auth.dependencies import get_current_user, require_not_restricted, get_admin_user
 from app.models.company import Company
 from app.models.contact import Contact
 from app.schemas.company import CompanyCreate, CompanyUpdate, CompanyPatch, CompanyResponse, PaginatedCompanies
@@ -189,6 +189,7 @@ def delete_company(
     company_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
+    _: User = Depends(require_not_restricted),
 ):
     company = db.query(Company).filter(
         Company.id == company_id,
@@ -402,6 +403,7 @@ def remove_company_poc(
     company_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     company = db.query(Company).filter(
         Company.id == company_id,

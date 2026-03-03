@@ -1165,6 +1165,7 @@ export default function CampaignsPage() {
     },
   });
 
+  const isRestricted = useAuth((s) => s.isRestricted);
   const deleteCampaign = useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/campaigns/${id}`);

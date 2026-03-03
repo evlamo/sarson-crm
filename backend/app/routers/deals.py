@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, Field
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_not_restricted
 from app.models.user import User
 from app.models.deal import Deal
 from app.models.company import Company
@@ -270,6 +270,7 @@ def delete_deal(
     deal_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: User = Depends(require_not_restricted),
 ):
     deal = db.query(Deal).filter(Deal.id == deal_id, Deal.deleted_at.is_(None)).first()
     if not deal:
