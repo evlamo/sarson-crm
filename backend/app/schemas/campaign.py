@@ -15,6 +15,7 @@ class CampaignCreate(BaseModel):
     body_text: Optional[str] = None
     template_id: Optional[UUID] = None
     segment_id: Optional[UUID] = None
+    sales_campaign_id: Optional[UUID] = None  # Link to sales campaign
     from_name: str = "Sarson Funds"
     from_email: str
     reply_to: Optional[str] = None
@@ -28,6 +29,7 @@ class CampaignUpdate(BaseModel):
     body_text: Optional[str] = None
     template_id: Optional[UUID] = None
     segment_id: Optional[UUID] = None
+    sales_campaign_id: Optional[UUID] = None  # Link to sales campaign
     from_name: Optional[str] = None
     from_email: Optional[str] = None
     reply_to: Optional[str] = None
@@ -42,6 +44,7 @@ class CampaignOut(BaseModel):
     body_text: Optional[str]
     template_id: Optional[UUID]
     segment_id: Optional[UUID]
+    sales_campaign_id: Optional[UUID] = None  # Link to sales campaign
     from_name: str
     from_email: str
     reply_to: Optional[str]

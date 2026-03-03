@@ -66,6 +66,7 @@ interface Campaign {
   body_text: string | null;
   segment_id: string | null;
   template_id: string | null;
+  sales_campaign_id: string | null;
   mailchimp_campaign_id: string | null;
   mailchimp_audience_id: string | null;
   mailchimp_status: string | null;
@@ -87,6 +88,12 @@ interface Template {
   subject: string | null;
   body_html: string;
   category: string | null;
+}
+
+interface SalesCampaign {
+  id: string;
+  name: string;
+  status: string;
 }
 
 interface Tag {
@@ -332,6 +339,7 @@ function CampaignBuilder({
     body_html: editCampaign?.body_html || '',
     body_text: editCampaign?.body_text || '',
     template_id: editCampaign?.template_id || '',
+    sales_campaign_id: (editCampaign as { sales_campaign_id?: string })?.sales_campaign_id || '',
     tracking_opens: true,
     tracking_html_clicks: true,
     google_analytics_tag: '',
@@ -391,6 +399,17 @@ function CampaignBuilder({
     },
   });
 
+  // Fetch sales campaigns for linking
+  const { data: salesCampaigns = [] } = useQuery<SalesCampaign[]>({
+    queryKey: ['sales-campaigns-list'],
+    queryFn: async () => {
+      const res = await api.get('/sales-campaigns', { params: { per_page: 100 } });
+      return res.data.data || [];
+    },
+  });
+
+  const selectedSalesCampaign = salesCampaigns.find((sc) => sc.id === form.sales_campaign_id);
+
   const { data: mcTemplates = [] } = useQuery<MailchimpTemplate[]>({
     queryKey: ['mc-templates'],
     queryFn: async () => {
@@ -413,6 +432,7 @@ function CampaignBuilder({
         reply_to: form.reply_to || undefined,
         segment_id: form.segment_id || undefined,
         template_id: form.template_id || undefined,
+        sales_campaign_id: form.sales_campaign_id || undefined,
         body_html: form.body_html || '<p></p>',
         body_text: form.body_text || undefined,
       };
@@ -646,6 +666,27 @@ function CampaignBuilder({
                 <Label>Reply-To Email</Label>
                 <Input value={form.reply_to} onChange={(e) => setForm({ ...form, reply_to: e.target.value })} placeholder="Same as From if blank" />
               </div>
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label>Sales Campaign (optional)</Label>
+              <Select 
+                value={form.sales_campaign_id || "none"} 
+                onValueChange={(v) => setForm({ ...form, sales_campaign_id: v === "none" ? "" : v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Standalone email (no sales campaign)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Standalone — no sales campaign</SelectItem>
+                  {salesCampaigns.map(sc => (
+                    <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                If linked, contacts who completed or declined this sales campaign will be auto-excluded from sends
+              </p>
             </div>
             <div className="flex justify-end">
               <Button onClick={() => goToStep(2)} disabled={!canProceedStep1}>Next: Recipients →</Button>

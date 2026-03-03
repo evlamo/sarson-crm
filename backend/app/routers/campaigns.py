@@ -48,6 +48,7 @@ def _capture_campaign_snapshot(campaign: EmailCampaign) -> dict:
         "from_name": campaign.from_name,
         "from_email": campaign.from_email,
         "segment_id": str(campaign.segment_id) if campaign.segment_id else None,
+        "sales_campaign_id": str(campaign.sales_campaign_id) if campaign.sales_campaign_id else None,
     }
 
 
@@ -56,6 +57,7 @@ def _capture_campaign_snapshot(campaign: EmailCampaign) -> dict:
 @router.get("", response_model=CampaignListOut)
 def list_campaigns(
     status: Optional[str] = None,
+    sales_campaign_id: Optional[UUID] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -64,6 +66,8 @@ def list_campaigns(
     query = db.query(EmailCampaign)
     if status:
         query = query.filter(EmailCampaign.status == status)
+    if sales_campaign_id:
+        query = query.filter(EmailCampaign.sales_campaign_id == sales_campaign_id)
 
     total = query.count()
     items = (
@@ -89,6 +93,13 @@ def create_campaign(
         if not segment:
             raise HTTPException(status_code=404, detail="Segment not found")
 
+    # Validate sales campaign exists if provided
+    if data.sales_campaign_id:
+        from app.models.sales_campaign import SalesCampaign
+        sales_campaign = db.query(SalesCampaign).filter(SalesCampaign.id == data.sales_campaign_id).first()
+        if not sales_campaign:
+            raise HTTPException(status_code=404, detail="Sales campaign not found")
+
     campaign = EmailCampaign(
         name=data.name,
         subject=data.subject,
@@ -97,6 +108,7 @@ def create_campaign(
         body_text=data.body_text,
         template_id=data.template_id,
         segment_id=data.segment_id,
+        sales_campaign_id=data.sales_campaign_id,
         from_name=data.from_name,
         from_email=data.from_email,
         reply_to=data.reply_to,

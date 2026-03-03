@@ -773,13 +773,23 @@ function StatsTab({ campaignId }: { campaignId: string }) {
     },
   });
 
+  // Fetch linked email campaigns
+  const { data: emailData } = useQuery<EmailCampaignsResponse>({
+    queryKey: ['email-campaigns-for-stats', campaignId],
+    queryFn: async () => {
+      const res = await api.get('/email-campaigns', { params: { sales_campaign_id: campaignId, per_page: 10 } });
+      return res.data;
+    },
+  });
+  const emailCampaigns: EmailCampaign[] = emailData?.data || [];
+
   if (isLoading) {
     return <LoadingSpinner text="Loading stats..." />;
   }
   if (!data) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {isFetching && !isLoading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -796,6 +806,38 @@ function StatsTab({ campaignId }: { campaignId: string }) {
         <Card><CardContent className="p-4 text-center"><div className="text-3xl font-bold">{data.excluded_contacts}</div><div className="text-sm text-muted-foreground">Excluded</div></CardContent></Card>
         <Card><CardContent className="p-4 text-center"><div className="text-3xl font-bold">{data.email_campaigns}</div><div className="text-sm text-muted-foreground">Emails</div></CardContent></Card>
       </div>
+
+      {/* Linked Email Campaigns */}
+      {emailCampaigns.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Email Campaigns</h3>
+          <div className="space-y-2">
+            {emailCampaigns.map(ec => (
+              <div key={ec.id} className="flex items-center justify-between p-3 border rounded-lg bg-white">
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium truncate block">{ec.name}</span>
+                  <span className="text-xs text-muted-foreground truncate block">{ec.subject}</span>
+                </div>
+                <div className="flex items-center gap-4 text-sm shrink-0">
+                  <div className="text-right">
+                    <div className="font-medium">{ec.sent_count.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">Sent</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-green-600">{ec.unique_opens.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">Opens</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium text-blue-600">{ec.unique_clicks.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">Clicks</div>
+                  </div>
+                  <StatusBadge status={ec.status} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
