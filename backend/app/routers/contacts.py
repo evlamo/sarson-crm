@@ -42,6 +42,14 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
+def _escape_search(search: str) -> str:
+    """Escape LIKE/ILIKE wildcards in search string."""
+    s = search.strip()
+    s = s.replace("%", "\%")
+    s = s.replace("_", "\_")
+    return s
+
+
 def _check_poc_enforcement(db: Session, contact_id, company_id, status_value: str):
     """Raise 409 if setting status to 'poc' but company already has a POC or no company assigned."""
     if status_value != "poc" and not company_id:
@@ -235,10 +243,10 @@ def list_contacts(
         *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
         *([or_(
             Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
-            Contact.first_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.last_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.email.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.company.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
+            Contact.first_name.ilike(f"%{_escape_search(search)}%"),
+            Contact.last_name.ilike(f"%{_escape_search(search)}%"),
+            Contact.email.ilike(f"%{_escape_search(search)}%"),
+            Contact.company.ilike(f"%{_escape_search(search)}%"),
         )] if search else []),
     ).scalar()
     contacts = (
@@ -386,6 +394,12 @@ def patch_contact(
             contact.conversion_status = "pending"
             contact.conversion_name = trigger_action.name
             contact.conversion_value = contact.conversion_value or float(trigger_action.default_value or 0)
+
+    # Auto-set master_dnc when email_unsubscribed becomes True
+    if data.get("email_unsubscribed") is True and not contact.master_dnc:
+        contact.master_dnc = True
+        contact.master_dnc_reason = "Email unsubscribe"
+        contact.master_dnc_set_at = _utcnow()
 
     contact.updated_at = _utcnow()
     _sync_poc_on_company(db, contact)
@@ -704,3 +718,223 @@ def bulk_delete_contacts(
     
     db.commit()
     return {"deleted": len(contacts)}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CAMPAIGN EXCLUSION LOGIC - Contact DNC & Campaign Membership Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+from app.models.sales_campaign import SalesCampaign, CampaignContact
+
+
+# ── Schemas for Campaign Membership ────────────────────────────────────────────
+
+class ContactCampaignMembership(BaseModel):
+    campaign_id: uuid.UUID
+    campaign_name: str
+    status: str
+    added_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ContactCampaignsResponse(BaseModel):
+    data: List[ContactCampaignMembership]
+    total: int
+
+
+class CampaignStatusUpdate(BaseModel):
+    status: str = Field(..., pattern="^(active|completed|no|excluded|paused)$")
+
+
+class SetDNCRequest(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)
+
+
+# ── Get Contact Campaign Memberships ───────────────────────────────────────────
+
+@router.get("/{contact_id}/campaigns", response_model=ContactCampaignsResponse)
+def get_contact_campaigns(
+    contact_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all sales campaigns this contact belongs to with their status."""
+    contact = _get_contact_or_404(contact_id, db)
+    
+    # Join CampaignContact with SalesCampaign to get campaign details
+    memberships = (
+        db.query(CampaignContact, SalesCampaign)
+        .join(SalesCampaign, CampaignContact.sales_campaign_id == SalesCampaign.id)
+        .filter(
+            CampaignContact.contact_id == contact.id,
+            SalesCampaign.status != "archived",
+        )
+        .order_by(CampaignContact.added_at.desc())
+        .all()
+    )
+    
+    data = [
+        ContactCampaignMembership(
+            campaign_id=campaign.id,
+            campaign_name=campaign.name,
+            status=cc.status or "active",
+            added_at=cc.added_at,
+            updated_at=cc.updated_at,
+        )
+        for cc, campaign in memberships
+    ]
+    
+    return ContactCampaignsResponse(data=data, total=len(data))
+
+
+# ── Update Contact Status in Campaign ──────────────────────────────────────────
+
+@router.put("/{contact_id}/campaigns/{campaign_id}")
+def update_contact_campaign_status(
+    contact_id: str,
+    campaign_id: uuid.UUID,
+    data: CampaignStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update a contact's status in a specific sales campaign."""
+    contact = _get_contact_or_404(contact_id, db)
+    
+    # Find the campaign contact record
+    cc = db.query(CampaignContact).filter(
+        CampaignContact.contact_id == contact.id,
+        CampaignContact.sales_campaign_id == campaign_id,
+    ).first()
+    
+    if not cc:
+        raise HTTPException(status_code=404, detail="Contact is not in this campaign")
+    
+    old_status = cc.status
+    cc.status = data.status
+    cc.updated_at = _utcnow()
+    
+    # Set completion_status if status is completed or no
+    if data.status in ("completed", "no"):
+        cc.completion_status = data.status
+        cc.excluded_reason = "campaign_complete"
+    elif data.status == "active":
+        # Reset completion status when reactivating
+        cc.completion_status = None
+        if cc.excluded_reason == "campaign_complete":
+            cc.excluded_reason = None
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="campaign_contact.status_update",
+        entity_type="campaign_contact",
+        entity_id=str(contact.id),
+        old_values={"status": old_status, "campaign_id": str(campaign_id)},
+        new_values={"status": data.status, "campaign_id": str(campaign_id)},
+        user_id=str(current_user.id),
+    )
+    
+    db.commit()
+    
+    return {
+        "contact_id": str(contact.id),
+        "campaign_id": str(campaign_id),
+        "status": cc.status,
+        "updated_at": cc.updated_at.isoformat(),
+    }
+
+
+# ── Set Contact DNC ────────────────────────────────────────────────────────────
+
+@router.post("/{contact_id}/dnc")
+def set_contact_dnc(
+    contact_id: str,
+    data: SetDNCRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Set master DNC status on a contact. Admin only."""
+    contact = _get_contact_or_404(contact_id, db)
+    
+    if contact.master_dnc:
+        raise HTTPException(status_code=409, detail="Contact already has DNC status")
+    
+    contact.master_dnc = True
+    contact.master_dnc_reason = data.reason or "Manual DNC"
+    contact.master_dnc_set_at = _utcnow()
+    contact.master_dnc_set_by = current_user.id
+    contact.updated_at = _utcnow()
+    
+    # Exclude from all active campaign memberships
+    db.query(CampaignContact).filter(
+        CampaignContact.contact_id == contact.id,
+        CampaignContact.excluded_reason.is_(None),
+    ).update({
+        CampaignContact.excluded_reason: "dnc",
+        CampaignContact.status: "excluded",
+    }, synchronize_session=False)
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="contact.dnc_set",
+        entity_type="contact",
+        entity_id=str(contact.id),
+        old_values={"master_dnc": False},
+        new_values={"master_dnc": True, "master_dnc_reason": contact.master_dnc_reason},
+        user_id=str(current_user.id),
+    )
+    
+    db.commit()
+    
+    return {
+        "contact_id": str(contact.id),
+        "master_dnc": True,
+        "master_dnc_reason": contact.master_dnc_reason,
+        "master_dnc_set_at": contact.master_dnc_set_at.isoformat(),
+    }
+
+
+# ── Clear Contact DNC ──────────────────────────────────────────────────────────
+
+@router.delete("/{contact_id}/dnc", status_code=status.HTTP_204_NO_CONTENT)
+def clear_contact_dnc(
+    contact_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+    _: User = Depends(require_not_restricted),
+):
+    """Clear master DNC status from a contact. Admin only."""
+    contact = _get_contact_or_404(contact_id, db)
+    
+    if not contact.master_dnc:
+        raise HTTPException(status_code=400, detail="Contact is not on the DNC list")
+    
+    old_reason = contact.master_dnc_reason
+    
+    contact.master_dnc = False
+    contact.master_dnc_reason = None
+    contact.master_dnc_set_at = None
+    contact.master_dnc_set_by = None
+    contact.updated_at = _utcnow()
+    
+    # Restore campaign access - clear DNC exclusions (set back to active)
+    db.query(CampaignContact).filter(
+        CampaignContact.contact_id == contact.id,
+        CampaignContact.excluded_reason == "dnc",
+    ).update({
+        CampaignContact.excluded_reason: None,
+        CampaignContact.status: "active",
+    }, synchronize_session=False)
+    
+    audit_service.log_action_sync(
+        db=db,
+        action="contact.dnc_cleared",
+        entity_type="contact",
+        entity_id=str(contact.id),
+        old_values={"master_dnc": True, "master_dnc_reason": old_reason},
+        new_values={"master_dnc": False},
+        user_id=str(current_user.id),
+    )
+    
+    db.commit()

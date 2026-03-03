@@ -495,10 +495,11 @@ async def sync_to_mailchimp(
     if not contact_ids:
         raise HTTPException(status_code=400, detail="No contacts specified. Provide contact_ids, segment_id, tag_ids, or campaign_list_ids.")
 
-    # Filter out unsubscribed/bounced
-    eligible = mailchimp_service.filter_eligible_contacts(db, list(contact_ids))
+    # Filter out unsubscribed/bounced/master_dnc and (if linked to sales campaign) done contacts
+    sales_campaign_id_str = str(campaign.sales_campaign_id) if campaign.sales_campaign_id else None
+    eligible = mailchimp_service.filter_eligible_contacts(db, list(contact_ids), sales_campaign_id_str)
     if not eligible:
-        raise HTTPException(status_code=400, detail="No eligible contacts after filtering unsubscribed/bounced.")
+        raise HTTPException(status_code=400, detail="No eligible contacts after filtering unsubscribed/bounced/DNC.")
 
     # Step 1: Get the ONE main audience
     audience_id = await mailchimp_service.get_main_audience_id()

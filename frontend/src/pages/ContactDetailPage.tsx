@@ -7,10 +7,21 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import { copyToClipboard } from '@/lib/clipboard';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle, Linkedin, Globe, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle, Linkedin, Globe, ExternalLink, ShieldAlert, Users } from 'lucide-react';
 import { RepAssignPopover } from '@/components/RepAssignPopover';
 import { EditableField } from '@/components/EditableField';
 import { CompanyCombobox } from '@/components/CompanyCombobox';
@@ -44,6 +55,10 @@ interface ContactDetail {
   lead_source: string | null;
   email_open_count: number;
   email_click_count: number;
+  master_dnc?: boolean;
+  master_dnc_reason?: string | null;
+  master_dnc_set_at?: string | null;
+  email_unsubscribed?: boolean;
   tags?: { id: string; name: string; color: string }[];
   created_at: string;
   updated_at: string;
@@ -56,6 +71,14 @@ interface Activity {
   body: string | null;
   performed_at: string;
   performed_by: string | null;
+}
+
+interface CampaignMembership {
+  campaign_id: string;
+  campaign_name: string;
+  status: string;
+  added_at: string;
+  updated_at: string;
 }
 
 const ACTIVITY_ICONS: Record<string, typeof Mail> = {
@@ -578,6 +601,9 @@ export default function ContactDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState('');
+  const [dncModalOpen, setDncModalOpen] = useState(false);
+  const [dncReason, setDncReason] = useState('');
+  const [clearDncConfirmOpen, setClearDncConfirmOpen] = useState(false);
 
   const { data: contact, isLoading, isError } = useQuery({
     queryKey: ['contact', contactId],
@@ -600,6 +626,54 @@ export default function ContactDetailPage() {
       const res = await api.get<{ data: Activity[] }>(`/contacts/${contactId}/activities`);
       return res.data.data || [];
     },
+  });
+
+  // Campaign memberships query
+  const { data: campaignMemberships } = useQuery({
+    queryKey: ['contact-campaigns', contactId],
+    queryFn: async () => {
+      const res = await api.get<{ data: CampaignMembership[] }>(`/contacts/${contactId}/campaigns`);
+      return res.data.data || [];
+    },
+    enabled: !!contactId,
+  });
+
+  // DNC mutations
+  const setDncMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      await api.post(`/contacts/${contactId}/dnc`, { reason: reason || null });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+      toast.success('Contact marked as Do Not Contact');
+      setDncModalOpen(false);
+      setDncReason('');
+    },
+    onError: () => toast.error('Failed to set DNC status'),
+  });
+
+  const clearDncMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/contacts/${contactId}/dnc`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact', contactId] });
+      toast.success('DNC status cleared');
+      setClearDncConfirmOpen(false);
+    },
+    onError: () => toast.error('Failed to clear DNC status'),
+  });
+
+  // Update campaign status mutation
+  const updateCampaignStatusMutation = useMutation({
+    mutationFn: async ({ campaignId, status }: { campaignId: string; status: string }) => {
+      await api.put(`/contacts/${contactId}/campaigns/${campaignId}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contact-campaigns', contactId] });
+      toast.success('Campaign status updated');
+    },
+    onError: () => toast.error('Failed to update campaign status'),
   });
 
   const patchContact = async (data: Record<string, unknown>) => {
@@ -769,6 +843,42 @@ export default function ContactDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ─── DNC Status Section ─── */}
+      {contact.master_dnc ? (
+        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-700">Do Not Contact</p>
+            {contact.master_dnc_reason && (
+              <p className="text-xs text-red-600">Reason: {contact.master_dnc_reason}</p>
+            )}
+            {contact.master_dnc_set_at && (
+              <p className="text-xs text-muted-foreground">
+                Set {formatDate(contact.master_dnc_set_at)}
+              </p>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setClearDncConfirmOpen(true)}
+            disabled={clearDncMutation.isPending}
+          >
+            Clear DNC
+          </Button>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-red-600 border-red-200 hover:bg-red-50"
+          onClick={() => setDncModalOpen(true)}
+        >
+          <ShieldAlert className="h-4 w-4 mr-2" />
+          Set DNC
+        </Button>
+      )}
 
       {/* ─── Two-Column Layout ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1082,10 +1192,136 @@ export default function ContactDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Campaign Memberships */}
+          {campaignMemberships && campaignMemberships.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Sales Campaigns
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {campaignMemberships.map((membership) => (
+                  <div
+                    key={membership.campaign_id}
+                    className="flex items-center justify-between p-3 border rounded-lg"
+                  >
+                    <span className="font-medium text-sm">{membership.campaign_name}</span>
+                    <Select
+                      value={membership.status}
+                      onValueChange={(status) =>
+                        updateCampaignStatusMutation.mutate({
+                          campaignId: membership.campaign_id,
+                          status,
+                        })
+                      }
+                      disabled={updateCampaignStatusMutation.isPending}
+                    >
+                      <SelectTrigger className="w-32 h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-green-500" />
+                            Active
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="completed">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500" />
+                            Completed
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="no">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-red-500" />
+                            No
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="excluded">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-gray-400" />
+                            Excluded
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="paused">
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                            Paused
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Activity & History - Phase 4 */}
           <ContactActivityPanel contactId={contactId!} isAdmin={true} />
         </div>
       </div>
+
+      {/* DNC Set Modal */}
+      <Dialog open={dncModalOpen} onOpenChange={setDncModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Do Not Contact</DialogTitle>
+            <DialogDescription>
+              This contact will be excluded from all campaign lists and email sends.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="dnc-reason">Reason (optional)</Label>
+              <Textarea
+                id="dnc-reason"
+                placeholder="Why is this contact being marked DNC?"
+                value={dncReason}
+                onChange={(e) => setDncReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDncModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => setDncMutation.mutate(dncReason)}
+              disabled={setDncMutation.isPending}
+            >
+              {setDncMutation.isPending ? 'Setting...' : 'Set DNC'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear DNC Confirmation */}
+      <Dialog open={clearDncConfirmOpen} onOpenChange={setClearDncConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear Do Not Contact Status?</DialogTitle>
+            <DialogDescription>
+              This will allow the contact to be included in campaigns and email sends again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDncConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => clearDncMutation.mutate()}
+              disabled={clearDncMutation.isPending}
+            >
+              {clearDncMutation.isPending ? 'Clearing...' : 'Clear DNC'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
