@@ -7,6 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -38,6 +45,11 @@ interface CampaignStat {
   status: string;
 }
 
+interface SalesCampaignOption {
+  id: string;
+  name: string;
+}
+
 interface CampaignSummary {
   total_sent: number;
   delivered_rate: number;
@@ -51,6 +63,7 @@ interface CampaignSummary {
 interface CampaignStatsResponse {
   campaigns: CampaignStat[];
   source: string;
+  sales_campaigns: SalesCampaignOption[];
 }
 
 interface UnsubscriberRecord {
@@ -232,18 +245,33 @@ export default function CampaignStatsPage() {
 
   const source = summary?.source || statsData?.source || 'demo';
   const campaigns = statsData?.campaigns || [];
+  const salesCampaigns = statsData?.sales_campaigns || [];
   const isDemo = source === 'demo';
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">📊 Campaign Stats</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Email campaign performance overview</p>
         </div>
-        <Badge variant={isDemo ? 'secondary' : 'default'} className="text-xs">
-          {isDemo ? '🧪 Demo Data' : '🟢 Live (Mailchimp)'}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Select value={salesCampaignFilter} onValueChange={setSalesCampaignFilter}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filter by Sales Campaign" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Campaigns</SelectItem>
+              <SelectItem value="standalone">Standalone Only</SelectItem>
+              {salesCampaigns.map(sc => (
+                <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Badge variant={isDemo ? 'secondary' : 'default'} className="text-xs">
+            {isDemo ? '🧪 Demo Data' : source === 'crm' ? '📂 CRM Data' : '🟢 Live (Mailchimp)'}
+          </Badge>
+        </div>
       </div>
 
       {(summaryError || statsError) && (
@@ -300,6 +328,7 @@ export default function CampaignStatsPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/40">
                     <TableHead className="text-xs font-semibold uppercase">Campaign</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase">Sales Campaign</TableHead>
                     <TableHead className="text-xs font-semibold uppercase">Send Date</TableHead>
                     <TableHead className="text-xs font-semibold uppercase text-right">Recipients</TableHead>
                     <TableHead className="text-xs font-semibold uppercase text-right">Open Rate</TableHead>
