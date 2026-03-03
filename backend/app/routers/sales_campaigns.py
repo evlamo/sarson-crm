@@ -242,6 +242,7 @@ def create_sales_campaign(
     
     _log_audit(db, "sales_campaign.create", "sales_campaign", str(campaign.id), 
                str(current_user.id), new_values={"name": data.name, "status": data.status})
+    db.commit()
     
     return _build_campaign_out(campaign, db)
 

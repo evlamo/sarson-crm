@@ -18,6 +18,7 @@ from app.models.user import User
 from app.models.contact import Contact
 from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.campaign import EmailCampaign
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/email-campaigns", tags=["email-campaigns"])
 
@@ -127,20 +128,16 @@ def _get_email_campaign_or_404(campaign_id: UUID, db: Session) -> EmailCampaign:
 
 def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_id: str, 
                old_values: dict = None, new_values: dict = None):
-    """Sync audit logging - fire and forget."""
-    try:
-        from app.models.audit import AuditLog
-        audit = AuditLog(
-            user_id=str(user_id),
-            action=action,
-            entity_type=entity_type,
-            entity_id=str(entity_id),
-            old_values=old_values,
-            new_values=new_values,
-        )
-        db.add(audit)
-    except Exception:
-        pass
+    """Sync audit logging using audit_service."""
+    audit_service.log_action_sync(
+        db=db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=str(entity_id),
+        user_id=str(user_id),
+        old_values=old_values,
+        new_values=new_values,
+    )
 
 
 def _build_email_campaign_out(ec: EmailCampaign, db: Session) -> EmailCampaignOut:

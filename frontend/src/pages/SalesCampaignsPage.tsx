@@ -376,9 +376,9 @@ function AddContactsDrawer({
               className="pl-9"
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex gap-2 pl-1">
             <Select value={selectedTagId} onValueChange={(v) => { setSelectedTagId(v); setPage(1); }}>
-              <SelectTrigger>
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Filter by tag" />
               </SelectTrigger>
               <SelectContent align="end">
@@ -389,7 +389,7 @@ function AddContactsDrawer({
               </SelectContent>
             </Select>
             <Select value={selectedListId} onValueChange={(v) => { setSelectedListId(v); setPage(1); }}>
-              <SelectTrigger>
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Filter by list" />
               </SelectTrigger>
               <SelectContent>

@@ -16,6 +16,7 @@ from app.auth.dependencies import get_current_user, get_admin_user, require_not_
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.sales_campaign import CampaignContact
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/dnc", tags=["dnc"])
 
@@ -57,20 +58,16 @@ class PaginatedDNCContacts(BaseModel):
 
 def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_id: str,
                old_values: dict = None, new_values: dict = None):
-    """Sync audit logging - fire and forget."""
-    try:
-        from app.models.audit import AuditLog
-        audit = AuditLog(
-            user_id=str(user_id),
-            action=action,
-            entity_type=entity_type,
-            entity_id=str(entity_id),
-            old_values=old_values,
-            new_values=new_values,
-        )
-        db.add(audit)
-    except Exception:
-        pass
+    """Sync audit logging using audit_service."""
+    audit_service.log_action_sync(
+        db=db,
+        action=action,
+        entity_type=entity_type,
+        entity_id=str(entity_id),
+        user_id=str(user_id),
+        old_values=old_values,
+        new_values=new_values,
+    )
 
 
 def _get_contact_or_404(contact_id: UUID, db: Session) -> Contact:
