@@ -185,6 +185,7 @@ function CreateCampaignModal({ open, onClose, onSuccess }: { open: boolean; onCl
 }
 
 function ContactsTab({ campaignId }: { campaignId: string }) {
+  const isRestricted = useAuth((s) => s.isRestricted);
   const queryClient = useQueryClient();
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState('');
@@ -306,7 +307,7 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <Button 
+                  {!isRestricted && <Button 
                     variant="ghost" 
                     size="sm" 
                     className="text-red-600" 
@@ -314,7 +315,7 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
                     disabled={removeContactMutation.isPending}
                   >
                     {removeContactMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Remove'}
-                  </Button>
+                  </Button>}
                 </TableCell>
               </TableRow>
             ))}

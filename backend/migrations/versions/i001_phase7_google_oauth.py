@@ -1,7 +1,7 @@
 """Phase 7: Google OAuth support + restricted users
 
 Revision ID: i001_phase7_google_oauth
-Revises: h001_phase4_audit_indexes
+Revises: h001_phase4_audit_idx
 Create Date: 2026-03-03
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "i001_phase7_google_oauth"
-down_revision = "h001_phase4_audit_indexes"
+down_revision = "h001_phase4_audit_idx"
 branch_labels = None
 depends_on = None
 
