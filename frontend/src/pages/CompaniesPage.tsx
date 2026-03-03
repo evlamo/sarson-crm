@@ -285,7 +285,6 @@ function AddCompanyModal({ open, onClose }: { open: boolean; onClose: () => void
 function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () => void }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const isRestricted = useAuth((s) => s.isRestricted);
 
   const { data: company } = useQuery({
     queryKey: ['company', companyId],

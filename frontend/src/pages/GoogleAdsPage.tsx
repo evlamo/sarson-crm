@@ -538,7 +538,7 @@ function ConversionActionsSection() {
                 <td className="py-2 pr-4">{a.is_active ? '✓' : '✗'}</td>
                 <td className="py-2 flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => setEditAction(a)}>Edit</Button>
-                  <Button variant="outline" size="sm" className="text-destructive" onClick={() => { if (confirm('Delete this action?')) deleteMutation.mutate(a.id); }}>Delete</Button>
+                  {!isRestricted && <Button variant="outline" size="sm" className="text-destructive" onClick={() => { if (confirm('Delete this action?')) deleteMutation.mutate(a.id); }}>Delete</Button>}
                 </td>
               </tr>
             ))}
