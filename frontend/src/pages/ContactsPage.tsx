@@ -1067,6 +1067,7 @@ export default function ContactsPage() {
           >
             <Trash2 className="h-3 w-3" /> Delete
           </Button>
+          )}
           <Button
             variant="ghost" size="sm"
             className="h-7 w-7 p-0 ml-auto text-muted-foreground"
