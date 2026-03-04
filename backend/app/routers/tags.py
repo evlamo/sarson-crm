@@ -8,39 +8,38 @@ from app.auth.dependencies import get_current_user, require_not_restricted
 from app.models.tag import Tag
 from app.models.contact import Contact
 from app.models.tag import ContactTag
-from app.schemas.tag import TagCreate, TagUpdate, TagResponse
+from app.schemas.tag import TagCreate, TagUpdate, TagResponse, TagWithCountResponse
 from app.models.user import User
 from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1", tags=["tags"])
 
 
-@router.get("/tags")
+@router.get("/tags", response_model=list[TagWithCountResponse])
 def list_tags(
     with_counts: Optional[bool] = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """List all tags, optionally with contact counts."""
-    if with_counts:
-        results = (
-            db.query(Tag, func.count(ContactTag.c.contact_id).label("contact_count"))
-            .outerjoin(ContactTag, Tag.id == ContactTag.c.tag_id)
-            .group_by(Tag.id)
-            .order_by(Tag.name)
-            .all()
+    results = (
+        db.query(Tag, func.count(ContactTag.c.contact_id).label("contact_count"))
+        .outerjoin(ContactTag, Tag.id == ContactTag.c.tag_id)
+        .group_by(Tag.id)
+        .order_by(Tag.name)
+        .all()
+    )
+    return [
+        TagWithCountResponse(
+            id=tag.id,
+            name=tag.name,
+            color=tag.color,
+            category=getattr(tag, "category", None),
+            created_at=tag.created_at,
+            contact_count=count if with_counts else 0,
         )
-        return [
-            {
-                "id": str(tag.id),
-                "name": tag.name,
-                "color": tag.color,
-                "category": getattr(tag, "category", None),
-                "contact_count": count,
-            }
-            for tag, count in results
-        ]
-    return db.query(Tag).order_by(Tag.name).all()
+        for tag, count in results
+    ]
 
 
 @router.post("/tags", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
