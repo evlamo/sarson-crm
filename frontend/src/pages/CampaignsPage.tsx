@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -719,10 +720,9 @@ function CampaignBuilder({
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={form.campaign_list_ids.includes(list.id)}
-                        onChange={() => {
+                        onCheckedChange={() => {
                           setForm(f => ({
                             ...f,
                             campaign_list_ids: f.campaign_list_ids.includes(list.id)
@@ -730,7 +730,6 @@ function CampaignBuilder({
                               : [...f.campaign_list_ids, list.id],
                           }));
                         }}
-                        className="w-4 h-4 rounded"
                       />
                       <div className="flex-1">
                         <span className="text-sm font-medium">{list.name}</span>
@@ -956,11 +955,9 @@ function CampaignBuilder({
           <CardContent className="pt-6 space-y-4">
             <div className="space-y-3">
               <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={form.tracking_opens}
-                  onChange={(e) => setForm({ ...form, tracking_opens: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300"
+                  onCheckedChange={(checked) => setForm({ ...form, tracking_opens: !!checked })}
                 />
                 <div>
                   <p className="text-sm font-medium">Track Opens</p>
@@ -968,11 +965,9 @@ function CampaignBuilder({
                 </div>
               </label>
               <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={form.tracking_html_clicks}
-                  onChange={(e) => setForm({ ...form, tracking_html_clicks: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300"
+                  onCheckedChange={(checked) => setForm({ ...form, tracking_html_clicks: !!checked })}
                 />
                 <div>
                   <p className="text-sm font-medium">Track Clicks</p>
