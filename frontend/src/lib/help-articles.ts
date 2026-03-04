@@ -811,6 +811,241 @@ Audit logs are retained for 2 years. Contact admin for older records or exports.
 - Investigate issues by tracing actions
 - Export logs for external analysis`
   }
+  // Version History
+  {
+    id: 'contacts-version-history',
+    title: 'Version History & Reverting Changes',
+    category: 'Contacts',
+    keywords: ['version', 'history', 'revert', 'undo', 'restore', 'audit', 'change'],
+    relevantPaths: ['/contacts'],
+    content: `# Version History & Reverting Changes
+
+Every field change on a contact is tracked automatically. The CRM maintains a full audit trail so you can always see what changed, when, and who made the change.
+
+## Viewing History
+
+1. Open a contact's detail page
+2. Click the **History** tab (next to Overview, Notes, etc.)
+3. You'll see a chronological list of all field changes
+4. Each entry shows:
+   - The field that changed
+   - The previous value
+   - The new value
+   - Timestamp of the change
+   - Which user made the change
+
+## Reverting a Field
+
+To restore a previous value:
+1. Find the change you want to undo in the History tab
+2. Click the **Revert** button on that entry
+3. Confirm the revert in the dialog
+4. The field is instantly restored to its previous value
+
+**Note:** Reverting is itself a logged action — the history will show that a revert occurred, who did it, and when.
+
+## Bulk Rollbacks
+
+For large-scale rollbacks, the system runs automated database snapshots every 8 hours. Admins can restore from these snapshots to roll back bulk operations or recover from import errors. Contact your admin if you need a bulk rollback.`
+  },
+
+  // Sales Campaigns Overview
+  {
+    id: 'campaigns-sales-overview',
+    title: 'How Sales Campaigns Work',
+    category: 'Campaigns',
+    keywords: ['sales campaign', 'outreach', 'pipeline', 'assign', 'status', 'workflow'],
+    relevantPaths: ['/sales-campaigns'],
+    content: `# How Sales Campaigns Work
+
+Sales campaigns are containers for organized outbound efforts. Each campaign holds a set of contacts and can be linked to one or more email campaigns.
+
+## Contact Statuses
+
+Every contact in a sales campaign has their own per-campaign status:
+
+| Status | Meaning |
+|--------|---------|
+| **Active** | In progress — rep is working this contact |
+| **Completed** | Outreach finished successfully |
+| **No** | Contact declined or not interested |
+| **Excluded** | Manually excluded from this campaign |
+| **Paused** | Temporarily paused for this contact |
+
+## The Fresh Slate Rule
+
+This is important: **statuses are per-campaign, not global.**
+
+A contact marked "No" or "Completed" in Campaign A has **zero effect** on their eligibility for Campaign B. When a contact is added to a new campaign, they start fresh — their status in other campaigns doesn't carry over.
+
+This lets you run multiple campaigns against the same contact list without past results blocking future opportunities.
+
+## Creating a Sales Campaign
+
+1. Go to **Sales Campaigns** in the sidebar
+2. Click **+ New Campaign**
+3. Give it a name and optional description
+4. Save
+
+## Adding Contacts
+
+You can add contacts to a campaign three ways:
+- **By Tag** — Add all contacts with a specific tag
+- **By List** — Add contacts from a saved list
+- **Manual** — Search and add contacts one by one
+
+## Linking Email Campaigns
+
+Each sales campaign can be linked to email campaigns. When an email send runs, it respects the per-contact status — contacts marked No, Excluded, or Completed in the sales campaign will be skipped by the linked email campaigns.`
+  },
+
+  // Campaign Exclusion & DNC Logic
+  {
+    id: 'campaigns-exclusion-logic',
+    title: 'Campaign Exclusion & DNC Logic',
+    category: 'Campaigns',
+    keywords: ['exclusion', 'dnc', 'do not contact', 'fresh slate', 'campaign status', 'eligible'],
+    relevantPaths: ['/sales-campaigns', '/campaigns'],
+    content: `# Campaign Exclusion & DNC Logic
+
+The CRM uses a two-tier system for controlling who receives outreach.
+
+## Tier 1 — Master DNC (Global)
+
+The Master DNC flag is a global kill switch. A contact marked DNC:
+- Is blocked from **all** campaigns and email sends system-wide
+- Cannot receive any automated or bulk outreach
+- Is set manually by an admin, or automatically when a contact unsubscribes
+
+This is a hard block and takes precedence over everything else.
+
+## Tier 2 — Per-Campaign Status (Local)
+
+Each contact has an independent status within each campaign. The statuses that block sends within a campaign:
+
+| Status | Blocks this campaign? | Blocks other campaigns? |
+|--------|----------------------|------------------------|
+| Active | No | No |
+| Paused | Yes | No |
+| No | Yes | No |
+| Completed | Yes | No |
+| Excluded | Yes | No |
+
+**Key point:** A "No" or "Completed" in Campaign A does NOT affect Campaign B. Contacts always start fresh in each new campaign (the Fresh Slate Rule).
+
+## How Eligible-Contact Filtering Works
+
+When a campaign email send is triggered, the system filters recipients:
+1. Remove all contacts with Master DNC = true
+2. Remove contacts whose status in this campaign is No, Completed, Excluded, or Paused
+3. The remaining contacts are the eligible send list
+
+## Checking Eligibility
+
+On a campaign detail page, the contacts list shows current status for each contact. Use the status filter to see which contacts are eligible vs. excluded.`
+  },
+
+  // Google Sheets Two-Way Sync (detailed)
+  {
+    id: 'sheets-two-way-sync',
+    title: 'How Google Sheets Two-Way Sync Works',
+    category: 'Sheets Sync',
+    keywords: ['sheets', 'sync', 'two-way', 'bidirectional', 'import', 'export', 'conflict'],
+    relevantPaths: ['/sheets'],
+    content: `# How Google Sheets Two-Way Sync Works
+
+The Sheets Sync feature supports full bidirectional sync between the CRM and a Google Sheets spreadsheet.
+
+## Export: CRM → Sheets
+
+When you trigger an export:
+- All contacts (or a filtered subset by list) are pushed to the spreadsheet
+- Standard fields are included: name, email, phone, company, tags, status, rep
+- Rows are keyed by contact ID — re-exports update existing rows rather than creating duplicates
+- Filtering by a list lets you export targeted segments
+
+## Import: Sheets → CRM
+
+When you trigger an import (Sheets → CRM):
+1. Rows are pulled back from the spreadsheet
+2. The system compares each row to the CRM record using the contact ID
+
+**Conflict detection:** If the same contact was edited in both the CRM and the sheet between syncs, a conflict is flagged. You'll see a side-by-side comparison of the two values for each conflicting field.
+
+**Conflict resolution:** An admin reviews each conflict and picks which value wins — CRM version or Sheets version — on a field-by-field basis.
+
+## Special Row Cases
+
+| Row type | What happens |
+|----------|-------------|
+| ID in sheet matches CRM contact | Updates the contact |
+| ID in sheet but contact deleted from CRM | Flagged as **orphan row** — requires manual decision |
+| No ID, but has valid email | Treated as **new contact candidate** — you can import or skip |
+| No ID, no email | Ignored |
+
+## Security
+
+CSV injection protection is built in — any cell values starting with =, +, -, or @ are sanitized before processing to prevent formula injection attacks.
+
+## Best Practices
+
+- Use the CRM as your source of truth for critical data
+- Sync regularly to minimize the conflict window
+- Resolve conflicts promptly to keep both systems aligned
+- Avoid editing the same contacts in both places simultaneously`
+  },
+
+  // Audit Log Details
+  {
+    id: 'admin-audit-detail',
+    title: 'Understanding the Audit Log',
+    category: 'Admin',
+    keywords: ['audit', 'log', 'trail', 'track', 'who', 'when', 'changed'],
+    relevantPaths: ['/activity'],
+    content: `# Understanding the Audit Log
+
+Every mutation in the CRM is recorded in the audit log. This gives you a complete trail of who did what and when.
+
+## What's Logged
+
+| Category | Examples |
+|----------|---------|
+| Contact changes | Create, update, delete any contact field |
+| Tags | Add tag to contact, remove tag, rename tag |
+| Bulk operations | Bulk tag, bulk assign, bulk status change |
+| Campaign activity | Email send, campaign create/edit, contact added/removed |
+| DNC changes | Contact set to DNC, DNC removed |
+| Import operations | Import started, completed, errors |
+| User management | User invited, role changed, deactivated |
+| Companies & Lists | Created, edited, deleted |
+| Version reverts | Field reverted to previous value via History tab |
+
+## Each Log Entry Contains
+
+- **Timestamp** — Exact date and time
+- **Acting user** — Who performed the action
+- **Action type** — What kind of change (create, update, delete, etc.)
+- **Entity type & ID** — What was affected (Contact ID, Campaign ID, etc.)
+- **Before/after values** — What the value was before and after the change
+
+## Filtering the Log
+
+Go to **Activity** in the sidebar and use the filter controls to narrow by:
+- **Date range** — Focus on a specific time window
+- **User** — See all actions by a specific team member
+- **Action type** — Filter to just imports, DNC changes, etc.
+
+## Common Use Cases
+
+- **Compliance audits** — Prove what changed and when for regulatory purposes
+- **Debugging** — Trace back unexpected data changes to find the root cause
+- **Accountability** — Know which team member made which changes
+- **Revert tracking** — When a field is reverted via version history, the revert itself appears as an audit entry
+
+## Retention
+
+Audit logs are retained indefinitely. For large exports or compliance reporting, use the export function or contact your admin.`
+  },
 ];
 
 export const categories = [

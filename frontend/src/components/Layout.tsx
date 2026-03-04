@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 import KeyboardShortcutsModal from './KeyboardShortcutsModal';
+import HelpWidget from './HelpWidget';
 import {
   Users,
   Building2,
@@ -230,7 +231,7 @@ export default function Layout() {
       </main>
 
       {/* Help Widget - mounted globally */}
-      
+      <HelpWidget isOpen={isHelpOpen} onOpenChange={setIsHelpOpen} />
 
       {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal 
