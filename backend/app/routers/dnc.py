@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.contact import Contact
 from app.models.sales_campaign import CampaignContact
 from app.services import audit_service
+from app.services.contact_service import get_contact_or_404 as _service_get_contact_or_404
 
 router = APIRouter(prefix="/api/v1/dnc", tags=["dnc"])
 
@@ -71,13 +72,8 @@ def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_
 
 
 def _get_contact_or_404(contact_id: UUID, db: Session) -> Contact:
-    contact = db.query(Contact).filter(
-        Contact.id == contact_id,
-        Contact.deleted_at.is_(None)
-    ).first()
-    if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found")
-    return contact
+    """Local shim — delegates to contact_service.get_contact_or_404."""
+    return _service_get_contact_or_404(db, str(contact_id), load_relations=False)
 
 
 # ── List All DNC Contacts ──────────────────────────────────────────────────

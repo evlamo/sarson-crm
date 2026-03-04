@@ -3,6 +3,7 @@ import { formatDate, formatTime } from '@/lib/formatDate';
 import { STATUSES, getStatus } from '@/lib/statuses';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from '@tanstack/react-router';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { copyToClipboard } from '@/lib/clipboard';
@@ -597,6 +598,7 @@ function TagInput({
 }
 
 export default function ContactDetailPage() {
+  const isAdmin = useAuth((s) => s.isAdmin);
   const { contactId } = useParams({ strict: false }) as { contactId: string };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -1261,7 +1263,7 @@ export default function ContactDetailPage() {
           )}
 
           {/* Activity & History - Phase 4 */}
-          <ContactActivityPanel contactId={contactId!} isAdmin={true} />
+          <ContactActivityPanel contactId={contactId!} isAdmin={isAdmin} />
         </div>
       </div>
 

@@ -140,13 +140,17 @@ def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_
     )
 
 
-def _build_email_campaign_out(ec: EmailCampaign, db: Session) -> EmailCampaignOut:
+def _build_email_campaign_out(ec: EmailCampaign, db: Session = None) -> EmailCampaignOut:
     """Build email campaign response with sales campaign name."""
     sales_campaign_name = None
     if ec.sales_campaign_id:
-        sc = db.query(SalesCampaign.name).filter(SalesCampaign.id == ec.sales_campaign_id).first()
-        if sc:
-            sales_campaign_name = sc.name
+        # Use already-loaded relationship if available (avoids N+1)
+        if hasattr(ec, 'sales_campaign') and ec.sales_campaign is not None:
+            sales_campaign_name = ec.sales_campaign.name
+        elif db is not None:
+            sc = db.query(SalesCampaign.name).filter(SalesCampaign.id == ec.sales_campaign_id).first()
+            if sc:
+                sales_campaign_name = sc.name
     
     return EmailCampaignOut(
         id=ec.id,
@@ -187,7 +191,7 @@ def list_email_campaigns(
     current_user: User = Depends(get_current_user),
 ):
     """List email campaigns, optionally filtered by sales campaign."""
-    query = db.query(EmailCampaign)
+    query = db.query(EmailCampaign).options(joinedload(EmailCampaign.sales_campaign))
     
     if sales_campaign_id:
         query = query.filter(EmailCampaign.sales_campaign_id == sales_campaign_id)

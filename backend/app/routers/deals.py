@@ -66,6 +66,16 @@ class DealOut(BaseModel):
         from_attributes = True
 
 
+class DealListResponse(BaseModel):
+    data: list[DealOut]
+    total: int
+    page: int
+    per_page: int
+
+    class Config:
+        from_attributes = True
+
+
 def _capture_deal_snapshot(deal: Deal) -> dict:
     """Capture current values of a deal for audit comparison."""
     return {
@@ -101,11 +111,11 @@ def _enrich(deal: Deal) -> dict:
 
 # ── List Deals ─────────────────────────────────────────────────────────────
 
-@router.get("")
+@router.get("", response_model=DealListResponse)
 def list_deals(
     stage: Optional[str] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, le=200),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -122,18 +132,19 @@ def list_deals(
         *([Deal.stage == stage] if stage else []),
     ).scalar()
 
-    deals = query.order_by(Deal.created_at.desc()).offset(skip).limit(limit).all()
+    offset = (page - 1) * per_page
+    deals = query.order_by(Deal.created_at.desc()).offset(offset).limit(per_page).all()
     return {
         "data": [_enrich(d) for d in deals],
         "total": total,
-        "page": skip // limit + 1 if limit else 1,
-        "per_page": limit,
+        "page": page,
+        "per_page": per_page,
     }
 
 
 # ── Create Deal ────────────────────────────────────────────────────────────
 
-@router.post("", status_code=201)
+@router.post("", response_model=DealOut, status_code=201)
 def create_deal(
     data: DealCreate,
     db: Session = Depends(get_db),
@@ -173,7 +184,7 @@ def create_deal(
 
 # ── Get Deal ───────────────────────────────────────────────────────────────
 
-@router.get("/{deal_id}")
+@router.get("/{deal_id}", response_model=DealOut)
 def get_deal(
     deal_id: UUID,
     db: Session = Depends(get_db),
@@ -192,7 +203,7 @@ def get_deal(
 
 # ── Update Deal ────────────────────────────────────────────────────────────
 
-@router.patch("/{deal_id}")
+@router.patch("/{deal_id}", response_model=DealOut)
 def update_deal(
     deal_id: UUID,
     data: DealUpdate,
@@ -231,7 +242,7 @@ def update_deal(
 
 # ── Move Stage ─────────────────────────────────────────────────────────────
 
-@router.patch("/{deal_id}/stage")
+@router.patch("/{deal_id}/stage", response_model=DealOut)
 def move_deal_stage(
     deal_id: UUID,
     data: StageUpdate,

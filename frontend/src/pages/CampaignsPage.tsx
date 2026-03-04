@@ -163,14 +163,16 @@ function MergeTagToolbar({ onInsert }: { onInsert: (tag: string) => void }) {
     <div className="flex gap-1.5 flex-wrap mb-2">
       <span className="text-xs text-muted-foreground self-center">Insert:</span>
       {MERGE_TAGS.map(mt => (
-        <button
+        <Button
           key={mt.tag}
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => onInsert(mt.tag)}
-          className="text-xs px-2 py-0.5 rounded border border-dashed border-[#253a52]/40 text-[#253a52] hover:bg-[#253a52]/5 transition-colors"
+          className="text-xs px-2 py-0.5 h-auto rounded border-dashed border-[#253a52]/40 text-[#253a52] hover:bg-[#253a52]/5"
         >
           {mt.label}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -224,7 +226,7 @@ function CampaignStatsView({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <button onClick={onBack} className="text-sm text-[#253a52] hover:underline mb-1">← Back to Campaigns</button>
+          <Button variant="link" onClick={onBack} className="text-sm text-[#253a52] p-0 h-auto mb-1">← Back to Campaigns</Button>
           <h2 className="text-xl font-bold">{campaign.name}</h2>
           <p className="text-sm text-muted-foreground">{campaign.subject}</p>
         </div>
@@ -589,7 +591,7 @@ function CampaignBuilder({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <button onClick={onClose} className="text-sm text-[#253a52] hover:underline mb-1">← Back to Campaigns</button>
+          <Button variant="link" onClick={onClose} className="text-sm text-[#253a52] p-0 h-auto mb-1">← Back to Campaigns</Button>
           <h2 className="text-xl font-bold">{editCampaign ? 'Edit Campaign' : 'New Campaign'}</h2>
         </div>
         <Button variant="outline" size="sm" onClick={() => { saveDraft.mutate(); toast.success('Draft saved'); }}>
@@ -600,19 +602,20 @@ function CampaignBuilder({
       {/* Step indicator */}
       <div className="flex gap-1">
         {STEP_LABELS.map((label, i) => (
-          <button
+          <Button
             key={i}
+            variant="ghost"
             onClick={() => goToStep(i + 1)}
-            className={`flex-1 text-center py-2 text-xs font-medium rounded transition-colors ${
+            className={`flex-1 text-center py-2 text-xs font-medium rounded transition-colors h-auto ${
               i + 1 === step
-                ? 'bg-[#253a52] text-white'
+                ? 'bg-[#253a52] text-white hover:bg-[#253a52]/90'
                 : i + 1 < step
                 ? 'bg-[#253a52]/20 text-[#253a52] hover:bg-[#253a52]/30'
                 : 'bg-muted text-muted-foreground'
             }`}
           >
             {i + 1}. {label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -784,9 +787,11 @@ function CampaignBuilder({
                     <Label>Or select specific tags</Label>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {tags.map((tag) => (
-                        <button
+                        <Button
                           key={tag.id}
                           type="button"
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             setForm(f => ({
                               ...f,
@@ -795,14 +800,14 @@ function CampaignBuilder({
                                 : [...f.tag_ids, tag.id],
                             }));
                           }}
-                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+                          className={`text-xs px-3 py-1 h-auto rounded-full border transition-colors ${
                             form.tag_ids.includes(tag.id)
                               ? 'bg-[#253a52] text-white border-[#253a52]'
                               : 'border-gray-300 hover:border-[#253a52]/50'
                           }`}
                         >
                           {tag.name} {tag.contact_count != null ? `(${tag.contact_count})` : ''}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </div>
@@ -875,17 +880,18 @@ function CampaignBuilder({
             {/* Tab bar */}
             <div className="flex border-b">
               {(['html', 'preview', 'plaintext'] as const).map((tab) => (
-                <button
+                <Button
                   key={tab}
+                  variant="ghost"
                   onClick={() => setContentTab(tab)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium border-b-2 rounded-none h-auto transition-colors ${
                     contentTab === tab
                       ? 'border-[#253a52] text-[#253a52]'
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {tab === 'html' ? 'HTML Editor' : tab === 'preview' ? 'Preview' : 'Plain Text'}
-                </button>
+                </Button>
               ))}
             </div>
 

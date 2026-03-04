@@ -193,7 +193,7 @@ def get_segment_contacts(
         .all()
     )
 
-    from app.routers.contacts import _build_response
+    from app.services.contact_service import build_contact_response as _build_response
     return SegmentContactsResponse(
         data=[_build_response(c).model_dump() for c in contacts],
         total=total,

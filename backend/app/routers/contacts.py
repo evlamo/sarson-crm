@@ -24,6 +24,7 @@ from app.schemas.contact import (
 )
 from app.models.user import User
 from app.services.company_service import get_or_create_company
+from app.services.contact_service import get_contact_or_404 as _service_get_contact_or_404, build_contact_response as _service_build_response
 from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["contacts"])
@@ -108,26 +109,13 @@ def _resolve_company(db: Session, data: dict, contact=None):
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def _get_contact_or_404(contact_id: str, db: Session) -> Contact:
-    contact = (
-        db.query(Contact)
-        .options(joinedload(Contact.tags), joinedload(Contact.company_obj))
-        .filter(Contact.id == contact_id, Contact.deleted_at.is_(None))
-        .first()
-    )
-    if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found")
-    return contact
+    """Local shim — delegates to contact_service.get_contact_or_404."""
+    return _service_get_contact_or_404(db, contact_id)
 
 
 def _build_response(contact: Contact) -> ContactResponse:
-    """Enrich ContactResponse with computed fields."""
-    data = ContactResponse.model_validate(contact)
-    data.full_name = contact.full_name
-    if contact.company_obj:
-        data.company_name = contact.company_obj.name
-    elif contact.company:
-        data.company_name = contact.company
-    return data
+    """Local shim — delegates to contact_service.build_contact_response."""
+    return _service_build_response(contact)
 
 
 def _capture_contact_snapshot(contact: Contact, fields: Optional[List[str]] = None) -> dict:
