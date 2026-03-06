@@ -26,6 +26,8 @@ from app.routers.api_controls import router as api_controls_router
 from app.routers.sales_campaigns import router as sales_campaigns_router
 from app.routers.email_campaigns_hierarchy import router as email_campaigns_hierarchy_router
 from app.routers.dnc import router as dnc_router
+# Phase 8: Campaign Contact Removal
+from app.routers.campaign_contact_removal import router as campaign_contact_removal_router
 # Phase 4: Audit Trail
 from app.routers.audit import router as audit_router
 # Phase 5: Google Sheets Sync
@@ -127,6 +129,8 @@ app.include_router(api_controls_router)
 app.include_router(sales_campaigns_router)
 app.include_router(email_campaigns_hierarchy_router)
 app.include_router(dnc_router)
+# Phase 8: Campaign Contact Removal
+app.include_router(campaign_contact_removal_router)
 # Phase 4: Audit Trail
 app.include_router(audit_router)
 # Phase 5: Google Sheets Sync

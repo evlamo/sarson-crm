@@ -74,6 +74,9 @@ class Contact(Base):
     master_dnc_reason = Column(Text)             # Why they're on the DNC list
     master_dnc_set_at = Column(DateTime(timezone=True))
     master_dnc_set_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    
+    # ========== CAMPAIGN DNC (Phase 8: Contact Removal Tracking) ==========
+    dnc_campaigns = Column(JSONB, default=list)  # List of campaign IDs where contact was removed
 
     # Investment-specific
     commitment_amount = Column(Numeric(15, 2))
