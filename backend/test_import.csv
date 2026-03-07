@@ -1,0 +1,4 @@
+first_name,last_name,email,phone,company,title,status
+Test,User1,test1@example.com,555-9001,TestCorp,Engineer,active
+Test,User2,test2@example.com,555-9002,TestCorp,Manager,prospect
+Test,User3,test3@example.com,555-9003,DemoCo,VP,hot
