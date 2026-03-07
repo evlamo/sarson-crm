@@ -12,7 +12,6 @@ import {
 } from '@tanstack/react-table';
 import api from '@/lib/api';
 import { copyToClipboard } from '@/lib/clipboard';
-import { useAuth } from '@/hooks/useAuth';
 import type { Contact, PaginatedResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -718,7 +717,6 @@ function DeleteConfirmDialog({
 
 export default function ContactsPage() {
   const navigate = useNavigate();
-  const isRestricted = useAuth((s) => s.isRestricted);
   const queryClient = useQueryClient();
   const windowWidth = useWindowWidth();
   const searchParams = useSearch({ strict: false }) as {
@@ -753,7 +751,7 @@ export default function ContactsPage() {
     if (statusFilter !== 'all') params.status = statusFilter;
     if (search) params.search = search;
     if (salesRepFilter) params.rep = salesRepFilter;
-    navigate({ to: '/contacts', search: params, replace: true });
+    navigate({ to: '/contacts', search: params as any, replace: true });
   }, [page, sorting, statusFilter, search, salesRepFilter, navigate]);
 
   // Responsive column visibility
@@ -1059,7 +1057,6 @@ export default function ContactsPage() {
           <Button variant="outline" size="sm" className="gap-1.5 h-7" onClick={() => exportToCSV(selectedContacts)}>
             <Download className="h-3 w-3" /> Export
           </Button>
-          {!isRestricted && (
           <Button
             variant="outline" size="sm"
             className="gap-1.5 h-7 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
@@ -1067,7 +1064,6 @@ export default function ContactsPage() {
           >
             <Trash2 className="h-3 w-3" /> Delete
           </Button>
-          )}
           <Button
             variant="ghost" size="sm"
             className="h-7 w-7 p-0 ml-auto text-muted-foreground"

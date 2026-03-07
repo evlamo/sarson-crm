@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -67,7 +66,6 @@ interface Campaign {
   body_text: string | null;
   segment_id: string | null;
   template_id: string | null;
-  sales_campaign_id: string | null;
   mailchimp_campaign_id: string | null;
   mailchimp_audience_id: string | null;
   mailchimp_status: string | null;
@@ -89,12 +87,6 @@ interface Template {
   subject: string | null;
   body_html: string;
   category: string | null;
-}
-
-interface SalesCampaign {
-  id: string;
-  name: string;
-  status: string;
 }
 
 interface Tag {
@@ -164,16 +156,14 @@ function MergeTagToolbar({ onInsert }: { onInsert: (tag: string) => void }) {
     <div className="flex gap-1.5 flex-wrap mb-2">
       <span className="text-xs text-muted-foreground self-center">Insert:</span>
       {MERGE_TAGS.map(mt => (
-        <Button
+        <button
           key={mt.tag}
           type="button"
-          variant="outline"
-          size="sm"
           onClick={() => onInsert(mt.tag)}
-          className="text-xs px-2 py-0.5 h-auto rounded border-dashed border-[#253a52]/40 text-[#253a52] hover:bg-[#253a52]/5"
+          className="text-xs px-2 py-0.5 rounded border border-dashed border-[#253a52]/40 text-[#253a52] hover:bg-[#253a52]/5 transition-colors"
         >
           {mt.label}
-        </Button>
+        </button>
       ))}
     </div>
   );
@@ -227,7 +217,7 @@ function CampaignStatsView({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <Button variant="link" onClick={onBack} className="text-sm text-[#253a52] p-0 h-auto mb-1">← Back to Campaigns</Button>
+          <button onClick={onBack} className="text-sm text-[#253a52] hover:underline mb-1">← Back to Campaigns</button>
           <h2 className="text-xl font-bold">{campaign.name}</h2>
           <p className="text-sm text-muted-foreground">{campaign.subject}</p>
         </div>
@@ -342,7 +332,6 @@ function CampaignBuilder({
     body_html: editCampaign?.body_html || '',
     body_text: editCampaign?.body_text || '',
     template_id: editCampaign?.template_id || '',
-    sales_campaign_id: (editCampaign as { sales_campaign_id?: string })?.sales_campaign_id || '',
     tracking_opens: true,
     tracking_html_clicks: true,
     google_analytics_tag: '',
@@ -402,17 +391,6 @@ function CampaignBuilder({
     },
   });
 
-  // Fetch sales campaigns for linking
-  const { data: salesCampaigns = [] } = useQuery<SalesCampaign[]>({
-    queryKey: ['sales-campaigns-list'],
-    queryFn: async () => {
-      const res = await api.get('/sales-campaigns', { params: { per_page: 100 } });
-      return res.data.data || [];
-    },
-  });
-
-  const selectedSalesCampaign = salesCampaigns.find((sc) => sc.id === form.sales_campaign_id);
-
   const { data: mcTemplates = [] } = useQuery<MailchimpTemplate[]>({
     queryKey: ['mc-templates'],
     queryFn: async () => {
@@ -435,7 +413,6 @@ function CampaignBuilder({
         reply_to: form.reply_to || undefined,
         segment_id: form.segment_id || undefined,
         template_id: form.template_id || undefined,
-        sales_campaign_id: form.sales_campaign_id || undefined,
         body_html: form.body_html || '<p></p>',
         body_text: form.body_text || undefined,
       };
@@ -592,7 +569,7 @@ function CampaignBuilder({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <Button variant="link" onClick={onClose} className="text-sm text-[#253a52] p-0 h-auto mb-1">← Back to Campaigns</Button>
+          <button onClick={onClose} className="text-sm text-[#253a52] hover:underline mb-1">← Back to Campaigns</button>
           <h2 className="text-xl font-bold">{editCampaign ? 'Edit Campaign' : 'New Campaign'}</h2>
         </div>
         <Button variant="outline" size="sm" onClick={() => { saveDraft.mutate(); toast.success('Draft saved'); }}>
@@ -603,20 +580,19 @@ function CampaignBuilder({
       {/* Step indicator */}
       <div className="flex gap-1">
         {STEP_LABELS.map((label, i) => (
-          <Button
+          <button
             key={i}
-            variant="ghost"
             onClick={() => goToStep(i + 1)}
-            className={`flex-1 text-center py-2 text-xs font-medium rounded transition-colors h-auto ${
+            className={`flex-1 text-center py-2 text-xs font-medium rounded transition-colors ${
               i + 1 === step
-                ? 'bg-[#253a52] text-white hover:bg-[#253a52]/90'
+                ? 'bg-[#253a52] text-white'
                 : i + 1 < step
                 ? 'bg-[#253a52]/20 text-[#253a52] hover:bg-[#253a52]/30'
                 : 'bg-muted text-muted-foreground'
             }`}
           >
             {i + 1}. {label}
-          </Button>
+          </button>
         ))}
       </div>
 
@@ -671,27 +647,6 @@ function CampaignBuilder({
                 <Input value={form.reply_to} onChange={(e) => setForm({ ...form, reply_to: e.target.value })} placeholder="Same as From if blank" />
               </div>
             </div>
-            <Separator />
-            <div className="space-y-2">
-              <Label>Sales Campaign (optional)</Label>
-              <Select 
-                value={form.sales_campaign_id || "none"} 
-                onValueChange={(v) => setForm({ ...form, sales_campaign_id: v === "none" ? "" : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Standalone email (no sales campaign)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Standalone — no sales campaign</SelectItem>
-                  {salesCampaigns.map(sc => (
-                    <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                If linked, contacts who completed or declined this sales campaign will be auto-excluded from sends
-              </p>
-            </div>
             <div className="flex justify-end">
               <Button onClick={() => goToStep(2)} disabled={!canProceedStep1}>Next: Recipients →</Button>
             </div>
@@ -720,9 +675,10 @@ function CampaignBuilder({
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      <Checkbox
+                      <input
+                        type="checkbox"
                         checked={form.campaign_list_ids.includes(list.id)}
-                        onCheckedChange={() => {
+                        onChange={() => {
                           setForm(f => ({
                             ...f,
                             campaign_list_ids: f.campaign_list_ids.includes(list.id)
@@ -730,6 +686,7 @@ function CampaignBuilder({
                               : [...f.campaign_list_ids, list.id],
                           }));
                         }}
+                        className="w-4 h-4 rounded"
                       />
                       <div className="flex-1">
                         <span className="text-sm font-medium">{list.name}</span>
@@ -786,11 +743,9 @@ function CampaignBuilder({
                     <Label>Or select specific tags</Label>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {tags.map((tag) => (
-                        <Button
+                        <button
                           key={tag.id}
                           type="button"
-                          variant="outline"
-                          size="sm"
                           onClick={() => {
                             setForm(f => ({
                               ...f,
@@ -799,14 +754,14 @@ function CampaignBuilder({
                                 : [...f.tag_ids, tag.id],
                             }));
                           }}
-                          className={`text-xs px-3 py-1 h-auto rounded-full border transition-colors ${
+                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${
                             form.tag_ids.includes(tag.id)
                               ? 'bg-[#253a52] text-white border-[#253a52]'
                               : 'border-gray-300 hover:border-[#253a52]/50'
                           }`}
                         >
                           {tag.name} {tag.contact_count != null ? `(${tag.contact_count})` : ''}
-                        </Button>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -879,18 +834,17 @@ function CampaignBuilder({
             {/* Tab bar */}
             <div className="flex border-b">
               {(['html', 'preview', 'plaintext'] as const).map((tab) => (
-                <Button
+                <button
                   key={tab}
-                  variant="ghost"
                   onClick={() => setContentTab(tab)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 rounded-none h-auto transition-colors ${
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                     contentTab === tab
                       ? 'border-[#253a52] text-[#253a52]'
                       : 'border-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {tab === 'html' ? 'HTML Editor' : tab === 'preview' ? 'Preview' : 'Plain Text'}
-                </Button>
+                </button>
               ))}
             </div>
 
@@ -955,9 +909,11 @@ function CampaignBuilder({
           <CardContent className="pt-6 space-y-4">
             <div className="space-y-3">
               <label className="flex items-center gap-3 cursor-pointer">
-                <Checkbox
+                <input
+                  type="checkbox"
                   checked={form.tracking_opens}
-                  onCheckedChange={(checked) => setForm({ ...form, tracking_opens: !!checked })}
+                  onChange={(e) => setForm({ ...form, tracking_opens: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300"
                 />
                 <div>
                   <p className="text-sm font-medium">Track Opens</p>
@@ -965,9 +921,11 @@ function CampaignBuilder({
                 </div>
               </label>
               <label className="flex items-center gap-3 cursor-pointer">
-                <Checkbox
+                <input
+                  type="checkbox"
                   checked={form.tracking_html_clicks}
-                  onCheckedChange={(checked) => setForm({ ...form, tracking_html_clicks: !!checked })}
+                  onChange={(e) => setForm({ ...form, tracking_html_clicks: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300"
                 />
                 <div>
                   <p className="text-sm font-medium">Track Clicks</p>

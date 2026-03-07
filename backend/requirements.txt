@@ -39,6 +39,8 @@ pycparser==3.0
 pydantic==2.12.5
 pydantic-settings==2.13.1
 pydantic_core==2.41.5
+pyotp==2.9.0
+qrcode==8.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-http-client==3.3.7
@@ -66,8 +68,3 @@ watchfiles==1.1.1
 wcwidth==0.6.0
 websockets==16.0
 Werkzeug==3.1.6
-google-auth>=2.0.0
-google-auth-oauthlib>=1.0.0
-google-auth-httplib2>=0.1.0
-google-api-python-client>=2.0.0
-apscheduler==3.11.2

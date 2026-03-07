@@ -41,9 +41,7 @@ class EmailCampaign(Base):
     scheduled_at = Column(DateTime(timezone=True))
     sent_at = Column(DateTime(timezone=True))
     sendgrid_batch_id = Column(String)
-
-    # ========== SALES CAMPAIGN LINK (Phase 1 Foundation) ==========
-    sales_campaign_id = Column(UUID(as_uuid=True), ForeignKey("sales_campaigns.id", ondelete="SET NULL"), index=True)
+    idempotency_key = Column(String, unique=True, nullable=True, index=True)  # For preventing duplicate sends
 
     # Mailchimp integration
     mailchimp_campaign_id = Column(String)
@@ -73,7 +71,6 @@ class EmailCampaign(Base):
     # Relationships
     sends = relationship("EmailSend", back_populates="campaign", cascade="all, delete-orphan")
     segment = relationship("Segment", foreign_keys=[segment_id])
-    sales_campaign = relationship("SalesCampaign", back_populates="email_campaigns")
 
 
 class EmailSend(Base):

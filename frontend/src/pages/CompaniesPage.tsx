@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import api from '@/lib/api';
-import { useAuth } from '@/hooks/useAuth';
 import type { Company, PaginatedResponse } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +44,6 @@ interface CompanyPOC {
 export default function CompaniesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const isRestricted = useAuth((s) => s.isRestricted);
   const searchParams = useSearch({ strict: false }) as { q?: string; openId?: string };
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState(searchParams.q || '');
@@ -150,7 +148,7 @@ export default function CompaniesPage() {
                   <TableCell>
                     <Badge variant="secondary" className="cursor-pointer" onClick={(e) => {
                       e.stopPropagation();
-                      navigate({ to: '/contacts', search: { search: co.name } });
+                      navigate({ to: '/contacts', search: { page: undefined, sort: undefined, order: undefined, status: undefined, search: co.name, rep: undefined } });
                     }}>
                       {co.contact_count}
                     </Badge>
@@ -163,7 +161,7 @@ export default function CompaniesPage() {
                     ) : '—'}
                   </TableCell>
                   <TableCell>
-                    {!isRestricted && <DeleteCompanyButton companyId={co.id} />}
+                    <DeleteCompanyButton companyId={co.id} />
                   </TableCell>
                 </TableRow>
               ))
@@ -242,7 +240,7 @@ function AddCompanyModal({ open, onClose }: { open: boolean; onClose: () => void
       setForm({ name: '', website: '', industry: '', city: '', state: '', country: '', notes: '' });
       onClose();
     },
-    onError: (err: { response?: { data?: { detail?: string } } }) => {
+    onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Failed to create company');
     },
   });
@@ -319,7 +317,7 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
       queryClient.invalidateQueries({ queryKey: ['companies'] });
       toast.success('POC assigned');
     },
-    onError: (err: { response?: { data?: { detail?: string } } }) => toast.error(err?.response?.data?.detail || 'Failed to assign POC'),
+    onError: (err: any) => toast.error(err?.response?.data?.detail || 'Failed to assign POC'),
   });
 
   const removePocMutation = useMutation({
@@ -339,7 +337,7 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
       queryClient.invalidateQueries({ queryKey: ['company', companyId] });
       queryClient.invalidateQueries({ queryKey: ['companies'] });
       toast.success('Updated');
-    } catch (err: { response?: { data?: { detail?: string } } }) {
+    } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Failed to update');
       throw err;
     }
@@ -432,7 +430,7 @@ function CompanyDrawer({ companyId, onClose }: { companyId: string; onClose: () 
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Contacts ({contacts.length})</h3>
                 <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
                   onClose();
-                  navigate({ to: '/contacts', search: { search: company.name } });
+                  navigate({ to: '/contacts', search: { page: undefined, sort: undefined, order: undefined, status: undefined, search: company.name, rep: undefined } });
                 }}>View all</Button>
               </div>
               <div className="space-y-1">

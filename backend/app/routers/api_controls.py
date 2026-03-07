@@ -17,7 +17,6 @@ from app.schemas.api_credentials import (
     ApiCredentialsResponse, ApiCredentialsTestResponse, MailchimpCredentialsUpdate
 )
 from app.services import api_credentials_service
-from app.services import audit_service
 from app.services.api_credentials_service import PROVIDER_FIELDS, get_masked_fields
 
 logger = logging.getLogger(__name__)
@@ -25,8 +24,7 @@ router = APIRouter(prefix="/api/v1/api-controls", tags=["api-controls"])
 
 
 def _require_admin(user: User):
-    """Check if user has admin or owner role."""
-    if getattr(user, 'role', None) not in ('admin', 'owner'):
+    if getattr(user, 'role', None) != 'admin':
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
@@ -108,17 +106,6 @@ def update_mailchimp(
         "from_name": data.from_name,
         "webhook_secret": data.webhook_secret,
     })
-    
-    audit_service.log_action_sync(
-        db=db,
-        action="api_credentials.update",
-        entity_type="api_credentials",
-        entity_id=str(creds.id),
-        user_id=str(current_user.id),
-        new_values={"provider": "mailchimp", "updated_fields": ["api_key", "server_prefix", "audience_id", "from_email", "from_name", "webhook_secret"]},
-    )
-    db.commit()
-    
     return _build_response(creds, "mailchimp")
 
 
@@ -139,17 +126,6 @@ def update_provider(
         if v is not None and not isinstance(v, str):
             raise HTTPException(status_code=422, detail=f"Field '{k}' must be a string")
     creds = api_credentials_service.update_credentials(db, provider, filtered)
-    
-    audit_service.log_action_sync(
-        db=db,
-        action="api_credentials.update",
-        entity_type="api_credentials",
-        entity_id=str(creds.id),
-        user_id=str(current_user.id),
-        new_values={"provider": provider, "updated_fields": list(filtered.keys())},
-    )
-    db.commit()
-    
     return _build_response(creds, provider)
 
 

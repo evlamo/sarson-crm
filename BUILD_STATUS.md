@@ -1,39 +1,56 @@
-# Sarson CRM — Build Status
-_Last updated: 2026-03-04_
+# CRM V1 Build Status
+_Updated by each Raider on completion. Read this before sending next Raider._
 
-## All Phases Complete ✅
+## Current Phase
+**CRM-1 — Contacts + Companies + Tags APIs**
 
-| Phase | Status | Commit |
-|---|---|---|
-| Phase 1: Database Foundations | ✅ LOCKED | g001 migration |
-| Phase 2: Campaign Hierarchy + DNC Logic | ✅ LOCKED | Phase 2 |
-| Phase 3: RBAC Hardening | ✅ LOCKED | 09208c8 |
-| Phase 4: Audit Trail + Version History | ✅ LOCKED | 354dfad |
-| Phase 5: Google Sheets Two-Way Sync | ✅ LOCKED | f015f24 |
-| Phase 6: Help Widget + Auto-Docs | ✅ LOCKED | 165fd14 |
-| Phase 7: Google Workspace OAuth | ✅ LOCKED | ce82450 |
+## Completed Raiders
+- SCHEMA-1: Backend scaffold + DB models + migrations — COMPLETE 2026-02-27
+- SCHEMA-2: Auth (JWT login/refresh/me + users CRUD) — COMPLETE 2026-02-27
 
-## Post-Phase Work (Complete)
-- Campaign stats page + enriched endpoint
-- Campaign exclusion logic + DNC on contact detail
-- Campaign membership view
-- Import tags auto-tagging
-- Full platform audit (backend + frontend RBAC hardening)
-- Campaign contacts audit + security hardening
+## Completed Raiders
+- CRM-1: Contacts + Companies + Tags APIs — COMPLETE 2026-02-27
 
-## Quality Pass (2026-03-04)
-- ✅ Audit report: AUDIT_REPORT_2026-03-04.md
-- ✅ Pass 1: 7 structural fixes (eb059f1)
-- ✅ Pass 2: test_dnc.py + test_rbac.py — 40 tests, 100% passing (e31ef79)
-- ✅ Phase A: tags.py response consistency + BUILD_STATUS.md update
-- 🔜 Phase B: sheets.py refactor (1,131 lines → router/service split)
-- 🔜 Phase C: God component decomposition (5 components >1000 lines)
+## Active Raiders
+None
 
-## Environment
-- **Mac mini:** `ssh -i ~/.ssh/id_ed25519 agentstevesmith@100.73.48.118`
-- **CRM path:** `~/.openclaw/workspace/crm/`
-- **Backend:** `http://localhost:8000`
-- **Frontend:** `http://localhost:3000`
-- **DB:** `crm_dev`, user: `agentstevesmith`, no password
-- **Admin login:** `ev@speranza.local` / `speranza2026`
-- **Repo:** `git@github.com:evlamo/sarson-crm.git`
+## Completed Raiders
+- CRM-3: Segments + Static Lists — COMPLETE 2026-02-27
+
+## Completed Raiders
+- CRM-2: CSV Import Pipeline — COMPLETE 2026-02-27
+
+## Build Log
+| Raider | Mission | Status | Completed |
+|---|---|---|---|
+| SCHEMA-1 | Backend scaffold, models, migrations, seed | COMPLETE | 2026-02-27 |
+| SCHEMA-2 | Auth (JWT, login, users) | COMPLETE | 2026-02-27 |
+| CRM-1 | Contacts + Companies + Tags APIs | COMPLETE | 2026-02-27 |
+| CRM-2 | CSV Import pipeline | COMPLETE | 2026-02-27 |
+| CRM-3 | Segments + Static Lists | COMPLETE | 2026-02-27 |
+| EMAIL-1 | Campaigns + SendGrid send | COMPLETE | 2026-02-27 |
+| EMAIL-2 | SendGrid webhook handler | COMPLETE | 2026-02-27 |
+| EMAIL-3 | Email templates + merge fields | COMPLETE | 2026-02-27 |
+| FRONT-1 | React scaffold + auth UI | COMPLETE | 2026-02-27 |
+| FRONT-2 | Contacts table UI | COMPLETE | 2026-02-27 |
+| FRONT-3 | Contact detail page | COMPLETE | 2026-02-27 |
+| FRONT-4 | Pipeline Kanban UI | COMPLETE | 2026-02-27 |
+| FRONT-5 | Campaign builder UI | COMPLETE | 2026-02-27 |
+| FRONT-6 | Import wizard UI | COMPLETE | 2026-02-27 |
+| DEPLOY-1 | Docker Compose + nginx + prod config | COMPLETE | 2026-02-27 |
+
+## SCHEMA-1 Deliverables
+- Virtualenv at `backend/venv/` with all deps installed (bcrypt pinned to 4.0.1 for passlib compat)
+- All SQLAlchemy models: users, contacts, companies, tags, contact_tags, deals, deal_contacts, pipelines, activities, email_campaigns, email_sends, email_templates, segments, imports, custom_field_definitions
+- Alembic migrations — all 15 tables created in crm_dev
+- DB seeded: admin user (ev@speranza.local / speranza2026), 9 tags, 5 segments, 8-stage deal pipeline
+- API starts clean: GET /health returns 200
+
+## Notes
+- CSV headers from CMO still pending — import column map will be stubbed with common fields
+- Local dev stack: PostgreSQL 16 + Redis (Homebrew), Python 3.12, Node 24
+- CRM directory: /Users/agentstevesmith/.openclaw/workspace/crm/
+- API runs on: localhost:8000 (`./start.sh`)
+- Frontend runs on: localhost:3000
+- bcrypt==4.0.1 pinned — passlib 1.7.4 not compatible with newer bcrypt; SCHEMA-2 should keep this pin or switch to bcrypt directly
+- SCHEMA-PATCH: CSV field additions to contacts — COMPLETE 2026-02-27

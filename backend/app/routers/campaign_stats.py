@@ -12,10 +12,13 @@ from typing import List, Optional
 import redis
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.config import settings as app_settings
 from app.models.user import User
+from app.models.campaign import EmailCampaign
 
 logger = logging.getLogger(__name__)
 
@@ -178,433 +181,81 @@ async def _fetch_mailchimp_cached(cache_key: str) -> Optional[List[CampaignStat]
     return campaigns
 
 
+def _fetch_campaigns_from_db(db: Session) -> List[CampaignStat]:
+    """Fetch campaign stats from local database."""
+    campaigns = db.query(EmailCampaign).filter(EmailCampaign.status == "sent").all()
+    results = []
+    for c in campaigns:
+        delivered = c.delivered_count or 0
+        recipients = c.recipient_count or 0
+        results.append(CampaignStat(
+            id=str(c.id),
+            name=c.name,
+            send_date=c.sent_at.strftime("%Y-%m-%d") if c.sent_at else None,
+            recipients=recipients,
+            delivered=delivered,
+            opens=c.open_count or 0,
+            clicks=c.click_count or 0,
+            unsubscribes=c.unsubscribe_count or 0,
+            bounces=c.bounce_count or 0,
+            open_rate=round(c.open_count / delivered * 100, 1) if delivered > 0 else 0,
+            click_rate=round(c.click_count / delivered * 100, 1) if delivered > 0 else 0,
+            unsubscribe_rate=round(c.unsubscribe_count / delivered * 100, 2) if delivered > 0 else 0,
+            bounce_rate=round(c.bounce_count / recipients * 100, 2) if recipients > 0 else 0,
+            status=c.status,
+        ))
+    return results
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=CampaignStatsResponse)
-async def get_campaign_stats(current_user: User = Depends(get_current_user)):
+async def get_campaign_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get campaign stats from database (preferred), Mailchimp, or demo."""
+    # Try to get real data from database first
+    try:
+        campaigns = _fetch_campaigns_from_db(db)
+        if campaigns:
+            return CampaignStatsResponse(campaigns=campaigns, source="database")
+    except Exception as exc:
+        logger.error("Failed to fetch campaign stats from database: %s", exc)
+    
+    # Fall back to Mailchimp if configured
     if _mailchimp_configured():
         try:
             campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
             return CampaignStatsResponse(campaigns=campaigns, source="mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign stats from Mailchimp: %s", exc)
+    
+    # Fall back to demo data
     return CampaignStatsResponse(campaigns=DEMO_CAMPAIGNS, source="demo")
 
 
 @router.get("/summary", response_model=CampaignSummary)
-async def get_campaign_summary(current_user: User = Depends(get_current_user)):
+async def get_campaign_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get campaign summary from database (preferred), Mailchimp, or demo."""
+    # Try to get real data from database first
+    try:
+        campaigns = _fetch_campaigns_from_db(db)
+        if campaigns:
+            return _compute_summary(campaigns, "database")
+    except Exception as exc:
+        logger.error("Failed to fetch campaign summary from database: %s", exc)
+    
+    # Fall back to Mailchimp if configured
     if _mailchimp_configured():
         try:
             campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
             return _compute_summary(campaigns, "mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign summary from Mailchimp: %s", exc)
+    
+    # Fall back to demo data
     return _compute_summary(DEMO_CAMPAIGNS, "demo")
-
-
-# ── Enriched Stats (with Sales Campaign info) ──────────────────────────────
-
-class EnrichedCampaignStat(BaseModel):
-    id: str
-    name: str
-    send_date: Optional[str] = None
-    recipients: int = 0
-    delivered: int = 0
-    opens: int = 0
-    clicks: int = 0
-    unsubscribes: int = 0
-    bounces: int = 0
-    open_rate: float = 0.0
-    click_rate: float = 0.0
-    unsubscribe_rate: float = 0.0
-    bounce_rate: float = 0.0
-    status: str = "sent"
-    sales_campaign_id: Optional[str] = None
-    sales_campaign_name: Optional[str] = None
-
-
-class EnrichedCampaignStatsResponse(BaseModel):
-    campaigns: List[EnrichedCampaignStat]
-    source: str = "demo"
-    sales_campaigns: List[dict] = []
-
-
-@router.get("/enriched", response_model=EnrichedCampaignStatsResponse)
-async def get_enriched_campaign_stats(
-    sales_campaign_id: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
-):
-    from app.database import get_db
-    from app.models.campaign import EmailCampaign
-    from app.models.sales_campaign import SalesCampaign
-    from sqlalchemy.orm import Session
-    
-    db: Session = next(get_db())
-    
-    try:
-        results: List[EnrichedCampaignStat] = []
-        source = "demo"
-        
-        if _mailchimp_configured():
-            try:
-                mc_campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
-                mc_ids = [c.id for c in mc_campaigns]
-                crm_campaigns = db.query(EmailCampaign).filter(
-                    EmailCampaign.mailchimp_campaign_id.in_(mc_ids)
-                ).all()
-                crm_lookup = {c.mailchimp_campaign_id: c for c in crm_campaigns}
-                
-                sc_ids = [c.sales_campaign_id for c in crm_campaigns if c.sales_campaign_id]
-                sc_lookup = {}
-                if sc_ids:
-                    scs = db.query(SalesCampaign).filter(SalesCampaign.id.in_(sc_ids)).all()
-                    sc_lookup = {str(sc.id): sc.name for sc in scs}
-                
-                for mc in mc_campaigns:
-                    crm_campaign = crm_lookup.get(mc.id)
-                    sc_id = str(crm_campaign.sales_campaign_id) if crm_campaign and crm_campaign.sales_campaign_id else None
-                    sc_name = sc_lookup.get(sc_id) if sc_id else None
-                    
-                    results.append(EnrichedCampaignStat(
-                        id=mc.id, name=mc.name, send_date=mc.send_date,
-                        recipients=mc.recipients, delivered=mc.delivered,
-                        opens=mc.opens, clicks=mc.clicks, unsubscribes=mc.unsubscribes,
-                        bounces=mc.bounces, open_rate=mc.open_rate, click_rate=mc.click_rate,
-                        unsubscribe_rate=mc.unsubscribe_rate, bounce_rate=mc.bounce_rate,
-                        status=mc.status, sales_campaign_id=sc_id, sales_campaign_name=sc_name,
-                    ))
-                source = "mailchimp"
-            except Exception as exc:
-                logger.error("Failed to fetch from Mailchimp: %s", exc)
-                results = []
-                source = "crm"
-        
-        if not results or source == "crm":
-            query = db.query(EmailCampaign).filter(EmailCampaign.status.in_(["sent", "scheduled", "draft"]))
-            crm_campaigns = query.order_by(EmailCampaign.created_at.desc()).limit(50).all()
-            
-            sc_ids = [c.sales_campaign_id for c in crm_campaigns if c.sales_campaign_id]
-            sc_lookup = {}
-            if sc_ids:
-                scs = db.query(SalesCampaign).filter(SalesCampaign.id.in_(sc_ids)).all()
-                sc_lookup = {str(sc.id): sc.name for sc in scs}
-            
-            for c in crm_campaigns:
-                sc_id = str(c.sales_campaign_id) if c.sales_campaign_id else None
-                sc_name = sc_lookup.get(sc_id) if sc_id else None
-                delivered = (c.sent_count or 0) - (c.bounce_count or 0)
-                
-                results.append(EnrichedCampaignStat(
-                    id=str(c.id), name=c.name,
-                    send_date=c.sent_at.strftime("%Y-%m-%d") if c.sent_at else None,
-                    recipients=c.sent_count or 0, delivered=delivered,
-                    opens=c.unique_opens or 0, clicks=c.unique_clicks or 0,
-                    unsubscribes=c.unsubscribe_count or 0, bounces=c.bounce_count or 0,
-                    open_rate=round((c.unique_opens or 0) / delivered * 100, 1) if delivered else 0,
-                    click_rate=round((c.unique_clicks or 0) / delivered * 100, 1) if delivered else 0,
-                    unsubscribe_rate=round((c.unsubscribe_count or 0) / delivered * 100, 2) if delivered else 0,
-                    bounce_rate=round((c.bounce_count or 0) / (c.sent_count or 1) * 100, 2) if c.sent_count else 0,
-                    status=c.status, sales_campaign_id=sc_id, sales_campaign_name=sc_name,
-                ))
-            source = "crm"
-        
-        if sales_campaign_id:
-            if sales_campaign_id == "standalone":
-                results = [r for r in results if r.sales_campaign_id is None]
-            else:
-                results = [r for r in results if r.sales_campaign_id == sales_campaign_id]
-        
-        all_scs = db.query(SalesCampaign).order_by(SalesCampaign.name).all()
-        sc_list = [{"id": str(sc.id), "name": sc.name} for sc in all_scs]
-        
-        return EnrichedCampaignStatsResponse(campaigns=results, source=source, sales_campaigns=sc_list)
-    finally:
-        db.close()
-
-
-# ── Campaign Detail with Unsubscribers ─────────────────────────────────────────
-
-class UnsubscriberRecord(BaseModel):
-    email: str
-    contact_id: Optional[str] = None
-    contact_name: Optional[str] = None
-    reason: Optional[str] = None
-
-
-class CampaignDetailResponse(BaseModel):
-    campaign_id: str
-    name: str
-    subject: Optional[str] = None
-    status: str
-    send_date: Optional[str] = None
-    sales_campaign_id: Optional[str] = None
-    sales_campaign_name: Optional[str] = None
-    sent: int = 0
-    delivered: int = 0
-    opens: int = 0
-    unique_opens: int = 0
-    clicks: int = 0
-    unique_clicks: int = 0
-    unsubscribes: int = 0
-    bounces: int = 0
-    open_rate: float = 0.0
-    click_rate: float = 0.0
-    unsubscribe_rate: float = 0.0
-    bounce_rate: float = 0.0
-    unsubscribers: List[UnsubscriberRecord] = []
-    mailchimp_required: bool = False
-
-
-async def _fetch_mc_unsubscribers(mc_campaign_id: str) -> List[dict]:
-    """Fetch unsubscriber list from Mailchimp reports API."""
-    import httpx
-    
-    api_key = os.environ.get("MAILCHIMP_API_KEY")
-    server = os.environ.get("MAILCHIMP_SERVER_PREFIX")
-    if not api_key or not server:
-        return []
-    
-    url = f"https://{server}.api.mailchimp.com/3.0/reports/{mc_campaign_id}/unsubscribed"
-    params = {"count": 100}
-    
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, params=params, auth=("anystring", api_key))
-            if resp.status_code != 200:
-                logger.warning(f"Failed to fetch unsubscribers: {resp.status_code}")
-                return []
-            data = resp.json()
-            return data.get("unsubscribes", [])
-    except Exception as exc:
-        logger.error(f"Error fetching unsubscribers: {exc}")
-        return []
-
-
-async def _fetch_mc_campaign_report(mc_campaign_id: str) -> Optional[dict]:
-    """Fetch campaign report from Mailchimp."""
-    import httpx
-    
-    api_key = os.environ.get("MAILCHIMP_API_KEY")
-    server = os.environ.get("MAILCHIMP_SERVER_PREFIX")
-    if not api_key or not server:
-        return None
-    
-    url = f"https://{server}.api.mailchimp.com/3.0/reports/{mc_campaign_id}"
-    
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(url, auth=("anystring", api_key))
-            if resp.status_code != 200:
-                logger.warning(f"Failed to fetch campaign report: {resp.status_code}")
-                return None
-            return resp.json()
-    except Exception as exc:
-        logger.error(f"Error fetching campaign report: {exc}")
-        return None
-
-
-@router.get("/{campaign_id}/detail", response_model=CampaignDetailResponse)
-async def get_campaign_detail(
-    campaign_id: str,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Get detailed campaign stats including unsubscriber list.
-    campaign_id can be either mailchimp_campaign_id or email_campaigns.id (UUID).
-    """
-    from app.database import get_db
-    from app.models.campaign import EmailCampaign
-    from app.models.sales_campaign import SalesCampaign
-    from app.models.contact import Contact
-    from sqlalchemy.orm import Session
-    import uuid as uuid_module
-    
-    db: Session = next(get_db())
-    
-    try:
-        # Try to find campaign by mailchimp_campaign_id first, then by UUID id
-        campaign = db.query(EmailCampaign).filter(
-            EmailCampaign.mailchimp_campaign_id == campaign_id
-        ).first()
-        
-        if not campaign:
-            # Try parsing as UUID
-            try:
-                campaign_uuid = uuid_module.UUID(campaign_id)
-                campaign = db.query(EmailCampaign).filter(
-                    EmailCampaign.id == campaign_uuid
-                ).first()
-            except (ValueError, AttributeError):
-                pass
-        
-        # Also check demo data
-        demo_campaign = next((c for c in DEMO_CAMPAIGNS if c.id == campaign_id), None)
-        
-        if not campaign and not demo_campaign:
-            raise HTTPException(status_code=404, detail="Campaign not found")
-        
-        # Get sales campaign name if linked
-        sales_campaign_name = None
-        sales_campaign_id_str = None
-        if campaign and campaign.sales_campaign_id:
-            sales_campaign = db.query(SalesCampaign).filter(
-                SalesCampaign.id == campaign.sales_campaign_id
-            ).first()
-            if sales_campaign:
-                sales_campaign_name = sales_campaign.name
-                sales_campaign_id_str = str(campaign.sales_campaign_id)
-        
-        # Initialize response
-        unsubscribers: List[UnsubscriberRecord] = []
-        mailchimp_required = False
-        
-        mc_campaign_id = campaign.mailchimp_campaign_id if campaign else None
-        
-        # If Mailchimp configured and campaign has mailchimp_campaign_id, fetch from Mailchimp
-        if _mailchimp_configured() and mc_campaign_id:
-            # Fetch report stats from Mailchimp
-            report = await _fetch_mc_campaign_report(mc_campaign_id)
-            
-            if report:
-                opens_data = report.get("opens", {})
-                clicks_data = report.get("clicks", {})
-                bounces_data = report.get("bounces", {})
-                
-                sent = report.get("emails_sent", 0)
-                hard_bounces = bounces_data.get("hard_bounces", 0)
-                soft_bounces = bounces_data.get("soft_bounces", 0)
-                bounces = hard_bounces + soft_bounces
-                delivered = sent - bounces
-                unique_opens = opens_data.get("unique_opens", 0)
-                total_opens = opens_data.get("opens_total", 0)
-                unique_clicks = clicks_data.get("unique_clicks", 0)
-                total_clicks = clicks_data.get("clicks_total", 0)
-                unsubs = report.get("unsubscribed", 0)
-                
-                open_rate = round(opens_data.get("open_rate", 0) * 100, 1)
-                click_rate = round(clicks_data.get("click_rate", 0) * 100, 1)
-                unsub_rate = round(unsubs / delivered * 100, 2) if delivered else 0
-                bounce_rate = round(bounces / sent * 100, 2) if sent else 0
-                
-                # Fetch unsubscribers list
-                mc_unsubs = await _fetch_mc_unsubscribers(mc_campaign_id)
-                
-                # Match against CRM contacts
-                for u in mc_unsubs:
-                    email = u.get("email_address", "")
-                    reason = u.get("reason", "")
-                    
-                    # Try to find contact by email
-                    contact = db.query(Contact).filter(
-                        Contact.email == email
-                    ).first() if email else None
-                    
-                    contact_name = None
-                    contact_id = None
-                    if contact:
-                        contact_id = str(contact.id)
-                        first = contact.first_name or ""
-                        last = contact.last_name or ""
-                        contact_name = f"{first} {last}".strip() or None
-                    
-                    unsubscribers.append(UnsubscriberRecord(
-                        email=email,
-                        contact_id=contact_id,
-                        contact_name=contact_name,
-                        reason=reason,
-                    ))
-                
-                return CampaignDetailResponse(
-                    campaign_id=campaign_id,
-                    name=campaign.name if campaign else "Unknown",
-                    subject=campaign.subject if campaign else None,
-                    status=campaign.status if campaign else "sent",
-                    send_date=campaign.sent_at.strftime("%Y-%m-%d") if campaign and campaign.sent_at else report.get("send_time", "")[:10] if report.get("send_time") else None,
-                    sales_campaign_id=sales_campaign_id_str,
-                    sales_campaign_name=sales_campaign_name,
-                    sent=sent,
-                    delivered=delivered,
-                    opens=total_opens,
-                    unique_opens=unique_opens,
-                    clicks=total_clicks,
-                    unique_clicks=unique_clicks,
-                    unsubscribes=unsubs,
-                    bounces=bounces,
-                    open_rate=open_rate,
-                    click_rate=click_rate,
-                    unsubscribe_rate=unsub_rate,
-                    bounce_rate=bounce_rate,
-                    unsubscribers=unsubscribers,
-                    mailchimp_required=False,
-                )
-        
-        # If demo data
-        if demo_campaign and not campaign:
-            return CampaignDetailResponse(
-                campaign_id=demo_campaign.id,
-                name=demo_campaign.name,
-                subject=None,
-                status=demo_campaign.status,
-                send_date=demo_campaign.send_date,
-                sales_campaign_id=None,
-                sales_campaign_name=None,
-                sent=demo_campaign.recipients,
-                delivered=demo_campaign.delivered,
-                opens=demo_campaign.opens,
-                unique_opens=demo_campaign.opens,
-                clicks=demo_campaign.clicks,
-                unique_clicks=demo_campaign.clicks,
-                unsubscribes=demo_campaign.unsubscribes,
-                bounces=demo_campaign.bounces,
-                open_rate=demo_campaign.open_rate,
-                click_rate=demo_campaign.click_rate,
-                unsubscribe_rate=demo_campaign.unsubscribe_rate,
-                bounce_rate=demo_campaign.bounce_rate,
-                unsubscribers=[],
-                mailchimp_required=True,
-            )
-        
-        # Fallback to CRM stored stats
-        if campaign:
-            sent = campaign.sent_count or 0
-            bounces = campaign.bounce_count or 0
-            delivered = sent - bounces
-            unique_opens = campaign.unique_opens or 0
-            unique_clicks = campaign.unique_clicks or 0
-            unsubs = campaign.unsubscribe_count or 0
-            
-            open_rate = round(unique_opens / delivered * 100, 1) if delivered else 0
-            click_rate = round(unique_clicks / delivered * 100, 1) if delivered else 0
-            unsub_rate = round(unsubs / delivered * 100, 2) if delivered else 0
-            bounce_rate = round(bounces / sent * 100, 2) if sent else 0
-            
-            # Without Mailchimp, we cannot get individual unsubscribers
-            mailchimp_required = not _mailchimp_configured()
-            
-            return CampaignDetailResponse(
-                campaign_id=str(campaign.id),
-                name=campaign.name,
-                subject=campaign.subject,
-                status=campaign.status,
-                send_date=campaign.sent_at.strftime("%Y-%m-%d") if campaign.sent_at else None,
-                sales_campaign_id=sales_campaign_id_str,
-                sales_campaign_name=sales_campaign_name,
-                sent=sent,
-                delivered=delivered,
-                opens=campaign.open_count or 0,
-                unique_opens=unique_opens,
-                clicks=campaign.click_count or 0,
-                unique_clicks=unique_clicks,
-                unsubscribes=unsubs,
-                bounces=bounces,
-                open_rate=open_rate,
-                click_rate=click_rate,
-                unsubscribe_rate=unsub_rate,
-                bounce_rate=bounce_rate,
-                unsubscribers=[],
-                mailchimp_required=mailchimp_required,
-            )
-        
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    finally:
-        db.close()

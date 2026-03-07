@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import get_current_user, require_not_restricted
+from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models.campaign_segment import CampaignSegment
 from app.models.user import User
@@ -23,7 +23,6 @@ from app.schemas.campaign_segment import (
     CombineSyncRequest,
 )
 from app.services import campaign_list_service
-from app.services import audit_service
 from app.services import mailchimp_service
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -69,17 +68,6 @@ def create_campaign_segment(
     segment.member_count = len(contacts)
     db.commit()
     db.refresh(segment)
-    
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign_list.create",
-        entity_type="campaign_segment",
-        entity_id=str(segment.id),
-        user_id=str(current_user.id),
-        new_values={"name": segment.name, "member_count": segment.member_count},
-    )
-    db.commit()
-    
     return segment
 
 
@@ -188,17 +176,6 @@ def update_campaign_segment(
     seg.member_count = len(contacts)
     db.commit()
     db.refresh(seg)
-    
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign_list.update",
-        entity_type="campaign_segment",
-        entity_id=str(segment_id),
-        user_id=str(current_user.id),
-        new_values={"name": seg.name, "member_count": seg.member_count},
-    )
-    db.commit()
-    
     return seg
 
 
@@ -207,7 +184,6 @@ def delete_campaign_segment(
     segment_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_not_restricted),
 ):
     seg = db.query(CampaignSegment).filter(CampaignSegment.id == segment_id).first()
     if not seg:
@@ -226,15 +202,6 @@ def delete_campaign_segment(
             detail=f"Cannot delete: this list is used by {len(result)} campaign(s): {campaign_names}"
         )
 
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign_list.delete",
-        entity_type="campaign_segment",
-        entity_id=str(segment_id),
-        user_id=str(current_user.id),
-        old_values={"name": seg.name},
-    )
-    
     db.delete(seg)
     db.commit()
 

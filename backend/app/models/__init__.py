@@ -10,11 +10,7 @@ from app.models.import_job import ImportJob
 from app.models.custom_field import CustomFieldDefinition
 from app.models.static_list import StaticList, StaticListMember
 from app.models.user_invite import UserInvite, InviteStatus
-
-# ========== Phase 1 Foundation Models ==========
-from app.models.sales_campaign import SalesCampaign, CampaignContact
-from app.models.audit import AuditLog, ContactFieldHistory, DbSnapshot
-from app.models.sheets import SheetsExport, SheetsImportReview
-
-# ========== Phase 7 OAuth ==========
-from app.models.oauth_state import OAuthState
+from app.models.password_reset import PasswordResetToken
+from app.models.email_verification import EmailVerificationToken
+from app.models.token_blacklist import TokenBlacklist
+from app.models.mfa import MFASecret

@@ -11,9 +11,8 @@ from typing import Optional
 from app.database import get_db
 from app.models.user import User
 from app.models.user_invite import UserInvite, InviteStatus
-from app.auth.dependencies import get_admin_user, require_not_restricted, get_current_user
+from app.auth.dependencies import get_admin_user, get_current_user
 from app.config import settings
-from app.services import audit_service
 
 router = APIRouter(prefix="/invites", tags=["invites"])
 
@@ -133,16 +132,6 @@ def create_invite(
     db.add(invite)
     db.commit()
     db.refresh(invite)
-    
-    audit_service.log_action_sync(
-        db=db,
-        action="invite.create",
-        entity_type="user_invite",
-        entity_id=str(invite.id),
-        user_id=str(admin.id),
-        new_values={"email": invite.email},
-    )
-    db.commit()
 
     result = _serialize_invite(invite, include_token=True)
     return result
@@ -162,7 +151,6 @@ def revoke_invite(
     invite_id: uuid.UUID,
     db: Session = Depends(get_db),
     admin: User = Depends(get_admin_user),
-    _: User = Depends(require_not_restricted),
 ):
     invite = db.query(UserInvite).filter(UserInvite.id == invite_id).first()
     if not invite:
@@ -171,18 +159,6 @@ def revoke_invite(
         raise HTTPException(status_code=400, detail="Only pending invites can be revoked")
     invite.status = InviteStatus.revoked
     db.commit()
-    
-    audit_service.log_action_sync(
-        db=db,
-        action="invite.revoke",
-        entity_type="user_invite",
-        entity_id=str(invite_id),
-        user_id=str(admin.id),
-        old_values={"status": "pending"},
-        new_values={"status": "revoked"},
-    )
-    db.commit()
-    
     return {"message": "Invite revoked"}
 
 

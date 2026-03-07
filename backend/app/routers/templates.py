@@ -10,7 +10,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, require_not_restricted
+from app.auth.dependencies import get_current_user
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.campaign import EmailTemplate
@@ -23,7 +23,6 @@ from app.schemas.template import (
     MergeFieldsRequest,
 )
 from app.services.campaign_service import render_merge_fields
-from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/templates", tags=["templates"])
 
@@ -74,22 +73,6 @@ def create_template(
     db.add(template)
     db.commit()
     db.refresh(template)
-    
-    # Audit: template created
-    audit_service.log_action_sync(
-        db=db,
-        action="template.create",
-        entity_type="template",
-        entity_id=str(template.id),
-        new_values={
-            "name": template.name,
-            "subject": template.subject,
-            "category": template.category,
-        },
-        user_id=str(current_user.id),
-    )
-    db.commit()
-    
     return template
 
 
@@ -120,37 +103,11 @@ def update_template(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    old_values = {
-        "name": template.name,
-        "subject": template.subject,
-        "category": template.category,
-    }
-
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(template, key, value)
 
     template.updated_at = datetime.now(timezone.utc)
-    
-    new_values = {
-        "name": template.name,
-        "subject": template.subject,
-        "category": template.category,
-    }
-    
-    changes = {k: v for k, v in new_values.items() if old_values.get(k) != v}
-    
-    if changes:
-        audit_service.log_action_sync(
-            db=db,
-            action="template.update",
-            entity_type="template",
-            entity_id=str(template.id),
-            old_values={k: old_values[k] for k in changes},
-            new_values=changes,
-            user_id=str(current_user.id),
-        )
-    
     db.commit()
     db.refresh(template)
     return template
@@ -163,26 +120,10 @@ def delete_template(
     template_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_not_restricted),
 ):
     template = db.query(EmailTemplate).filter(EmailTemplate.id == template_id).first()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
-    # Audit: template deleted
-    audit_service.log_action_sync(
-        db=db,
-        action="template.delete",
-        entity_type="template",
-        entity_id=str(template.id),
-        old_values={
-            "name": template.name,
-            "subject": template.subject,
-            "category": template.category,
-        },
-        user_id=str(current_user.id),
-    )
-    
     db.delete(template)
     db.commit()
 

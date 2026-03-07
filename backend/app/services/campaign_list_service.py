@@ -28,7 +28,6 @@ def resolve_segment_contacts(segment: CampaignSegment, db: Session) -> List[Cont
     q = q.filter(
         Contact.email_unsubscribed.isnot(True),
         Contact.email_bounced.isnot(True),
-        Contact.master_dnc.isnot(True),  # Exclude master DNC contacts
     )
 
     has_filters = False

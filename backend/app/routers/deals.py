@@ -9,12 +9,11 @@ from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, Field
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, require_not_restricted
+from app.auth.dependencies import get_current_user
 from app.models.user import User
 from app.models.deal import Deal
 from app.models.company import Company
 from app.utils.time import utcnow
-from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/deals", tags=["deals"])
 
@@ -66,40 +65,6 @@ class DealOut(BaseModel):
         from_attributes = True
 
 
-class DealListResponse(BaseModel):
-    data: list[DealOut]
-    total: int
-    page: int
-    per_page: int
-
-    class Config:
-        from_attributes = True
-
-
-def _capture_deal_snapshot(deal: Deal) -> dict:
-    """Capture current values of a deal for audit comparison."""
-    return {
-        "title": deal.title,
-        "description": deal.description,
-        "stage": deal.stage,
-        "amount": float(deal.amount) if deal.amount else None,
-        "currency": deal.currency,
-        "expected_close": str(deal.expected_close) if deal.expected_close else None,
-        "company_id": str(deal.company_id) if deal.company_id else None,
-        "deal_type": deal.deal_type,
-    }
-
-
-def _compute_changes(old: dict, new: dict) -> dict:
-    changes = {}
-    for key in set(old.keys()) | set(new.keys()):
-        old_val = old.get(key)
-        new_val = new.get(key)
-        if old_val != new_val:
-            changes[key] = {"old": old_val, "new": new_val}
-    return changes
-
-
 def _enrich(deal: Deal) -> dict:
     d = DealOut.model_validate(deal).model_dump()
     if deal.company:
@@ -111,11 +76,11 @@ def _enrich(deal: Deal) -> dict:
 
 # ── List Deals ─────────────────────────────────────────────────────────────
 
-@router.get("", response_model=DealListResponse)
+@router.get("")
 def list_deals(
     stage: Optional[str] = None,
-    page: int = Query(1, ge=1),
-    per_page: int = Query(25, ge=1, le=200),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -132,19 +97,18 @@ def list_deals(
         *([Deal.stage == stage] if stage else []),
     ).scalar()
 
-    offset = (page - 1) * per_page
-    deals = query.order_by(Deal.created_at.desc()).offset(offset).limit(per_page).all()
+    deals = query.order_by(Deal.created_at.desc()).offset(skip).limit(limit).all()
     return {
         "data": [_enrich(d) for d in deals],
         "total": total,
-        "page": page,
-        "per_page": per_page,
+        "page": skip // limit + 1 if limit else 1,
+        "per_page": limit,
     }
 
 
 # ── Create Deal ────────────────────────────────────────────────────────────
 
-@router.post("", response_model=DealOut, status_code=201)
+@router.post("", status_code=201)
 def create_deal(
     data: DealCreate,
     db: Session = Depends(get_db),
@@ -165,18 +129,6 @@ def create_deal(
     db.add(deal)
     db.commit()
     db.refresh(deal)
-    
-    # Audit: deal created
-    audit_service.log_action_sync(
-        db=db,
-        action="deal.create",
-        entity_type="deal",
-        entity_id=str(deal.id),
-        new_values=_capture_deal_snapshot(deal),
-        user_id=str(current_user.id),
-    )
-    db.commit()
-    
     # Reload with company relationship
     deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
     return _enrich(deal)
@@ -184,7 +136,7 @@ def create_deal(
 
 # ── Get Deal ───────────────────────────────────────────────────────────────
 
-@router.get("/{deal_id}", response_model=DealOut)
+@router.get("/{deal_id}")
 def get_deal(
     deal_id: UUID,
     db: Session = Depends(get_db),
@@ -203,7 +155,7 @@ def get_deal(
 
 # ── Update Deal ────────────────────────────────────────────────────────────
 
-@router.patch("/{deal_id}", response_model=DealOut)
+@router.patch("/{deal_id}")
 def update_deal(
     deal_id: UUID,
     data: DealUpdate,
@@ -214,26 +166,9 @@ def update_deal(
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    old_snapshot = _capture_deal_snapshot(deal)
-
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(deal, key, value)
     deal.updated_at = utcnow()
-    
-    new_snapshot = _capture_deal_snapshot(deal)
-    changes = _compute_changes(old_snapshot, new_snapshot)
-    
-    if changes:
-        audit_service.log_action_sync(
-            db=db,
-            action="deal.update",
-            entity_type="deal",
-            entity_id=str(deal.id),
-            old_values={k: v["old"] for k, v in changes.items()},
-            new_values={k: v["new"] for k, v in changes.items()},
-            user_id=str(current_user.id),
-        )
-    
     db.commit()
     db.refresh(deal)
     deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
@@ -242,7 +177,7 @@ def update_deal(
 
 # ── Move Stage ─────────────────────────────────────────────────────────────
 
-@router.patch("/{deal_id}/stage", response_model=DealOut)
+@router.patch("/{deal_id}/stage")
 def move_deal_stage(
     deal_id: UUID,
     data: StageUpdate,
@@ -252,22 +187,8 @@ def move_deal_stage(
     deal = db.query(Deal).filter(Deal.id == deal_id, Deal.deleted_at.is_(None)).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
-    
-    old_stage = deal.stage
     deal.stage = data.stage
     deal.updated_at = utcnow()
-    
-    # Audit: stage change (important pipeline event)
-    audit_service.log_action_sync(
-        db=db,
-        action="deal.stage_change",
-        entity_type="deal",
-        entity_id=str(deal.id),
-        old_values={"stage": old_stage},
-        new_values={"stage": data.stage},
-        user_id=str(current_user.id),
-    )
-    
     db.commit()
     db.refresh(deal)
     deal = db.query(Deal).options(joinedload(Deal.company)).filter(Deal.id == deal.id).first()
@@ -281,23 +202,9 @@ def delete_deal(
     deal_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_not_restricted),
 ):
     deal = db.query(Deal).filter(Deal.id == deal_id, Deal.deleted_at.is_(None)).first()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
-    
-    old_snapshot = _capture_deal_snapshot(deal)
     deal.deleted_at = utcnow()
-    
-    # Audit: deal deleted
-    audit_service.log_action_sync(
-        db=db,
-        action="deal.delete",
-        entity_type="deal",
-        entity_id=str(deal.id),
-        old_values=old_snapshot,
-        user_id=str(current_user.id),
-    )
-    
     db.commit()

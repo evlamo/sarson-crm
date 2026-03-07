@@ -1,4 +1,3 @@
-import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -43,7 +42,6 @@ export default function ImportHistoryPage() {
     },
   });
 
-  const isRestricted = useAuth((s) => s.isRestricted);
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/imports/${id}`);
@@ -118,7 +116,7 @@ export default function ImportHistoryPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(job.id); }} style={{ display: isRestricted ? "none" : undefined }}
+                          onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(job.id); }}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

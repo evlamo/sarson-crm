@@ -10,7 +10,7 @@ from uuid import UUID
 from app.database import get_db
 from app.models.user import User
 from app.models.import_job import ImportJob
-from app.auth.dependencies import get_current_user, require_not_restricted
+from app.auth.dependencies import get_current_user
 from app.schemas.import_schema import (
     ImportUploadResponse, ImportStatusResponse,
     ImportExecuteRequest, ImportListResponse,
@@ -23,7 +23,6 @@ from app.services.file_parser import (
     parse_file, validate_file, get_filetype_from_extension, MAX_FILE_SIZE,
 )
 from app.services.import_normalizer import map_headers
-from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/imports", tags=["imports"])
 
@@ -37,7 +36,7 @@ _CHUNK_SIZE = 64 * 1024  # 64KB
 async def upload_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ):
     """Upload a file (CSV/TSV/XLSX/ODS/vCard) for import preview."""
     if not file.filename:
@@ -102,21 +101,6 @@ async def upload_file(
     row_count = len(rows)
 
     job = create_import_record(db, file.filename, file_path, headers, row_count, header_mapping, filetype)
-    
-    # Audit: import uploaded
-    audit_service.log_action_sync(
-        db=db,
-        action="import.upload",
-        entity_type="import",
-        entity_id=str(job.id),
-        new_values={
-            "filename": file.filename,
-            "row_count": row_count,
-            "file_type": filetype,
-        },
-        user_id=str(current_user.id),
-    )
-    db.commit()
 
     return ImportUploadResponse(
         import_id=job.id,
@@ -157,7 +141,7 @@ def get_import_status(
 def execute_import_job(
     import_id: UUID,
     body: ImportExecuteRequest = None,
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Execute a pending import."""
@@ -179,40 +163,8 @@ def execute_import_job(
         except ValueError as e:
             raise HTTPException(422, str(e))
 
-    # Audit: import execution started
-    audit_service.log_action_sync(
-        db=db,
-        action="import.execute_start",
-        entity_type="import",
-        entity_id=str(job.id),
-        new_values={
-            "filename": job.filename,
-            "total_rows": job.total_rows,
-            "has_overrides": overrides is not None,
-        },
-        user_id=str(current_user.id),
-    )
-    db.commit()
-
     execute_import(db, job, overrides)
     db.refresh(job)
-    
-    # Audit: import execution completed
-    audit_service.log_action_sync(
-        db=db,
-        action="import.execute_complete",
-        entity_type="import",
-        entity_id=str(job.id),
-        new_values={
-            "status": job.status,
-            "created": job.imported_count or 0,
-            "updated": job.updated_count or 0,
-            "skipped": job.skipped_count or 0,
-            "error_count": job.error_count or 0,
-        },
-        user_id=str(current_user.id),
-    )
-    db.commit()
 
     return ImportStatusResponse(
         id=job.id,
@@ -234,8 +186,7 @@ def execute_import_job(
 def delete_import_job(
     import_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    _: User = Depends(require_not_restricted),
+    _: User = Depends(get_current_user),
 ):
     """Issue #18: Delete a staged import job and its uploaded file."""
     job = db.query(ImportJob).filter(ImportJob.id == import_id).first()
@@ -243,20 +194,6 @@ def delete_import_job(
         raise HTTPException(404, "Import not found")
     if job.status == "processing":
         raise HTTPException(400, "Cannot delete an import that is currently processing")
-
-    # Audit: import deleted
-    audit_service.log_action_sync(
-        db=db,
-        action="import.delete",
-        entity_type="import",
-        entity_id=str(job.id),
-        old_values={
-            "filename": job.filename,
-            "status": job.status,
-            "total_rows": job.total_rows,
-        },
-        user_id=str(current_user.id),
-    )
 
     # Delete the uploaded file
     file_path = job.column_map.get("file_path", "") if job.column_map else ""

@@ -1,4 +1,3 @@
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -6,6 +5,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
+from app.middleware.csrf import CSRFMiddleware
 from app.auth.router import router as auth_router, users_router
 from app.routers.contacts import router as contacts_router
 from app.routers.companies import router as companies_router
@@ -22,67 +22,24 @@ from app.routers.invites import router as invites_router
 from app.routers.campaign_lists import router as campaign_lists_router
 from app.routers.google_ads import router as google_ads_router
 from app.routers.api_controls import router as api_controls_router
-# Phase 2: Campaign Hierarchy + DNC
-from app.routers.sales_campaigns import router as sales_campaigns_router
-from app.routers.email_campaigns_hierarchy import router as email_campaigns_hierarchy_router
-from app.routers.dnc import router as dnc_router
-# Phase 4: Audit Trail
-from app.routers.audit import router as audit_router
-# Phase 5: Google Sheets Sync
-from app.routers.sheets import router as sheets_router
-# Phase 6: Changelog
-from app.routers.changelog import router as changelog_router
 from app.models import google_ads as _google_ads_models  # noqa
 from app.models import api_credentials as _api_credentials_models  # noqa
 
-import logging
-logger = logging.getLogger(__name__)
-
 limiter = Limiter(key_func=get_remote_address)
-
-# Scheduler for background tasks
-scheduler = None
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan - startup and shutdown."""
-    global scheduler
-    # Startup
-    try:
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from app.tasks.db_snapshot import schedule_snapshot_job
-        
-        scheduler = AsyncIOScheduler()
-        schedule_snapshot_job(scheduler)
-        scheduler.start()
-        logger.info("APScheduler started with snapshot job")
-    except ImportError:
-        logger.warning("APScheduler not installed - snapshot job disabled")
-    except Exception as e:
-        logger.error(f"Failed to start scheduler: {e}")
-    
-    yield
-    
-    # Shutdown
-    if scheduler:
-        scheduler.shutdown()
-        logger.info("APScheduler shutdown")
-
 
 app = FastAPI(
     title="Speranza CRM",
-    description="Investment firm CRM - replaces Salesforce + Mailchimp",
+    description="Investment firm CRM — replaces Salesforce + Mailchimp",
     version="1.0.0",
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
-    lifespan=lifespan,
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-# -- Security Headers Middleware --------------------------------------------
+# ── Security Headers Middleware ────────────────────────────────────────────
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
@@ -93,6 +50,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFMiddleware)
 
 _origins = [settings.frontend_url]
 if settings.environment == "development":
@@ -123,16 +81,6 @@ app.include_router(invites_router, prefix="/api/v1")
 app.include_router(campaign_lists_router)
 app.include_router(google_ads_router)
 app.include_router(api_controls_router)
-# Phase 2: Campaign Hierarchy + DNC
-app.include_router(sales_campaigns_router)
-app.include_router(email_campaigns_hierarchy_router)
-app.include_router(dnc_router)
-# Phase 4: Audit Trail
-app.include_router(audit_router)
-# Phase 5: Google Sheets Sync
-app.include_router(sheets_router)
-# Phase 6: Changelog
-app.include_router(changelog_router)
 
 @app.get("/health")
 def health():

@@ -44,7 +44,3 @@ class TagResponse(TagBase):
 
     class Config:
         from_attributes = True
-
-
-class TagWithCountResponse(TagResponse):
-    contact_count: int = 0

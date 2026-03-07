@@ -5,54 +5,20 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
 
-
 class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=True)  # Nullable for Google-only users
+    hashed_password = Column(String, nullable=False)
     role = Column(String, default="member")  # admin | member
     avatar_url = Column(String)
     is_active = Column(Boolean, default=True)
-    is_restricted = Column(Boolean, default=False)  # True for outside-org invited users (no delete perms)
     last_login = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    # ========== OAUTH FIELDS (Phase 7) ==========
-    google_id = Column(String(255), unique=True, nullable=True, index=True)
-    auth_provider = Column(String(50), default="local", nullable=False)
-    # auth_provider values: "local" (email/password), "google" (Google only), "both" (linked)
-
-    # ========== RBAC PERMISSIONS (Phase 1 Foundation) ==========
-    can_manage_users = Column(Boolean, default=False)        # Create/edit/deactivate users
-    can_manage_campaigns = Column(Boolean, default=False)    # Create/edit/delete campaigns
-    can_approve_imports = Column(Boolean, default=False)     # Review and approve sheet imports
-    can_revert_db = Column(Boolean, default=False)           # Restore from snapshots
-    can_manage_integrations = Column(Boolean, default=False) # Configure Mailchimp, Sheets, etc.
-
     # Relationships
     owned_contacts = relationship("Contact", back_populates="owner", foreign_keys="Contact.owner_id")
     activities = relationship("Activity", back_populates="performed_by_user", foreign_keys="Activity.performed_by")
-
-    @property
-    def is_admin(self) -> bool:
-        return self.role == "admin"
-    
-    @property
-    def can_use_password(self) -> bool:
-        """Check if user can log in with password (local or both provider)."""
-        return self.auth_provider in ("local", "both") and self.hashed_password is not None
-    
-    @property
-    def can_use_google(self) -> bool:
-        """Check if user can log in with Google (google or both provider)."""
-        return self.auth_provider in ("google", "both") and self.google_id is not None
-    
-    def has_permission(self, permission: str) -> bool:
-        """Check if user has a specific permission."""
-        if self.is_admin:
-            return True
-        return getattr(self, permission, False)

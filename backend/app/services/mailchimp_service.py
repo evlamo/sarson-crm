@@ -571,12 +571,8 @@ async def create_or_update_static_segment(
     return data["id"]
 
 
-def filter_eligible_contacts(db: Session, contact_ids: List, sales_campaign_id: str = None) -> List[dict]:
-    """
-    Filter out contacts without email, unsubscribed, bounced, or on master DNC.
-    If sales_campaign_id is provided, also excludes contacts with completed/no status in that campaign.
-    Returns list of dicts.
-    """
+def filter_eligible_contacts(db: Session, contact_ids: List) -> List[dict]:
+    """Filter out contacts without email, unsubscribed, or bounced. Returns list of dicts."""
     contacts = db.query(Contact).filter(
         Contact.id.in_(contact_ids),
         Contact.deleted_at.is_(None),
@@ -584,19 +580,7 @@ def filter_eligible_contacts(db: Session, contact_ids: List, sales_campaign_id: 
         Contact.email != "",
         Contact.email_unsubscribed.isnot(True),
         Contact.email_bounced.isnot(True),
-        Contact.master_dnc.isnot(True),  # Exclude master DNC contacts
     ).all()
-    
-    # If sales_campaign_id provided, filter out contacts with done statuses
-    if sales_campaign_id:
-        from app.models.sales_campaign import CampaignContact
-        done_contact_ids = set(
-            row[0] for row in db.query(CampaignContact.contact_id).filter(
-                CampaignContact.sales_campaign_id == sales_campaign_id,
-                CampaignContact.status.in_(["completed", "no"])
-            ).all()
-        )
-        contacts = [c for c in contacts if c.id not in done_contact_ids]
     return [
         {
             "id": str(c.id),

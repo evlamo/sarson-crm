@@ -4,42 +4,42 @@ from sqlalchemy import func
 from typing import List, Optional
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, require_not_restricted
+from app.auth.dependencies import get_current_user
 from app.models.tag import Tag
 from app.models.contact import Contact
 from app.models.tag import ContactTag
-from app.schemas.tag import TagCreate, TagUpdate, TagResponse, TagWithCountResponse
+from app.schemas.tag import TagCreate, TagUpdate, TagResponse
 from app.models.user import User
-from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1", tags=["tags"])
 
 
-@router.get("/tags", response_model=list[TagWithCountResponse])
+@router.get("/tags")
 def list_tags(
     with_counts: Optional[bool] = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """List all tags, optionally with contact counts."""
-    results = (
-        db.query(Tag, func.count(ContactTag.c.contact_id).label("contact_count"))
-        .outerjoin(ContactTag, Tag.id == ContactTag.c.tag_id)
-        .group_by(Tag.id)
-        .order_by(Tag.name)
-        .all()
-    )
-    return [
-        TagWithCountResponse(
-            id=tag.id,
-            name=tag.name,
-            color=tag.color,
-            category=getattr(tag, "category", None),
-            created_at=tag.created_at,
-            contact_count=count if with_counts else 0,
+    if with_counts:
+        results = (
+            db.query(Tag, func.count(ContactTag.c.contact_id).label("contact_count"))
+            .outerjoin(ContactTag, Tag.id == ContactTag.c.tag_id)
+            .group_by(Tag.id)
+            .order_by(Tag.name)
+            .all()
         )
-        for tag, count in results
-    ]
+        return [
+            {
+                "id": str(tag.id),
+                "name": tag.name,
+                "color": tag.color,
+                "category": getattr(tag, "category", None),
+                "contact_count": count,
+            }
+            for tag, count in results
+        ]
+    return db.query(Tag).order_by(Tag.name).all()
 
 
 @router.post("/tags", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
@@ -57,18 +57,6 @@ def create_tag(
     db.add(tag)
     db.commit()
     db.refresh(tag)
-    
-    # Audit: tag created
-    audit_service.log_action_sync(
-        db=db,
-        action="tag.create",
-        entity_type="tag",
-        entity_id=str(tag.id),
-        new_values={"name": tag.name, "color": tag.color},
-        user_id=str(current_user.id),
-    )
-    db.commit()
-    
     return tag
 
 
@@ -83,29 +71,10 @@ def update_tag(
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
-    
-    old_values = {"name": tag.name, "color": tag.color}
-    
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(tag, key, value)
     db.commit()
     db.refresh(tag)
-    
-    new_values = {"name": tag.name, "color": tag.color}
-    changes = {k: v for k, v in new_values.items() if old_values.get(k) != v}
-    
-    if changes:
-        audit_service.log_action_sync(
-            db=db,
-            action="tag.update",
-            entity_type="tag",
-            entity_id=str(tag.id),
-            old_values={k: old_values[k] for k in changes},
-            new_values=changes,
-            user_id=str(current_user.id),
-        )
-        db.commit()
-    
     return tag
 
 
@@ -114,23 +83,11 @@ def delete_tag(
     tag_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_not_restricted),
 ):
     """Delete a tag (cascade removes from all contacts)."""
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
-    
-    # Audit: tag deleted
-    audit_service.log_action_sync(
-        db=db,
-        action="tag.delete",
-        entity_type="tag",
-        entity_id=str(tag.id),
-        old_values={"name": tag.name, "color": tag.color},
-        user_id=str(current_user.id),
-    )
-    
     db.delete(tag)
     db.commit()
 
@@ -154,37 +111,14 @@ def add_tag_to_contact(
 
     # Get or create tag
     tag = db.query(Tag).filter(Tag.name == payload.name).first()
-    created_new_tag = False
     if not tag:
         tag = Tag(**payload.model_dump())
         db.add(tag)
         db.flush()
-        created_new_tag = True
-        
-        # Audit: tag created
-        audit_service.log_action_sync(
-            db=db,
-            action="tag.create",
-            entity_type="tag",
-            entity_id=str(tag.id),
-            new_values={"name": tag.name, "color": tag.color},
-            user_id=str(current_user.id),
-        )
 
     # Check not already attached
     if tag not in contact.tags:
         contact.tags.append(tag)
-        
-        # Audit: tag added to contact
-        audit_service.log_action_sync(
-            db=db,
-            action="contact.add_tag",
-            entity_type="contact",
-            entity_id=str(contact.id),
-            new_values={"tag_id": str(tag.id), "tag_name": tag.name},
-            user_id=str(current_user.id),
-        )
-        
         db.commit()
 
     db.refresh(tag)
@@ -212,17 +146,6 @@ def add_tag_to_contact_by_id(
 
     if tag not in contact.tags:
         contact.tags.append(tag)
-        
-        # Audit: tag added to contact
-        audit_service.log_action_sync(
-            db=db,
-            action="contact.add_tag",
-            entity_type="contact",
-            entity_id=str(contact.id),
-            new_values={"tag_id": str(tag.id), "tag_name": tag.name},
-            user_id=str(current_user.id),
-        )
-        
         db.commit()
 
     db.refresh(tag)
@@ -235,7 +158,6 @@ def remove_tag_from_contact(
     tag_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_not_restricted),
 ):
     """Remove a tag from a contact."""
     contact = db.query(Contact).filter(
@@ -251,15 +173,4 @@ def remove_tag_from_contact(
 
     if tag in contact.tags:
         contact.tags.remove(tag)
-        
-        # Audit: tag removed from contact
-        audit_service.log_action_sync(
-            db=db,
-            action="contact.remove_tag",
-            entity_type="contact",
-            entity_id=str(contact.id),
-            old_values={"tag_id": str(tag.id), "tag_name": tag.name},
-            user_id=str(current_user.id),
-        )
-        
         db.commit()

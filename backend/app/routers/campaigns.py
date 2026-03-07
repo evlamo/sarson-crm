@@ -6,11 +6,12 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth.dependencies import get_current_user, require_not_restricted, get_admin_user
+from app.auth.dependencies import get_current_user, get_admin_user
 from app.models.user import User
 from app.models.campaign import EmailCampaign, EmailSend
 from app.models.segment import Segment
@@ -29,7 +30,6 @@ from app.schemas.campaign import (
 )
 from app.services.campaign_service import get_campaign_stats
 from app.tasks.send_campaign import send_campaign_task, cancel_campaign_task
-from app.services import audit_service
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 
@@ -39,25 +39,11 @@ from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
 
 
-def _capture_campaign_snapshot(campaign: EmailCampaign) -> dict:
-    """Capture current values for audit comparison."""
-    return {
-        "name": campaign.name,
-        "subject": campaign.subject,
-        "status": campaign.status,
-        "from_name": campaign.from_name,
-        "from_email": campaign.from_email,
-        "segment_id": str(campaign.segment_id) if campaign.segment_id else None,
-        "sales_campaign_id": str(campaign.sales_campaign_id) if campaign.sales_campaign_id else None,
-    }
-
-
 # ── List Campaigns ─────────────────────────────────────────────────────────
 
 @router.get("", response_model=CampaignListOut)
 def list_campaigns(
     status: Optional[str] = None,
-    sales_campaign_id: Optional[UUID] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -66,8 +52,6 @@ def list_campaigns(
     query = db.query(EmailCampaign)
     if status:
         query = query.filter(EmailCampaign.status == status)
-    if sales_campaign_id:
-        query = query.filter(EmailCampaign.sales_campaign_id == sales_campaign_id)
 
     total = query.count()
     items = (
@@ -93,13 +77,6 @@ def create_campaign(
         if not segment:
             raise HTTPException(status_code=404, detail="Segment not found")
 
-    # Validate sales campaign exists if provided
-    if data.sales_campaign_id:
-        from app.models.sales_campaign import SalesCampaign
-        sales_campaign = db.query(SalesCampaign).filter(SalesCampaign.id == data.sales_campaign_id).first()
-        if not sales_campaign:
-            raise HTTPException(status_code=404, detail="Sales campaign not found")
-
     campaign = EmailCampaign(
         name=data.name,
         subject=data.subject,
@@ -108,7 +85,6 @@ def create_campaign(
         body_text=data.body_text,
         template_id=data.template_id,
         segment_id=data.segment_id,
-        sales_campaign_id=data.sales_campaign_id,
         from_name=data.from_name,
         from_email=data.from_email,
         reply_to=data.reply_to,
@@ -118,18 +94,6 @@ def create_campaign(
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
-    
-    # Audit: campaign created
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.create",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        new_values=_capture_campaign_snapshot(campaign),
-        user_id=str(current_user.id),
-    )
-    db.commit()
-    
     return campaign
 
 
@@ -162,28 +126,11 @@ def update_campaign(
     if campaign.status != "draft":
         raise HTTPException(status_code=400, detail="Can only edit draft campaigns")
 
-    old_snapshot = _capture_campaign_snapshot(campaign)
-
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(campaign, key, value)
 
     campaign.updated_at = datetime.now(timezone.utc)
-    
-    new_snapshot = _capture_campaign_snapshot(campaign)
-    changes = {k: v for k, v in new_snapshot.items() if old_snapshot.get(k) != v}
-    
-    if changes:
-        audit_service.log_action_sync(
-            db=db,
-            action="campaign.update",
-            entity_type="campaign",
-            entity_id=str(campaign.id),
-            old_values={k: old_snapshot[k] for k in changes},
-            new_values=changes,
-            user_id=str(current_user.id),
-        )
-    
     db.commit()
     db.refresh(campaign)
     return campaign
@@ -196,7 +143,6 @@ def delete_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _: User = Depends(require_not_restricted),
 ):
     campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
     if not campaign:
@@ -204,25 +150,20 @@ def delete_campaign(
     if campaign.status != "draft":
         raise HTTPException(status_code=400, detail="Can only delete draft campaigns")
 
-    # Audit: campaign deleted
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.delete",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        old_values=_capture_campaign_snapshot(campaign),
-        user_id=str(current_user.id),
-    )
-
     db.delete(campaign)
     db.commit()
 
 
 # ── Send Campaign ──────────────────────────────────────────────────────────
 
+class SendCampaignRequest(BaseModel):
+    """Request body for sending a campaign with optional idempotency key."""
+    idempotency_key: Optional[str] = None
+
 @router.post("/{campaign_id}/send")
 def send_campaign(
     campaign_id: UUID,
+    body: Optional[SendCampaignRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
@@ -237,18 +178,22 @@ def send_campaign(
     if not campaign.segment_id:
         raise HTTPException(status_code=400, detail="Campaign must have a segment assigned")
 
-    old_status = campaign.status
-    
-    # Audit: campaign send initiated
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.send",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        old_values={"status": old_status},
-        new_values={"status": "sending"},
-        user_id=str(current_user.id),
-    )
+    # Handle idempotency key for preventing duplicate sends
+    idempotency_key = body.idempotency_key if body else None
+    if idempotency_key:
+        # Check if this campaign was already sent with this idempotency key
+        existing = db.query(EmailCampaign).filter(
+            EmailCampaign.idempotency_key == idempotency_key,
+            EmailCampaign.id != campaign_id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Campaign with idempotency_key '{idempotency_key}' was already sent"
+            )
+        campaign.idempotency_key = idempotency_key
+
+    campaign.status = "sending"
     db.commit()
 
     # Queue the Celery task
@@ -258,6 +203,7 @@ def send_campaign(
         "message": "Campaign queued for sending",
         "campaign_id": str(campaign.id),
         "task_id": task.id,
+        "idempotency_key": idempotency_key,
     }
 
 
@@ -278,21 +224,8 @@ def schedule_campaign(
     if data.scheduled_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
 
-    old_status = campaign.status
     campaign.scheduled_at = data.scheduled_at
     campaign.status = "scheduled"
-    
-    # Audit: campaign scheduled
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.schedule",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        old_values={"status": old_status, "scheduled_at": None},
-        new_values={"status": "scheduled", "scheduled_at": data.scheduled_at.isoformat()},
-        user_id=str(current_user.id),
-    )
-    
     db.commit()
 
     # Schedule Celery task with ETA
@@ -324,20 +257,6 @@ def cancel_campaign(
             status_code=400,
             detail=f"Cannot cancel campaign with status '{campaign.status}'",
         )
-
-    old_status = campaign.status
-    
-    # Audit: campaign cancelled
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.cancel",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        old_values={"status": old_status},
-        new_values={"status": "cancelled"},
-        user_id=str(current_user.id),
-    )
-    db.commit()
 
     cancel_campaign_task.delay(str(campaign.id))
     return {"message": "Campaign cancellation requested", "campaign_id": str(campaign.id)}
@@ -412,21 +331,6 @@ def duplicate_campaign(
     db.add(clone)
     db.commit()
     db.refresh(clone)
-    
-    # Audit: campaign duplicated
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.duplicate",
-        entity_type="campaign",
-        entity_id=str(clone.id),
-        new_values={
-            "name": clone.name,
-            "cloned_from": str(original.id),
-        },
-        user_id=str(current_user.id),
-    )
-    db.commit()
-    
     return clone
 
 
@@ -507,11 +411,10 @@ async def sync_to_mailchimp(
     if not contact_ids:
         raise HTTPException(status_code=400, detail="No contacts specified. Provide contact_ids, segment_id, tag_ids, or campaign_list_ids.")
 
-    # Filter out unsubscribed/bounced/master_dnc and (if linked to sales campaign) done contacts
-    sales_campaign_id_str = str(campaign.sales_campaign_id) if campaign.sales_campaign_id else None
-    eligible = mailchimp_service.filter_eligible_contacts(db, list(contact_ids), sales_campaign_id_str)
+    # Filter out unsubscribed/bounced
+    eligible = mailchimp_service.filter_eligible_contacts(db, list(contact_ids))
     if not eligible:
-        raise HTTPException(status_code=400, detail="No eligible contacts after filtering unsubscribed/bounced/DNC.")
+        raise HTTPException(status_code=400, detail="No eligible contacts after filtering unsubscribed/bounced.")
 
     # Step 1: Get the ONE main audience
     audience_id = await mailchimp_service.get_main_audience_id()
@@ -581,21 +484,6 @@ async def sync_to_mailchimp(
         campaign.mc_segment_id_combined = mc_segment_id
     if data.campaign_list_ids:
         campaign.segment_ids = data.campaign_list_ids
-    
-    # Audit: Mailchimp sync
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.mailchimp_sync",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        new_values={
-            "mailchimp_campaign_id": mc_campaign_id,
-            "synced_count": result["added"] + result["updated"],
-            "recipient_count": len(eligible),
-        },
-        user_id=str(current_user.id),
-    )
-    
     db.commit()
 
     return {
@@ -642,18 +530,6 @@ async def send_test_email_endpoint(
         test_emails=data.test_emails,
         send_type=data.send_type or "html",
     )
-    
-    # Audit: test email sent
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.send_test",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        new_values={"test_emails": data.test_emails},
-        user_id=str(current_user.id),
-    )
-    db.commit()
-    
     return {"sent": True, "test_emails": data.test_emails}
 
 
@@ -671,24 +547,10 @@ async def send_via_mailchimp(
     if not campaign.mailchimp_campaign_id:
         raise HTTPException(status_code=400, detail="Campaign has not been synced to Mailchimp yet.")
 
-    old_status = campaign.status
-    
     await mailchimp_service.send_mc_campaign(campaign.mailchimp_campaign_id)
     campaign.mailchimp_status = "sending"
     campaign.status = "sending"
     campaign.sent_at = datetime.now(timezone.utc)
-    
-    # Audit: campaign sent via Mailchimp
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.mailchimp_send",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        old_values={"status": old_status},
-        new_values={"status": "sending", "mailchimp_status": "sending"},
-        user_id=str(current_user.id),
-    )
-    
     db.commit()
 
     return {"sent": True, "mailchimp_campaign_id": campaign.mailchimp_campaign_id}
@@ -708,8 +570,6 @@ async def schedule_via_mailchimp(
     if not campaign or not campaign.mailchimp_campaign_id:
         raise HTTPException(status_code=400, detail="Sync campaign to Mailchimp first.")
 
-    old_status = campaign.status
-    
     await mailchimp_service.schedule_mc_campaign(
         mc_campaign_id=campaign.mailchimp_campaign_id,
         schedule_time=data.schedule_time,
@@ -717,18 +577,6 @@ async def schedule_via_mailchimp(
     campaign.mailchimp_status = "scheduled"
     campaign.scheduled_at = datetime.fromisoformat(data.schedule_time)
     campaign.status = "scheduled"
-    
-    # Audit: campaign scheduled via Mailchimp
-    audit_service.log_action_sync(
-        db=db,
-        action="campaign.mailchimp_schedule",
-        entity_type="campaign",
-        entity_id=str(campaign.id),
-        old_values={"status": old_status},
-        new_values={"status": "scheduled", "scheduled_at": data.schedule_time},
-        user_id=str(current_user.id),
-    )
-    
     db.commit()
     return {"scheduled": True, "schedule_time": data.schedule_time}
 
@@ -747,3 +595,52 @@ async def mailchimp_stats(
 
     stats = await mailchimp_service.get_mc_campaign_stats(campaign.mailchimp_campaign_id)
     return stats
+
+
+@router.delete("/{campaign_id}/contacts/{contact_id}")
+@limiter.limit("30/minute")
+def remove_contact_from_campaign(
+    request: Request,
+    campaign_id: UUID,
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Remove a contact from a campaign."""
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Check if contact is in campaign
+    email_send = db.query(EmailSend).filter(
+        EmailSend.campaign_id == campaign_id,
+        EmailSend.contact_id == contact_id
+    ).first()
+    
+    if not email_send:
+        raise HTTPException(status_code=404, detail="Contact not found in this campaign")
+
+    # Delete the email send record
+    db.delete(email_send)
+    
+    # Update campaign stats if needed
+    if email_send.status != "queued":
+        # Adjust counters based on status
+        if email_send.delivered_at:
+            campaign.delivered_count = max(0, campaign.delivered_count - 1)
+        if email_send.first_opened_at:
+            campaign.unique_opens = max(0, campaign.unique_opens - 1)
+            campaign.open_count = max(0, campaign.open_count - email_send.open_count)
+        if email_send.first_clicked_at:
+            campaign.unique_clicks = max(0, campaign.unique_clicks - 1)
+            campaign.click_count = max(0, campaign.click_count - email_send.click_count)
+        if email_send.bounced_at:
+            campaign.bounce_count = max(0, campaign.bounce_count - 1)
+        if email_send.unsubscribed_at:
+            campaign.unsubscribe_count = max(0, campaign.unsubscribe_count - 1)
+    
+    campaign.sent_count = max(0, campaign.sent_count - 1)
+    campaign.recipient_count = max(0, campaign.recipient_count - 1)
+    
+    db.commit()
+    return {"message": "Contact removed from campaign", "campaign_id": str(campaign_id), "contact_id": str(contact_id)}

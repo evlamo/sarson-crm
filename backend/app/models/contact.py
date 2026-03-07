@@ -3,7 +3,9 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, String, Boolean, Integer, Numeric, DateTime, ForeignKey, Text, ARRAY, Date, event, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 from app.database import Base
+from app.services.encryption_service import encrypt_email, decrypt_email
 
 def _utcnow():
     return datetime.now(timezone.utc)
@@ -11,8 +13,8 @@ def _utcnow():
 class Contact(Base):
     __tablename__ = "contacts"
     __table_args__ = (
-        # Partial unique index on email — allows multiple nulls, but no duplicate non-null emails
-        UniqueConstraint("email", name="uq_contacts_email", deferrable=True),
+        # Partial unique index on encrypted email — allows multiple nulls, but no duplicate non-null emails
+        UniqueConstraint("_email_encrypted", name="uq_contacts_email", deferrable=True),
         # GIN index for full-text search
         Index("ix_contacts_search_vector", "search_vector", postgresql_using="gin"),
     )
@@ -23,7 +25,7 @@ class Contact(Base):
     first_name = Column(String)
     middle_name = Column(Text)
     last_name = Column(String)
-    email = Column(String, index=True)
+    _email_encrypted = Column("email", String, index=True)  # Encrypted email stored in DB
     email_secondary = Column(String)
     phone = Column(String)
     phone_secondary = Column(String)
@@ -69,12 +71,6 @@ class Contact(Base):
     email_unsubscribed = Column(Boolean, default=False)
     unsubscribed_at = Column(DateTime(timezone=True))
 
-    # ========== MASTER DNC (Phase 1 Foundation) ==========
-    master_dnc = Column(Boolean, default=False)  # True = excluded from ALL outbound
-    master_dnc_reason = Column(Text)             # Why they're on the DNC list
-    master_dnc_set_at = Column(DateTime(timezone=True))
-    master_dnc_set_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-
     # Investment-specific
     commitment_amount = Column(Numeric(15, 2))
     commitment_currency = Column(String, default="USD")
@@ -114,7 +110,25 @@ class Contact(Base):
     activities = relationship("Activity", back_populates="contact", cascade="all, delete-orphan")
     deal_contacts = relationship("DealContact", back_populates="contact")
     email_sends = relationship("EmailSend", back_populates="contact")
-    master_dnc_setter = relationship("User", foreign_keys=[master_dnc_set_by])
+
+    @hybrid_property
+    def email(self):
+        """Get decrypted email."""
+        if self._email_encrypted:
+            return decrypt_email(self._email_encrypted)
+        return None
+
+    @email.setter
+    def email(self, value):
+        """Set email (encrypts before storage)."""
+        if value:
+            self._email_encrypted = encrypt_email(value)
+            # Also update email_domain from plaintext value
+            if "@" in value:
+                self.email_domain = value.split("@", 1)[1].lower()
+        else:
+            self._email_encrypted = None
+            self.email_domain = None
 
     @property
     def full_name(self):
@@ -123,11 +137,12 @@ class Contact(Base):
 
 
 def _extract_email_domain(target, value, oldvalue, initiator):
-    """Auto-populate email_domain from email on set."""
+    """Auto-populate email_domain from encrypted email on set."""
+    # Since email setter handles this, this listener is now a fallback for direct DB updates
     if value and "@" in value:
         target.email_domain = value.split("@", 1)[1].lower()
     else:
         target.email_domain = None
 
 
-event.listen(Contact.email, "set", _extract_email_domain)
+event.listen(Contact._email_encrypted, "set", _extract_email_domain)

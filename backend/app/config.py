@@ -10,9 +10,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://agentstevesmith@localhost:5432/crm_dev"
     redis_url: str = "redis://localhost:6379/0"
     secret_key: str = ""
+    encryption_key: str = ""  # Fernet key for encrypting sensitive data
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
+    password_reset_token_expire_hours: int = 24
+    email_verification_token_expire_hours: int = 24
     sendgrid_api_key: str = ""
     sendgrid_webhook_verification_key: str = ""
     from_email: str = "noreply@speranza.local"
@@ -41,12 +44,21 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings():
+    from cryptography.fernet import Fernet
+    
     s = Settings()
     if not s.secret_key:
         if s.environment == "production":
             raise RuntimeError("SECRET_KEY must be set in production")
         s.secret_key = secrets.token_hex(32)
         logger.warning("SECRET_KEY not set — using ephemeral key. All sessions will reset on restart.")
+    
+    if not s.encryption_key:
+        if s.environment == "production":
+            raise RuntimeError("ENCRYPTION_KEY must be set in production")
+        s.encryption_key = Fernet.generate_key().decode()
+        logger.warning("ENCRYPTION_KEY not set — using ephemeral key. Encrypted data will be lost on restart.")
+    
     return s
 
 
