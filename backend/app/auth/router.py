@@ -25,6 +25,7 @@ from app.auth.schemas import (
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.config import settings
 from app.utils.time import utcnow
+from app.services.email_service import get_email_service
 import uuid
 from datetime import timedelta, datetime, timezone
 
@@ -251,12 +252,42 @@ def verify_email(req: VerifyEmailRequest, db: Session = Depends(get_db)):
 # ==================== LOGOUT ENDPOINT ====================
 
 @router.post("/logout")
-def logout(req: LogoutRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def logout(request: Request, req: LogoutRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Logout current user by revoking token."""
-    # Get the token from request context (would need to be extracted from Authorization header)
-    # For now, just add token JTI to blacklist
-    # This is a simplified implementation - in production, extract JTI from Authorization header
-    return {"message": "Logged out successfully"}
+    # Extract token from Authorization header
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    
+    token = auth_header[7:]  # Remove "Bearer " prefix
+    
+    try:
+        payload = decode_token(token)
+        token_jti = payload.get("jti")
+        token_exp = payload.get("exp")
+        
+        if not token_jti:
+            raise HTTPException(status_code=400, detail="Invalid token")
+        
+        # Convert exp timestamp to datetime
+        from datetime import datetime as dt
+        expires_at = dt.fromtimestamp(token_exp, tz=timezone.utc)
+        
+        # Create TokenBlacklist entry
+        blacklist_entry = TokenBlacklist(
+            id=uuid.uuid4(),
+            user_id=current_user.id,
+            token_jti=token_jti,
+            expires_at=expires_at
+        )
+        db.add(blacklist_entry)
+        db.commit()
+        
+        logger.info("User logged out and token blacklisted: %s (JTI: %s)", current_user.email, token_jti)
+        return {"message": "Logged out successfully"}
+    except JWTError as e:
+        logger.warning("Failed to blacklist token for user %s: %s", current_user.email, str(e))
+        raise HTTPException(status_code=400, detail="Invalid token")
 
 # ==================== MFA ENDPOINTS ====================
 
@@ -453,13 +484,25 @@ def update_user(user_id: uuid.UUID, req: UserUpdate, db: Session = Depends(get_d
 # ==================== EMAIL SENDING HELPERS ====================
 
 def send_password_reset_email(email: str, token: str):
-    """Send password reset email. TODO: Implement with SendGrid."""
-    reset_url = f"{settings.frontend_url}/reset-password?token={token}"
-    logger.info(f"Password reset link for {email}: {reset_url}")
-    # TODO: Send email via SendGrid
+    """Send password reset email via SendGrid."""
+    try:
+        email_service = get_email_service()
+        success = email_service.send_password_reset_email(email, token)
+        if success:
+            logger.info("Password reset email sent successfully to %s", email)
+        else:
+            logger.error("Failed to send password reset email to %s", email)
+    except Exception as e:
+        logger.error("Error sending password reset email to %s: %s", email, str(e))
 
 def send_email_verification_email(email: str, token: str):
-    """Send email verification email. TODO: Implement with SendGrid."""
-    verify_url = f"{settings.frontend_url}/verify-email?token={token}"
-    logger.info(f"Email verification link for {email}: {verify_url}")
-    # TODO: Send email via SendGrid
+    """Send email verification email via SendGrid."""
+    try:
+        email_service = get_email_service()
+        success = email_service.send_email_verification_email(email, token)
+        if success:
+            logger.info("Email verification email sent successfully to %s", email)
+        else:
+            logger.error("Failed to send email verification email to %s", email)
+    except Exception as e:
+        logger.error("Error sending email verification email to %s: %s", email, str(e))
