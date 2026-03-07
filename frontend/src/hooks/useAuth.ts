@@ -38,10 +38,15 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    // Clear all auth-related storage
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    set({ user: null, isAuthenticated: false });
-    window.location.href = '/login';
+    
+    // Clear user session state
+    set({ user: null, isAuthenticated: false, isAdmin: false });
+    
+    // Redirect to login with logout message
+    window.location.href = '/login?logged_out=true';
   },
 
   fetchUser: async () => {

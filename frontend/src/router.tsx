@@ -19,6 +19,9 @@ import RegisterPage from '@/pages/RegisterPage';
 import CompaniesPage from '@/pages/CompaniesPage';
 import ListsPage from '@/pages/ListsPage';
 import ApiControlsPage from '@/pages/ApiControlsPage';
+import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
+import ResetPasswordPage from '@/pages/ResetPasswordPage';
+import VerifyEmailPage from '@/pages/VerifyEmailPage';
 
 import { useEffect } from 'react';
 
@@ -55,6 +58,30 @@ const registerRoute = createRoute({
     const token = localStorage.getItem('access_token');
     if (token) throw redirect({ to: '/' });
   },
+});
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forgot-password',
+  component: ForgotPasswordPage,
+});
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/reset-password',
+  component: ResetPasswordPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: (search.token as string) || undefined,
+  }),
+});
+
+const verifyEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/verify-email',
+  component: VerifyEmailPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: (search.token as string) || undefined,
+  }),
 });
 
 // Auth guard
@@ -178,6 +205,9 @@ const apiControlsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   registerRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
+  verifyEmailRoute,
   layoutRoute.addChildren([
     indexRoute,
     contactsRoute,

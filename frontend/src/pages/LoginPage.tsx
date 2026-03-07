@@ -12,8 +12,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [logoutSuccess, setLogoutSuccess] = useState(false);
   const login = useAuth((s) => s.login);
   const navigate = useNavigate();
+
+  // Check for logout message on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('logged_out') === 'true') {
+      setLogoutSuccess(true);
+      // Clean up URL
+      window.history.replaceState({}, document.title, '/login');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +56,11 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {logoutSuccess && (
+              <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
+                You've been logged out successfully. Welcome back!
+              </div>
+            )}
             {error && (
               <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-200">
                 {error}
@@ -63,7 +79,16 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <a
+                  href="/forgot-password"
+                  className="text-xs text-[#253a52] font-medium hover:underline"
+                  onClick={(e) => { e.preventDefault(); navigate({ to: '/forgot-password' }); }}
+                >
+                  Forgot password?
+                </a>
+              </div>
               <Input
                 id="password"
                 type="password"
