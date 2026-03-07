@@ -5,6 +5,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.config import settings
+from app.middleware.csrf import CSRFMiddleware
 from app.auth.router import router as auth_router, users_router
 from app.routers.contacts import router as contacts_router
 from app.routers.companies import router as companies_router
@@ -49,6 +50,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFMiddleware)
 
 _origins = [settings.frontend_url]
 if settings.environment == "development":

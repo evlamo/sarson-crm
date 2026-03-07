@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
@@ -155,9 +156,14 @@ def delete_campaign(
 
 # ── Send Campaign ──────────────────────────────────────────────────────────
 
+class SendCampaignRequest(BaseModel):
+    """Request body for sending a campaign with optional idempotency key."""
+    idempotency_key: Optional[str] = None
+
 @router.post("/{campaign_id}/send")
 def send_campaign(
     campaign_id: UUID,
+    body: Optional[SendCampaignRequest] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user),
 ):
@@ -172,6 +178,24 @@ def send_campaign(
     if not campaign.segment_id:
         raise HTTPException(status_code=400, detail="Campaign must have a segment assigned")
 
+    # Handle idempotency key for preventing duplicate sends
+    idempotency_key = body.idempotency_key if body else None
+    if idempotency_key:
+        # Check if this campaign was already sent with this idempotency key
+        existing = db.query(EmailCampaign).filter(
+            EmailCampaign.idempotency_key == idempotency_key,
+            EmailCampaign.id != campaign_id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Campaign with idempotency_key '{idempotency_key}' was already sent"
+            )
+        campaign.idempotency_key = idempotency_key
+
+    campaign.status = "sending"
+    db.commit()
+
     # Queue the Celery task
     task = send_campaign_task.delay(str(campaign.id))
 
@@ -179,6 +203,7 @@ def send_campaign(
         "message": "Campaign queued for sending",
         "campaign_id": str(campaign.id),
         "task_id": task.id,
+        "idempotency_key": idempotency_key,
     }
 
 

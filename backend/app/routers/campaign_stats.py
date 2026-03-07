@@ -12,10 +12,13 @@ from typing import List, Optional
 import redis
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.config import settings as app_settings
 from app.models.user import User
+from app.models.campaign import EmailCampaign
 
 logger = logging.getLogger(__name__)
 
@@ -178,25 +181,81 @@ async def _fetch_mailchimp_cached(cache_key: str) -> Optional[List[CampaignStat]
     return campaigns
 
 
+def _fetch_campaigns_from_db(db: Session) -> List[CampaignStat]:
+    """Fetch campaign stats from local database."""
+    campaigns = db.query(EmailCampaign).filter(EmailCampaign.status == "sent").all()
+    results = []
+    for c in campaigns:
+        delivered = c.delivered_count or 0
+        recipients = c.recipient_count or 0
+        results.append(CampaignStat(
+            id=str(c.id),
+            name=c.name,
+            send_date=c.sent_at.strftime("%Y-%m-%d") if c.sent_at else None,
+            recipients=recipients,
+            delivered=delivered,
+            opens=c.open_count or 0,
+            clicks=c.click_count or 0,
+            unsubscribes=c.unsubscribe_count or 0,
+            bounces=c.bounce_count or 0,
+            open_rate=round(c.open_count / delivered * 100, 1) if delivered > 0 else 0,
+            click_rate=round(c.click_count / delivered * 100, 1) if delivered > 0 else 0,
+            unsubscribe_rate=round(c.unsubscribe_count / delivered * 100, 2) if delivered > 0 else 0,
+            bounce_rate=round(c.bounce_count / recipients * 100, 2) if recipients > 0 else 0,
+            status=c.status,
+        ))
+    return results
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=CampaignStatsResponse)
-async def get_campaign_stats(current_user: User = Depends(get_current_user)):
+async def get_campaign_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get campaign stats from database (preferred), Mailchimp, or demo."""
+    # Try to get real data from database first
+    try:
+        campaigns = _fetch_campaigns_from_db(db)
+        if campaigns:
+            return CampaignStatsResponse(campaigns=campaigns, source="database")
+    except Exception as exc:
+        logger.error("Failed to fetch campaign stats from database: %s", exc)
+    
+    # Fall back to Mailchimp if configured
     if _mailchimp_configured():
         try:
             campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
             return CampaignStatsResponse(campaigns=campaigns, source="mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign stats from Mailchimp: %s", exc)
+    
+    # Fall back to demo data
     return CampaignStatsResponse(campaigns=DEMO_CAMPAIGNS, source="demo")
 
 
 @router.get("/summary", response_model=CampaignSummary)
-async def get_campaign_summary(current_user: User = Depends(get_current_user)):
+async def get_campaign_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get campaign summary from database (preferred), Mailchimp, or demo."""
+    # Try to get real data from database first
+    try:
+        campaigns = _fetch_campaigns_from_db(db)
+        if campaigns:
+            return _compute_summary(campaigns, "database")
+    except Exception as exc:
+        logger.error("Failed to fetch campaign summary from database: %s", exc)
+    
+    # Fall back to Mailchimp if configured
     if _mailchimp_configured():
         try:
             campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
             return _compute_summary(campaigns, "mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign summary from Mailchimp: %s", exc)
+    
+    # Fall back to demo data
     return _compute_summary(DEMO_CAMPAIGNS, "demo")
