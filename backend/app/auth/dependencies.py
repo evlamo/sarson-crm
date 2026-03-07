@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from jose import JWTError
 from app.database import get_db
 from app.models.user import User
+from app.models.token_blacklist import TokenBlacklist
 from app.auth.security import decode_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -21,6 +22,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         user_id: str = payload.get("sub")
         if not user_id:
             raise credentials_exception
+        
+        # Check if token is blacklisted
+        token_jti = payload.get("jti")
+        if token_jti:
+            blacklisted = db.query(TokenBlacklist).filter(TokenBlacklist.token_jti == token_jti).first()
+            if blacklisted:
+                raise credentials_exception
     except JWTError:
         raise credentials_exception
 

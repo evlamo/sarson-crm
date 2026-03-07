@@ -41,6 +41,7 @@ class EmailCampaign(Base):
     scheduled_at = Column(DateTime(timezone=True))
     sent_at = Column(DateTime(timezone=True))
     sendgrid_batch_id = Column(String)
+    idempotency_key = Column(String, unique=True, nullable=True, index=True)  # For preventing duplicate sends
 
     # Mailchimp integration
     mailchimp_campaign_id = Column(String)

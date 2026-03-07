@@ -72,3 +72,39 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     avatar_url: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        return v
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+class LogoutRequest(BaseModel):
+    pass
+
+class MFASetupResponse(BaseModel):
+    secret: str
+    qr_code_url: str
+    backup_codes: list[str]
+
+class MFAVerifyRequest(BaseModel):
+    code: str
+
+class MFAEnableRequest(BaseModel):
+    code: str
+    password: str

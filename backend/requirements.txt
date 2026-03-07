@@ -39,6 +39,8 @@ pycparser==3.0
 pydantic==2.12.5
 pydantic-settings==2.13.1
 pydantic_core==2.41.5
+pyotp==2.9.0
+qrcode==8.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-http-client==3.3.7

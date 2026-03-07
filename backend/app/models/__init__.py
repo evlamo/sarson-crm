@@ -10,3 +10,7 @@ from app.models.import_job import ImportJob
 from app.models.custom_field import CustomFieldDefinition
 from app.models.static_list import StaticList, StaticListMember
 from app.models.user_invite import UserInvite, InviteStatus
+from app.models.password_reset import PasswordResetToken
+from app.models.email_verification import EmailVerificationToken
+from app.models.token_blacklist import TokenBlacklist
+from app.models.mfa import MFASecret

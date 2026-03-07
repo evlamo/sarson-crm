@@ -570,3 +570,52 @@ async def mailchimp_stats(
 
     stats = await mailchimp_service.get_mc_campaign_stats(campaign.mailchimp_campaign_id)
     return stats
+
+
+@router.delete("/{campaign_id}/contacts/{contact_id}")
+@limiter.limit("30/minute")
+def remove_contact_from_campaign(
+    request: Request,
+    campaign_id: UUID,
+    contact_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    """Remove a contact from a campaign."""
+    campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # Check if contact is in campaign
+    email_send = db.query(EmailSend).filter(
+        EmailSend.campaign_id == campaign_id,
+        EmailSend.contact_id == contact_id
+    ).first()
+    
+    if not email_send:
+        raise HTTPException(status_code=404, detail="Contact not found in this campaign")
+
+    # Delete the email send record
+    db.delete(email_send)
+    
+    # Update campaign stats if needed
+    if email_send.status != "queued":
+        # Adjust counters based on status
+        if email_send.delivered_at:
+            campaign.delivered_count = max(0, campaign.delivered_count - 1)
+        if email_send.first_opened_at:
+            campaign.unique_opens = max(0, campaign.unique_opens - 1)
+            campaign.open_count = max(0, campaign.open_count - email_send.open_count)
+        if email_send.first_clicked_at:
+            campaign.unique_clicks = max(0, campaign.unique_clicks - 1)
+            campaign.click_count = max(0, campaign.click_count - email_send.click_count)
+        if email_send.bounced_at:
+            campaign.bounce_count = max(0, campaign.bounce_count - 1)
+        if email_send.unsubscribed_at:
+            campaign.unsubscribe_count = max(0, campaign.unsubscribe_count - 1)
+    
+    campaign.sent_count = max(0, campaign.sent_count - 1)
+    campaign.recipient_count = max(0, campaign.recipient_count - 1)
+    
+    db.commit()
+    return {"message": "Contact removed from campaign", "campaign_id": str(campaign_id), "contact_id": str(contact_id)}
