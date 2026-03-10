@@ -843,7 +843,7 @@ export default function ContactsPage() {
       {
         accessorKey: 'first_name',
         header: 'First Name',
-        meta: { className: 'min-w-[110px]' },
+        meta: { className: "min-w-[110px]", sticky: "left", order: 1 },
         cell: ({ row }) => (
           <span className="block truncate font-medium text-foreground">{row.original.first_name || '—'}</span>
         ),
@@ -875,7 +875,7 @@ export default function ContactsPage() {
       {
         accessorKey: 'email',
         header: 'Email',
-        meta: { className: 'min-w-[180px]', truncate: true },
+        meta: { className: 'min-w-[180px]', truncate: true, sticky: 'left', order: 2 },
         cell: ({ getValue }) => {
           const val = getValue<string | null>();
           if (!val) return <span className="text-muted-foreground text-sm">—</span>;
@@ -1083,6 +1083,7 @@ export default function ContactsPage() {
                 {hg.headers.map((header) => {
                   const isStatus = header.column.id === 'status';
                   const isSelect = header.column.id === 'select';
+                  const stickyMeta = (header.column.columnDef.meta as { sticky?: string })?.sticky;
                   const metaClass = (header.column.columnDef.meta as { className?: string })?.className || '';
                   return (
                     <TableHead
@@ -1093,6 +1094,9 @@ export default function ContactsPage() {
                         'whitespace-nowrap text-xs font-semibold uppercase tracking-wide text-muted-foreground',
                         isStatus && 'sticky right-0 z-20 bg-muted border-l shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]',
                         isSelect && 'sticky left-0 z-20 bg-muted',
+                        stickyMeta === 'left' && 'sticky left-0 z-20 bg-muted border-r shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]',
+                        stickyMeta === 'left' && header.column.id === 'first_name' && 'left-0',
+                        stickyMeta === 'left' && header.column.id === 'email' && 'left-[110px]',
                       )}
                       onClick={header.column.getToggleSortingHandler()}
                     >
@@ -1141,7 +1145,9 @@ export default function ContactsPage() {
                     const isStatus = cell.column.id === 'status';
                     const isSelect = cell.column.id === 'select';
                     const isInteractive = ['select','status','next_step','sarson_rep','last_contacted_at'].includes(cell.column.id);
+                    const stickyMeta = (cell.column.columnDef.meta as { sticky?: string })?.sticky;
                     const metaClass = (cell.column.columnDef.meta as { className?: string })?.className || '';
+                    const selectedBg = row.getIsSelected() ? 'bg-muted' : 'bg-background';
                     return (
                       <TableCell
                         key={cell.id}
@@ -1150,8 +1156,12 @@ export default function ContactsPage() {
                           'py-3',
                           isStatus && 'sticky right-0 z-10 bg-background border-l shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]',
                           isSelect && 'sticky left-0 z-10 bg-background',
-                          row.getIsSelected() && 'bg-muted',
-                          row.getIsSelected() && (isStatus || isSelect) && 'bg-muted',
+                          stickyMeta === 'left' && 'sticky left-0 z-10 border-r shadow-[4px_0_8px_-2px_rgba(0,0,0,0.04)]',
+                          stickyMeta === 'left' && cell.column.id === 'first_name' && 'left-0',
+                          stickyMeta === 'left' && cell.column.id === 'email' && 'left-[110px]',
+                          stickyMeta === 'left' && selectedBg,
+                          isStatus && row.getIsSelected() && 'bg-muted',
+                          row.getIsSelected() && isSelect && 'bg-muted',
                         )}
                         onClick={isInteractive ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
                       >
