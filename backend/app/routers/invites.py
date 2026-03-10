@@ -86,7 +86,7 @@ def _serialize_invite(invite: UserInvite, include_token: bool = False) -> dict:
 def create_invite(
     body: InviteCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     email_lower = body.email.lower().strip()
 
@@ -140,9 +140,13 @@ def create_invite(
 @router.get("/", response_model=list[InviteListItem])
 def list_invites(
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
-    invites = db.query(UserInvite).order_by(UserInvite.created_at.desc()).all()
+    # Admins see all invites, regular users see only their own
+    query = db.query(UserInvite)
+    if current_user.role != "admin":
+        query = query.filter(UserInvite.invited_by == current_user.id)
+    invites = query.order_by(UserInvite.created_at.desc()).all()
     return [_serialize_invite(inv) for inv in invites]
 
 
@@ -150,15 +154,21 @@ def list_invites(
 def revoke_invite(
     invite_id: uuid.UUID,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_user),
 ):
     invite = db.query(UserInvite).filter(UserInvite.id == invite_id).first()
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
+    
+    # Check ownership or admin status
+    if current_user.role != "admin" and invite.invited_by != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only revoke your own invites")
+    
     if invite.status != InviteStatus.pending:
         raise HTTPException(status_code=400, detail="Only pending invites can be revoked")
     invite.status = InviteStatus.revoked
     db.commit()
+    return {"message": "Invite revoked"}
     return {"message": "Invite revoked"}
 
 

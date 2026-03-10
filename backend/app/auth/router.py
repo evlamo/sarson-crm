@@ -291,6 +291,29 @@ def logout(request: Request, req: LogoutRequest, current_user: User = Depends(ge
 
 # ==================== MFA ENDPOINTS ====================
 
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Change current user's password."""
+    # Verify current password
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Hash new password
+    new_hash = hash_password(payload.new_password)
+    
+    # Update password
+    current_user.password_hash = new_hash
+    db.commit()
+    
+    logger.info("Password changed for user: %s", current_user.email)
+    return {"message": "Password changed successfully"}
+
 @router.post("/mfa/setup", response_model=MFASetupResponse)
 def setup_mfa(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Generate MFA secret and QR code for user."""
