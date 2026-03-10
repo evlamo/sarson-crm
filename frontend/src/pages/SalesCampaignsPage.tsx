@@ -245,7 +245,6 @@ function AddContactsDrawer({
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
-  const [removeModalContact, setRemoveModalContact] = useState<{ id: string; name: string } | null>(null);
 
   // Reset state when drawer opens/closes
   useEffect(() => {
@@ -847,6 +846,8 @@ function StatsTab({ campaignId }: { campaignId: string }) {
 
 export default function SalesCampaignsPage() {
   const queryClient = useQueryClient();
+    const [removeModalOpen, setRemoveModalOpen] = useState(false);
+  const [removeModalContact, setRemoveModalContact] = useState<{ id: string; name: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'contacts' | 'emails' | 'stats'>('contacts');
