@@ -9,7 +9,7 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Authorization = ;
   }
   
   // Add CSRF token for state-changing requests
@@ -26,6 +26,10 @@ api.interceptors.request.use((config) => {
   
   return config;
 });
+
+// Response interceptor — handle 401 + token refresh
+api.interceptors.response.use(
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
@@ -47,7 +51,7 @@ api.interceptors.request.use((config) => {
         const { access_token, refresh_token: newRefresh } = res.data;
         localStorage.setItem('access_token', access_token);
         if (newRefresh) localStorage.setItem('refresh_token', newRefresh);
-        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        originalRequest.headers.Authorization = ;
         return api(originalRequest);
       } catch {
         localStorage.removeItem('access_token');
