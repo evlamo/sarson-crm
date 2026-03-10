@@ -159,7 +159,7 @@ def list_contacts(
     if search:
         search_clean = search.strip()
         # Escape ILIKE wildcards to prevent pattern injection
-        search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
+        search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', '_')
         query = query.filter(
             or_(
                 Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_clean)),
@@ -217,10 +217,10 @@ def list_contacts(
         *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
         *([or_(
             Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
-            Contact.first_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.last_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.email.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.company.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
+            Contact.first_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+            Contact.last_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+            Contact.email.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+            Contact.company.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
         )] if search else []),
     ).scalar()
     contacts = (

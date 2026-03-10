@@ -5,6 +5,8 @@ from app.models.tag import Tag, ContactTag
 from app.models.deal import Deal, Pipeline, DealContact
 from app.models.activity import Activity
 from app.models.campaign import EmailCampaign, EmailSend, EmailTemplate
+from app.models.sales_campaign import SalesCampaign, CampaignContact
+from app.models.campaign_contact_removal import CampaignContactRemoval
 from app.models.segment import Segment
 from app.models.import_job import ImportJob
 from app.models.custom_field import CustomFieldDefinition
