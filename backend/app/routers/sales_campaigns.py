@@ -170,8 +170,10 @@ def _build_campaign_out(campaign: SalesCampaign, db: Session) -> SalesCampaignOu
         CampaignContact.sales_campaign_id == campaign.id
     ).scalar() or 0
     
-    email_count = db.query(func.count(EmailCampaign.id)).filter(
-        EmailCampaign.sales_campaign_id == campaign.id
+    # Count unique email campaigns linked through CampaignContact
+    email_count = db.query(func.count(func.distinct(CampaignContact.email_campaign_id))).filter(
+        CampaignContact.sales_campaign_id == campaign.id,
+        CampaignContact.email_campaign_id.isnot(None)
     ).scalar() or 0
     
     return SalesCampaignOut(
@@ -717,8 +719,9 @@ def get_campaign_stats(
         CampaignContact.status == "excluded"
     ).scalar() or 0
     
-    email_campaigns = db.query(func.count(EmailCampaign.id)).filter(
-        EmailCampaign.sales_campaign_id == campaign_id
+    email_campaigns = db.query(func.count(func.distinct(CampaignContact.email_campaign_id))).filter(
+        CampaignContact.sales_campaign_id == campaign_id,
+        CampaignContact.email_campaign_id.isnot(None)
     ).scalar() or 0
     
     completion_rate = round((completed / total * 100) if total > 0 else 0, 1)
