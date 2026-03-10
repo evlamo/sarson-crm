@@ -35,13 +35,10 @@ def _list_response(sl: StaticList, db: Session) -> StaticListResponse:
     )
 
 
-def _get_list_or_404(list_id: uuid.UUID, db: Session, current_user: User) -> StaticList:
-    sl = db.query(StaticList).filter(
-        StaticList.id == list_id,
-        StaticList.created_by == current_user.id
-    ).first()
+def _get_list_or_404(list_id: uuid.UUID, db: Session) -> StaticList:
+    sl = db.query(StaticList).filter(StaticList.id == list_id).first()
     if not sl:
-        raise HTTPException(status_code=403, detail="List not found or access denied")
+        raise HTTPException(status_code=404, detail="Static list not found")
     return sl
 
 
@@ -50,7 +47,7 @@ def list_static_lists(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    lists = db.query(StaticList).filter(StaticList.created_by == current_user.id).order_by(StaticList.name).all()
+    lists = db.query(StaticList).order_by(StaticList.name).all()
     data = [_list_response(sl, db) for sl in lists]
     return StaticListListResponse(data=data, total=len(data))
 
@@ -61,7 +58,7 @@ def get_static_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return _list_response(_get_list_or_404(list_id, db, current_user), db)
+    return _list_response(_get_list_or_404(list_id, db), db)
 
 
 @router.post("", response_model=StaticListResponse, status_code=status.HTTP_201_CREATED)
@@ -88,7 +85,7 @@ def update_static_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    sl = _get_list_or_404(list_id, db, current_user)
+    sl = _get_list_or_404(list_id, db)
     if payload.name is not None:
         sl.name = payload.name
     if payload.description is not None:
@@ -105,7 +102,7 @@ def delete_static_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    sl = _get_list_or_404(list_id, db, current_user)
+    sl = _get_list_or_404(list_id, db)
     db.delete(sl)
     db.commit()
 
@@ -118,7 +115,7 @@ def get_list_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _get_list_or_404(list_id, db, current_user)
+    _get_list_or_404(list_id, db)
 
     total = db.query(func.count(StaticListMember.c.contact_id)).filter(
         StaticListMember.c.list_id == list_id
@@ -156,7 +153,7 @@ def add_contacts_to_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _get_list_or_404(list_id, db, current_user)
+    _get_list_or_404(list_id, db)
 
     # Get existing members to avoid duplicates
     existing = set(
@@ -188,7 +185,7 @@ def remove_contacts_from_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _get_list_or_404(list_id, db, current_user)
+    _get_list_or_404(list_id, db)
     db.execute(
         delete(StaticListMember).where(
             StaticListMember.c.list_id == list_id,
@@ -207,7 +204,7 @@ def snapshot_segment_to_list(
     current_user: User = Depends(get_current_user),
 ):
     """Snapshot a dynamic segment's current contacts into a static list."""
-    sl = _get_list_or_404(list_id, db, current_user)
+    sl = _get_list_or_404(list_id, db)
     segment = db.query(Segment).filter(Segment.id == segment_id).first()
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
