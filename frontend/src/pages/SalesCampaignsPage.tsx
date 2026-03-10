@@ -771,7 +771,7 @@ function StatsTab({ campaignId }: { campaignId: string }) {
     queryKey: ['sales-campaign-stats', campaignId],
     queryFn: async () => {
       const res = await api.get('/sales-campaigns/' + campaignId + '/stats');
-      return res.data as CampaignStats;
+      return res.data.data as CampaignStats;
     },
   });
 
