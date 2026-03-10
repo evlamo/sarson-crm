@@ -39,7 +39,7 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet';
 import { Plus, Users, Mail, BarChart3, AlertCircle, Loader2, Search, UserPlus, AlertTriangle } from 'lucide-react';
-import { RemoveContactModal } from @/components/RemoveContactModal;
+import { RemoveContactModal } from '@/components/RemoveContactModal';
 
 // TypeScript interfaces
 interface SalesCampaign {
