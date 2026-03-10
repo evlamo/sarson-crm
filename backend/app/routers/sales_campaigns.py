@@ -148,7 +148,7 @@ def _get_campaign_or_404(campaign_id: UUID, db: Session) -> SalesCampaign:
 
 def _is_contact_dnc(contact: Contact) -> bool:
     """Check if contact is on master DNC list."""
-    return contact.master_dnc is True
+    return getattr(contact, "master_dnc", False) is True
 
 
 def _log_audit(db: Session, action: str, entity_type: str, entity_id: str, user_id: str, old_values: Optional[dict] = None, new_values: Optional[dict] = None):
@@ -451,7 +451,7 @@ def list_campaign_contacts(
             status=cc.status,
             completion_status=cc.completion_status,
             excluded_reason=cc.excluded_reason,
-            master_dnc=contact.master_dnc if contact else False,
+            master_dnc=getattr(contact, 'master_dnc', False) if contact else False,
             added_at=cc.added_at,
             updated_at=cc.updated_at,
         ))
@@ -649,7 +649,7 @@ def update_campaign_contact_status(
         status=cc.status,
         completion_status=cc.completion_status,
         excluded_reason=cc.excluded_reason,
-        master_dnc=contact.master_dnc if contact else False,
+        master_dnc=getattr(contact, 'master_dnc', False) if contact else False,
         added_at=cc.added_at,
         updated_at=cc.updated_at,
     )
