@@ -9,6 +9,7 @@ import LoginPage from '@/pages/LoginPage';
 import ContactsPage from '@/pages/ContactsPage';
 import ContactDetailPage from '@/pages/ContactDetailPage';
 import CampaignsPage from '@/pages/CampaignsPage';
+import SalesCampaignsPage from '@/pages/SalesCampaignsPage';
 import ImportPage from '@/pages/ImportPage';
 import TagsPage from '@/pages/TagsPage';
 import ImportHistoryPage from '@/pages/ImportHistoryPage';
@@ -153,6 +154,12 @@ const campaignsRoute = createRoute({
   component: CampaignsPage,
 });
 
+const salesCampaignsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/sales-campaigns',
+  component: SalesCampaignsPage,
+});
+
 const listsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/lists',
@@ -215,6 +222,7 @@ const routeTree = rootRoute.addChildren([
     companiesRoute,
     googleAdsRoute,
     campaignsRoute,
+    salesCampaignsRoute,
     listsRoute,
     importRoute,
     tagsRoute,

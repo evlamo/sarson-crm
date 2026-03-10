@@ -16,6 +16,7 @@ import {
   BarChart3,
   UserPlus,
   KeyRound,
+  TrendingUp,
 } from 'lucide-react';
 
 const navItems = [
@@ -23,6 +24,7 @@ const navItems = [
   { to: '/companies', label: 'Companies', icon: Building2 },
   { to: '/google-ads', label: 'Google Ads', icon: BarChart2 },
   { to: '/campaigns', label: 'Campaigns', icon: Mail },
+  { to: '/sales-campaigns', label: 'Sales Campaigns', icon: TrendingUp },
   { to: '/campaign-stats', label: 'Campaign Stats', icon: BarChart3 },
   { to: '/lists', label: 'Lists', icon: Filter },
   { to: '/tags', label: 'Tags', icon: Tag },
