@@ -5,18 +5,27 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor — attach access token
+// Request interceptor — attach access token + CSRF token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
+  // Add CSRF token for state-changing requests
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(config.method?.toUpperCase() || '')) {
+    const csrfToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('csrf_token='))
+      ?.split('=')[1];
+    
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken;
+    }
+  }
+  
   return config;
 });
-
-// Response interceptor — handle 401 + token refresh
-api.interceptors.response.use(
-  (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
