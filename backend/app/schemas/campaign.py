@@ -42,6 +42,7 @@ class CampaignOut(BaseModel):
     body_text: Optional[str]
     template_id: Optional[UUID]
     segment_id: Optional[UUID]
+    sales_campaign_id: Optional[UUID] = None
     from_name: str
     from_email: str
     reply_to: Optional[str]

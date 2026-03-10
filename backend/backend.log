@@ -1,9 +1,46 @@
 SECRET_KEY not set — using ephemeral key. All sessions will reset on restart.
 ENCRYPTION_KEY not set — using ephemeral key. Encrypted data will be lost on restart.
-INFO:     Started server process [6536]
+INFO:     Started server process [8534]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     192.168.0.45:49158 - "GET /health HTTP/1.1" 200 OK
+INFO:     192.168.0.45:49182 - "GET /health HTTP/1.1" 200 OK
 /Users/agentstevesmith/sarson-crm/backend/app/auth/router.py:44: SAWarning: relationship 'CampaignContactRemoval.sales_campaign' will copy column sales_campaigns.id to column campaign_contact_removal.sales_campaign_id, which conflicts with relationship(s): 'SalesCampaign.campaign_removals' (copies sales_campaigns.id to campaign_contact_removal.sales_campaign_id). If this is not the intention, consider if these relationships should be linked with back_populates, or if viewonly=True should be applied to one or more if they are read-only. For the less common case that foreign key constraints are partially overlapping, the orm.foreign() annotation can be used to isolate the columns that should be written towards.   To silence this warning, add the parameter 'overlaps="campaign_removals"' to the 'CampaignContactRemoval.sales_campaign' relationship. (Background on this warning at: https://sqlalche.me/e/20/qzyx) (This warning originated from the `configure_mappers()` process, which was invoked automatically in response to a user-initiated operation.)
   user = db.query(User).filter(User.email == req.email.lower(), User.is_active == True).first()
-INFO:     192.168.0.45:65024 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49188 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49191 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49193 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49195 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49197 - "GET /api/v1/sales-campaigns/9cc8d8f7-b41d-45de-97cc-b21c8ae0de0c/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49199 - "GET /api/v1/sales-campaigns/f745094c-0e47-41cc-8eb7-aecd6dfd5489/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49201 - "GET /api/v1/sales-campaigns/56baf312-544b-4956-801a-3c34caa9a5d8/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49203 - "GET /api/v1/sales-campaigns/ca51b8c8-d8aa-4104-abc2-60c93609a8a7/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49205 - "GET /api/v1/email-campaigns?sales_campaign_id=56baf312-544b-4956-801a-3c34caa9a5d8&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49207 - "GET /api/v1/email-campaigns?sales_campaign_id=56baf312-544b-4956-801a-3c34caa9a5d8&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49209 - "GET /api/v1/email-campaigns?sales_campaign_id=56baf312-544b-4956-801a-3c34caa9a5d8&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49211 - "GET /api/v1/email-campaigns?sales_campaign_id=56baf312-544b-4956-801a-3c34caa9a5d8&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49213 - "GET /api/v1/email-campaigns?sales_campaign_id=56baf312-544b-4956-801a-3c34caa9a5d8&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49215 - "GET /api/v1/email-campaigns?sales_campaign_id=56baf312-544b-4956-801a-3c34caa9a5d8&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49217 - "GET /api/v1/email-campaigns?sales_campaign_id=8cf54545-aebe-4a95-ae14-d951c6d5e10b&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49220 - "GET /api/v1/email-campaigns?sales_campaign_id=8cf54545-aebe-4a95-ae14-d951c6d5e10b&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49222 - "GET /api/v1/sales-campaigns/8cf54545-aebe-4a95-ae14-d951c6d5e10b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49224 - "GET /api/v1/email-campaigns?sales_campaign_id=8cf54545-aebe-4a95-ae14-d951c6d5e10b&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49226 - "GET /api/v1/email-campaigns?sales_campaign_id=8cf54545-aebe-4a95-ae14-d951c6d5e10b&per_page=50 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49228 - "GET /api/v1/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49236 - "GET /api/v1/campaigns/mailchimp/templates HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49237 - "GET /api/v1/tags HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49232 - "GET /api/v1/templates HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49231 - "GET /api/v1/segments HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49238 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49244 - "GET /api/v1/campaigns/mailchimp/templates HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:49337 - "GET /api/v1/sales-campaigns/9cc8d8f7-b41d-45de-97cc-b21c8ae0de0c/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49335 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49339 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49344 - "GET /api/v1/contacts/6629d52b-dfd1-4317-a34a-3b790830c076 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49346 - "GET /api/v1/contacts/6629d52b-dfd1-4317-a34a-3b790830c076/activities HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49348 - "GET /api/v1/tags HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49350 - "GET /api/v1/companies?page=1&per_page=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49354 - "GET /api/v1/google-ads/conversions?per_page=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49353 - "GET /api/v1/google-ads/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49356 - "GET /api/v1/campaigns HTTP/1.1" 200 OK

@@ -32,6 +32,7 @@ class EmailCampaign(Base):
     body_text = Column(Text)
     template_id = Column(UUID(as_uuid=True), ForeignKey("email_templates.id", ondelete="SET NULL"))
     segment_id = Column(UUID(as_uuid=True), ForeignKey("segments.id", ondelete="SET NULL"))
+    sales_campaign_id = Column(UUID(as_uuid=True), ForeignKey("sales_campaigns.id", ondelete="SET NULL"), nullable=True)
     filter_snapshot = Column(JSONB)
     recipient_count = Column(Integer, default=0)
     from_name = Column(String, nullable=False, default="Speranza CRM")
@@ -71,6 +72,7 @@ class EmailCampaign(Base):
     # Relationships
     sends = relationship("EmailSend", back_populates="campaign", cascade="all, delete-orphan")
     segment = relationship("Segment", foreign_keys=[segment_id])
+    sales_campaign = relationship("SalesCampaign", back_populates="campaigns")
 
 
 class EmailSend(Base):

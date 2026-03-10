@@ -44,6 +44,7 @@ limiter = Limiter(key_func=get_remote_address)
 @router.get("", response_model=CampaignListOut)
 def list_campaigns(
     status: Optional[str] = None,
+    sales_campaign_id: Optional[UUID] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -52,6 +53,8 @@ def list_campaigns(
     query = db.query(EmailCampaign)
     if status:
         query = query.filter(EmailCampaign.status == status)
+    if sales_campaign_id:
+        query = query.filter(EmailCampaign.sales_campaign_id == sales_campaign_id)
 
     total = query.count()
     items = (

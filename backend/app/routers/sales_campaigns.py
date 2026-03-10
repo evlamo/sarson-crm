@@ -806,3 +806,106 @@ def remove_contact_from_campaign(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error removing contact: {str(e)}")
+
+
+# ── Nested Email Campaigns ─────────────────────────────────────────────────
+
+@router.get("/{campaign_id}/campaigns", response_model=dict)
+def list_campaigns_for_sales_campaign(
+    campaign_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100),
+):
+    """List all email campaigns for a specific sales campaign."""
+    # Check that sales campaign exists
+    sales_campaign = db.query(SalesCampaign).filter(SalesCampaign.id == campaign_id).first()
+    if not sales_campaign:
+        raise HTTPException(status_code=404, detail="Sales campaign not found")
+
+    # Check authorization
+    if current_user.role != "admin" and sales_campaign.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this campaign")
+
+    # Query email campaigns filtered by sales_campaign_id
+    total = db.query(EmailCampaign).filter(
+        EmailCampaign.sales_campaign_id == campaign_id
+    ).count()
+    
+    campaigns = db.query(EmailCampaign).filter(
+        EmailCampaign.sales_campaign_id == campaign_id
+    ).order_by(desc(EmailCampaign.created_at)).offset(
+        (page - 1) * per_page
+    ).limit(per_page).all()
+
+    from app.schemas.campaign import CampaignOut
+    campaigns_data = [CampaignOut.model_validate(c) for c in campaigns]
+    
+    return {
+        "data": campaigns_data,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+@router.post("/{campaign_id}/campaigns", response_model=dict, status_code=201)
+def create_campaign_for_sales_campaign(
+    campaign_id: UUID,
+    data: dict,  # Accept flexible payload
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new email campaign within a sales campaign."""
+    # Check that sales campaign exists
+    sales_campaign = db.query(SalesCampaign).filter(SalesCampaign.id == campaign_id).first()
+    if not sales_campaign:
+        raise HTTPException(status_code=404, detail="Sales campaign not found")
+
+    # Check authorization
+    if current_user.role != "admin" and sales_campaign.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to create campaign in this sales campaign")
+
+    # Validate segment if provided
+    if data.get("segment_id"):
+        from app.models.segment import Segment
+        segment = db.query(Segment).filter(Segment.id == data["segment_id"]).first()
+        if not segment:
+            raise HTTPException(status_code=404, detail="Segment not found")
+
+    # Create the email campaign with sales_campaign_id automatically set
+    campaign = EmailCampaign(
+        name=data.get("name"),
+        subject=data.get("subject"),
+        preview_text=data.get("preview_text"),
+        body_html=data.get("body_html"),
+        body_text=data.get("body_text"),
+        template_id=data.get("template_id"),
+        segment_id=data.get("segment_id"),
+        from_name=data.get("from_name", "Sarson Funds"),
+        from_email=data.get("from_email"),
+        reply_to=data.get("reply_to"),
+        status="draft",
+        created_by=current_user.id,
+        sales_campaign_id=campaign_id,  # Set the FK automatically
+    )
+    
+    db.add(campaign)
+    db.commit()
+    db.refresh(campaign)
+    
+    # Log audit trail
+    audit_service.log_action(
+        db,
+        current_user.id,
+        "email_campaign_create",
+        str(campaign.id),
+        new_values={
+            "name": campaign.name,
+            "sales_campaign_id": str(campaign_id),
+        },
+    )
+
+    from app.schemas.campaign import CampaignOut
+    return {"data": CampaignOut.model_validate(campaign)}
