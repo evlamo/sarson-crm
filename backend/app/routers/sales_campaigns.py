@@ -223,7 +223,7 @@ def list_sales_campaigns(
 
 # ── Create Sales Campaign ──────────────────────────────────────────────────
 
-@router.post("", response_model=SalesCampaignOut, status_code=201)
+@router.post("", status_code=201)
 def create_sales_campaign(
     data: SalesCampaignCreate,
     db: Session = Depends(get_db),
@@ -246,12 +246,15 @@ def create_sales_campaign(
                str(current_user.id), new_values={"name": data.name, "status": data.status})
     db.commit()
     
-    return _build_campaign_out(campaign, db)
+    return {
+        "data": _build_campaign_out(campaign, db).model_dump(),
+        "message": "Campaign created"
+    }
 
 
 # ── Get Sales Campaign ─────────────────────────────────────────────────────
 
-@router.get("/{campaign_id}", response_model=SalesCampaignOut)
+@router.get("/{campaign_id}")
 def get_sales_campaign(
     campaign_id: UUID,
     db: Session = Depends(get_db),
@@ -259,12 +262,13 @@ def get_sales_campaign(
 ):
     """Get a single sales campaign with stats."""
     campaign = _get_campaign_or_404(campaign_id, db)
-    return _build_campaign_out(campaign, db)
+    
+    return {"data": _build_campaign_out(campaign, db).model_dump()}
 
 
 # ── Update Sales Campaign ──────────────────────────────────────────────────
 
-@router.put("/{campaign_id}", response_model=SalesCampaignOut)
+@router.put("/{campaign_id}")
 def update_sales_campaign(
     campaign_id: UUID,
     data: SalesCampaignUpdate,
@@ -288,7 +292,11 @@ def update_sales_campaign(
     
     db.commit()
     db.refresh(campaign)
-    return _build_campaign_out(campaign, db)
+    
+    return {
+        "data": _build_campaign_out(campaign, db).model_dump(),
+        "message": "Campaign updated"
+    }
 
 
 # ── Delete (Archive) Sales Campaign ────────────────────────────────────────
@@ -592,7 +600,7 @@ def bulk_add_contacts_to_campaign(
 
 # ── Update Contact Status in Campaign ──────────────────────────────────────
 
-@router.put("/{campaign_id}/contacts/{contact_id}", response_model=CampaignContactOut)
+@router.put("/{campaign_id}/contacts/{contact_id}")
 def update_campaign_contact_status(
     campaign_id: UUID,
     contact_id: UUID,
@@ -640,7 +648,7 @@ def update_campaign_contact_status(
     db.refresh(cc)
     
     contact = cc.contact
-    return CampaignContactOut(
+    contact_out = CampaignContactOut(
         id=cc.id,
         contact_id=cc.contact_id,
         contact_name=contact.full_name if contact else "",
@@ -653,36 +661,13 @@ def update_campaign_contact_status(
         added_at=cc.added_at,
         updated_at=cc.updated_at,
     )
+    return {
+        "data": contact_out.model_dump(),
+        "message": "Contact status updated"
+    }
 
 
 # ── Remove Contact from Campaign ───────────────────────────────────────────
-
-@router.delete("/{campaign_id}/contacts/{contact_id}", status_code=204)
-def remove_contact_from_campaign(
-    campaign_id: UUID,
-    contact_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    _current_user: User = Depends(get_current_user),
-):
-    """Remove a contact from a sales campaign."""
-    _check_campaign_permission(current_user)
-    campaign = _get_campaign_or_404(campaign_id, db)
-    
-    cc = db.query(CampaignContact).filter(
-        CampaignContact.sales_campaign_id == campaign_id,
-        CampaignContact.contact_id == contact_id
-    ).first()
-    
-    if not cc:
-        raise HTTPException(status_code=404, detail="Contact not found in this campaign")
-    
-    _log_audit(db, "sales_campaign.remove_contact", "campaign_contact", str(contact_id),
-               str(current_user.id), old_values={"sales_campaign_id": str(campaign_id)})
-    
-    db.delete(cc)
-    db.commit()
-
 
 # ── Get Campaign Stats ─────────────────────────────────────────────────────
 
@@ -728,16 +713,18 @@ def get_campaign_stats(
     exclusion_rate = round(((excluded + no_count) / total * 100) if total > 0 else 0, 1)
     
     return {
-        "campaign_id": str(campaign_id),
-        "campaign_name": campaign.name,
-        "total_contacts": total,
-        "active_contacts": active,
-        "completed_contacts": completed,
-        "no_contacts": no_count,
-        "excluded_contacts": excluded,
-        "email_campaigns": email_campaigns,
-        "completion_rate": completion_rate,
-        "exclusion_rate": exclusion_rate,
+        "data": {
+            "campaign_id": str(campaign_id),
+            "campaign_name": campaign.name,
+            "total_contacts": total,
+            "active_contacts": active,
+            "completed_contacts": completed,
+            "no_contacts": no_count,
+            "excluded_contacts": excluded,
+            "email_campaigns": email_campaigns,
+            "completion_rate": completion_rate,
+            "exclusion_rate": exclusion_rate,
+        }
     }
 
 
