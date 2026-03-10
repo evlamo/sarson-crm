@@ -23,6 +23,7 @@ from app.schemas.contact import (
     BulkUpdateResponse,
 )
 from app.models.user import User
+from app.models.static_list import StaticList, StaticListMember
 from app.services.company_service import get_or_create_company
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["contacts"])
@@ -135,6 +136,7 @@ def list_contacts(
     assigned_to: Optional[uuid.UUID] = Query(None),
     sarson_rep: Optional[str] = Query(None, max_length=255),
     tag_id: Optional[str] = Query(None, max_length=36),
+    list_id: Optional[uuid.UUID] = Query(None),
     sort: Optional[str] = Query("last_name", max_length=50),
     order: Optional[str] = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
@@ -145,6 +147,15 @@ def list_contacts(
     - search: full-text via tsvector (falls back to ILIKE on name/email)
     - status, contacted, assigned_to, sarson_rep, tag_id filters
     """
+
+    # Authorization check for list_id
+    if list_id:
+        list_obj = db.query(StaticList).filter(
+            StaticList.id == list_id,
+            StaticList.created_by == current_user.id
+        ).first()
+        if not list_obj:
+            raise HTTPException(status_code=403, detail="Unauthorized access to this list")
     query = (
         db.query(Contact)
         .options(joinedload(Contact.tags), joinedload(Contact.company_obj))
@@ -154,6 +165,10 @@ def list_contacts(
     # Filter by tag
     if tag_id:
         query = query.filter(Contact.tags.any(Tag.id == tag_id))
+
+    # Filter by list
+    if list_id:
+        query = query.join(StaticListMember, Contact.id == StaticListMember.c.contact_id).filter(StaticListMember.c.list_id == list_id).distinct()
 
     # Full-text search
     if search:
@@ -207,22 +222,44 @@ def list_contacts(
         # For all other sorts, tiebreak by last_name then first_name
         secondary = Contact.last_name.asc().nullslast()
 
-    # Efficient count — no joins, just filter the base query
-    total = db.query(func.count(Contact.id)).filter(
-        Contact.deleted_at.is_(None),
-        *([Contact.status == status] if status else []),
-        *([Contact.contacted == contacted] if contacted is not None else []),
-        *([Contact.assigned_to == assigned_to] if assigned_to else []),
-        *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
-        *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
-        *([or_(
-            Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
-            Contact.first_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-            Contact.last_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-            Contact.email.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-            Contact.company.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-        )] if search else []),
-    ).scalar()
+    # Efficient count
+    if list_id:
+        # Need join for list filter
+        total = db.query(func.count(Contact.id.distinct())).join(
+            StaticListMember, Contact.id == StaticListMember.c.contact_id
+        ).filter(
+            Contact.deleted_at.is_(None),
+            StaticListMember.c.list_id == list_id,
+            *([Contact.status == status] if status else []),
+            *([Contact.contacted == contacted] if contacted is not None else []),
+            *([Contact.assigned_to == assigned_to] if assigned_to else []),
+            *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
+            *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
+            *([or_(
+                Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
+                Contact.first_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+                Contact.last_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+                Contact.email.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+                Contact.company.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+            )] if search else []),
+        ).scalar()
+    else:
+        # No join needed
+        total = db.query(func.count(Contact.id)).filter(
+            Contact.deleted_at.is_(None),
+            *([Contact.status == status] if status else []),
+            *([Contact.contacted == contacted] if contacted is not None else []),
+            *([Contact.assigned_to == assigned_to] if assigned_to else []),
+            *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
+            *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
+            *([or_(
+                Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
+                Contact.first_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+                Contact.last_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+                Contact.email.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+                Contact.company.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
+            )] if search else []),
+        ).scalar()
     contacts = (
         query.order_by(sort_expr, secondary)
         .offset((page - 1) * per_page)
