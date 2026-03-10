@@ -71,6 +71,25 @@ interface EmailCampaign {
   unique_opens: number;
 }
 
+interface Campaign {
+  id: string;
+  name: string;
+  subject: string;
+  status: string;
+  recipient_count: number;
+  sent_count: number;
+  unique_opens: number;
+  created_at: string;
+  sales_campaign_id: string | null;
+}
+
+interface CampaignsResponse {
+  data: Campaign[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
 interface CampaignStats {
   total_contacts: number;
   active_contacts: number;
@@ -161,7 +180,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function CreateCampaignModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
+function CreateSalesCampaignModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('active');
@@ -212,6 +231,121 @@ function CreateCampaignModal({ open, onClose, onSuccess }: { open: boolean; onCl
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : 'Create'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreateEmailCampaignModal({ 
+  open, 
+  onClose, 
+  onSuccess, 
+  salesCampaignId 
+}: { 
+  open: boolean; 
+  onClose: () => void; 
+  onSuccess: () => void; 
+  salesCampaignId?: string;
+}) {
+  const [name, setName] = useState('');
+  const [subject, setSubject] = useState('');
+  const [fromEmail, setFromEmail] = useState('');
+  const [fromName, setFromName] = useState('');
+  const [error, setError] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const endpoint = salesCampaignId 
+        ? `/sales-campaigns/${salesCampaignId}/campaigns`
+        : '/campaigns';
+      
+      const payload = {
+        name,
+        subject,
+        from_email: fromEmail,
+        from_name: fromName,
+      };
+      
+      const res = await api.post(endpoint, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Campaign created');
+      setName('');
+      setSubject('');
+      setFromEmail('');
+      setFromName('');
+      onSuccess();
+      onClose();
+    },
+    onError: (err: any) => {
+      const message = err.response?.data?.message || 'Failed to create campaign';
+      setError(message);
+      toast.error(message);
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create Email Campaign</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-4">
+          {error && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-2 rounded"><AlertCircle className="h-4 w-4" />{error}</div>}
+          <div className="space-y-2">
+            <Label htmlFor="name">Campaign Name *</Label>
+            <Input 
+              id="name" 
+              value={name} 
+              onChange={(e) => setName(e.target.value)} 
+              placeholder="Spring Newsletter"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="subject">Email Subject *</Label>
+            <Input 
+              id="subject" 
+              value={subject} 
+              onChange={(e) => setSubject(e.target.value)} 
+              placeholder="Spring 2026 Update"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fromName">From Name *</Label>
+            <Input 
+              id="fromName" 
+              value={fromName} 
+              onChange={(e) => setFromName(e.target.value)} 
+              placeholder="Sarson Funds"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fromEmail">From Email *</Label>
+            <Input 
+              id="fromEmail" 
+              value={fromEmail} 
+              onChange={(e) => setFromEmail(e.target.value)} 
+              placeholder="noreply@sarsonfunds.com"
+              type="email"
+              required
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={mutation.isPending || !name || !subject || !fromEmail || !fromName}>
               {mutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -766,6 +900,102 @@ function EmailCampaignsTab({ campaignId }: { campaignId: string }) {
   );
 }
 
+function CampaignsTab({ campaignId }: { campaignId: string }) {
+  const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const { data, isLoading, isFetching } = useQuery<CampaignsResponse>({
+    queryKey: ['sales-campaign-campaigns', campaignId],
+    queryFn: async () => {
+      const res = await api.get(`/sales-campaigns/${campaignId}/campaigns`, { params: { per_page: 50 } });
+      return res.data;
+    },
+  });
+
+  const deleteCampaign = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/campaigns/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales-campaign-campaigns', campaignId] });
+      toast.success('Campaign deleted');
+    },
+    onError: () => toast.error('Failed to delete campaign'),
+  });
+
+  const campaigns: Campaign[] = data?.data || [];
+
+  if (isLoading) {
+    return <LoadingSpinner text="Loading campaigns..." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Action bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {isFetching && !isLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Refreshing...
+            </div>
+          )}
+        </div>
+        <Button onClick={() => setCreateOpen(true)} className="bg-[#253a52] hover:bg-[#253a52]/90">
+          <Plus className="h-4 w-4 mr-2" />
+          New Campaign
+        </Button>
+      </div>
+
+      {campaigns.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Mail className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>No campaigns yet</p>
+          <p className="text-sm mt-1">Click "New Campaign" to create one</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {campaigns.map((campaign) => (
+            <Card key={campaign.id} className="hover:shadow-md transition-all">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex-1">
+                  <h4 className="font-medium">{campaign.name}</h4>
+                  <p className="text-sm text-muted-foreground">{campaign.subject}</p>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                    <span>{campaign.recipient_count} recipient{campaign.recipient_count !== 1 ? 's' : ''}</span>
+                    <span>{campaign.sent_count} sent</span>
+                    <span>{campaign.unique_opens} opens</span>
+                    <span className="text-gray-400">Created {new Date(campaign.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={campaign.status} />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => deleteCampaign.mutate(campaign.id)}
+                    disabled={deleteCampaign.isPending}
+                  >
+                    {deleteCampaign.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <CreateEmailCampaignModal 
+        open={createOpen} 
+        onClose={() => setCreateOpen(false)} 
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['sales-campaign-campaigns', campaignId] })}
+        salesCampaignId={campaignId}
+      />
+    </div>
+  );
+}
+
 function StatsTab({ campaignId }: { campaignId: string }) {
   const { data, isLoading, isFetching } = useQuery<CampaignStats>({
     queryKey: ['sales-campaign-stats', campaignId],
@@ -850,7 +1080,7 @@ export default function SalesCampaignsPage() {
   const [removeModalContact, setRemoveModalContact] = useState<{ id: string; name: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'contacts' | 'emails' | 'stats'>('contacts');
+  const [activeTab, setActiveTab] = useState<'contacts' | 'emails' | 'campaigns' | 'stats'>('contacts');
 
   useEffect(() => { document.title = 'Sales Campaigns - Sarson Funds CRM'; }, []);
 
@@ -933,12 +1163,14 @@ export default function SalesCampaignsPage() {
               </div>
               <div className="flex gap-1 mt-4 border-b">
                 <button className={tabClass('contacts')} onClick={() => setActiveTab('contacts')}><Users className="h-4 w-4 inline mr-1.5" />Contacts</button>
+                <button className={tabClass('campaigns')} onClick={() => setActiveTab('campaigns')}><Mail className="h-4 w-4 inline mr-1.5" />Campaigns</button>
                 <button className={tabClass('emails')} onClick={() => setActiveTab('emails')}><Mail className="h-4 w-4 inline mr-1.5" />Email Campaigns</button>
                 <button className={tabClass('stats')} onClick={() => setActiveTab('stats')}><BarChart3 className="h-4 w-4 inline mr-1.5" />Stats</button>
               </div>
             </div>
             <div className="flex-1 overflow-auto p-4">
               {activeTab === 'contacts' && <ContactsTab campaignId={selectedCampaign.id} />}
+              {activeTab === 'campaigns' && <CampaignsTab campaignId={selectedCampaign.id} />}
               {activeTab === 'emails' && <EmailCampaignsTab campaignId={selectedCampaign.id} />}
               {activeTab === 'stats' && <StatsTab campaignId={selectedCampaign.id} />}
             </div>
@@ -950,7 +1182,7 @@ export default function SalesCampaignsPage() {
         )}
       </div>
 
-      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ['sales-campaigns'] })} />
+      <CreateSalesCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ['sales-campaigns'] })} />
       {removeModalContact && <RemoveContactModal open={removeModalOpen} onClose={() => { setRemoveModalOpen(false); setRemoveModalContact(null); }} campaignId={selectedCampaign?.id || ""} contactId={removeModalContact.id} contactName={removeModalContact.name} onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["sales-campaign-contacts", selectedCampaign?.id] }); queryClient.invalidateQueries({ queryKey: ["sales-campaigns"] }); setRemoveModalOpen(false); setRemoveModalContact(null); }} />}
     </div>
   );

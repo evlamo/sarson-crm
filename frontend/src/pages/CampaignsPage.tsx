@@ -73,6 +73,12 @@ interface Campaign {
   sent_at: string | null;
   created_at: string;
   updated_at: string;
+  sales_campaign_id: string | null;
+}
+
+interface SalesCampaign {
+  id: string;
+  name: string;
 }
 
 interface Segment {
@@ -1152,15 +1158,29 @@ type ViewMode = { type: 'list' } | { type: 'builder'; campaign: Campaign | null 
 export default function CampaignsPage() {
   const isAdmin = useAuth((s) => s.isAdmin);
   const [view, setView] = useState<ViewMode>({ type: 'list' });
+  const [selectedSalesCampaignId, setSelectedSalesCampaignId] = useState<string>('all');
 
   useEffect(() => { document.title = 'Campaigns — Sarson Funds CRM'; }, []);
 
   const queryClient = useQueryClient();
 
-  const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
-    queryKey: ['campaigns'],
+  // Fetch sales campaigns for filter dropdown
+  const { data: salesCampaigns = [] } = useQuery<SalesCampaign[]>({
+    queryKey: ['sales-campaigns-filter'],
     queryFn: async () => {
-      const res = await api.get('/campaigns');
+      const res = await api.get('/sales-campaigns', { params: { per_page: 100 } });
+      return res.data.data || [];
+    },
+  });
+
+  const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
+    queryKey: ['campaigns', selectedSalesCampaignId],
+    queryFn: async () => {
+      const params: Record<string, string | number> = {};
+      if (selectedSalesCampaignId && selectedSalesCampaignId !== 'all') {
+        params.sales_campaign_id = selectedSalesCampaignId;
+      }
+      const res = await api.get('/campaigns', { params });
       return res.data.data || [];
     },
   });
@@ -1208,7 +1228,20 @@ export default function CampaignsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Campaigns</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold">Campaigns</h1>
+          <Select value={selectedSalesCampaignId} onValueChange={setSelectedSalesCampaignId}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Filter by Sales Campaign" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Campaigns</SelectItem>
+              {salesCampaigns.map((sc) => (
+                <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {isAdmin ? (
           <Button onClick={() => setView({ type: 'builder', campaign: null })} className="bg-[#253a52] hover:bg-[#253a52]/90">
             + New Campaign
@@ -1243,11 +1276,18 @@ export default function CampaignsPage() {
               <Card key={c.id} className="hover:shadow-sm transition-shadow">
                 <CardContent className="flex items-center justify-between py-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                       <h3 className="font-medium truncate">{c.name}</h3>
                       <Badge className={STATUS_COLORS[c.mailchimp_status || c.status] || 'bg-gray-100 text-gray-700'}>
                         {c.mailchimp_status || c.status}
                       </Badge>
+                      {c.sales_campaign_id ? (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200">
+                          {salesCampaigns.find(sc => sc.id === c.sales_campaign_id)?.name || 'Campaign'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-gray-500">Independent</Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground truncate">{c.subject}</p>
                     <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
