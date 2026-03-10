@@ -1,0 +1,550 @@
+SECRET_KEY not set — using ephemeral key. All sessions will reset on restart.
+/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.20) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+INFO:     Started server process [31643]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58227 - "GET /api/v1/auth/google/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58229 - "GET /api/v1/auth/google/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58304 - "GET /api/v1/auth/google/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58306 - "GET /api/v1/auth/google/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58365 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58367 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58369 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58387 - "GET /api/v1/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58389 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58391 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58394 - "PUT /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts/3df43ec1-f1cc-418c-9cc1-8a86abc80a8b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58396 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58398 - "PUT /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts/3df43ec1-f1cc-418c-9cc1-8a86abc80a8b HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58400 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58433 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58435 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58694 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58695 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58770 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58772 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58774 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58776 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58778 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58780 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58782 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58784 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58786 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58788 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58797 - "GET /api/v1/email-campaigns?sales_campaign_id=dbf879b0-27ba-4d76-bf3f-869de7736e2b&per_page=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58796 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58799 - "GET /api/v1/email-campaigns?sales_campaign_id=dbf879b0-27ba-4d76-bf3f-869de7736e2b&per_page=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58801 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59164 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59163 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59166 - "GET /api/v1/email-campaigns?sales_campaign_id=dbf879b0-27ba-4d76-bf3f-869de7736e2b&per_page=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59169 - "GET /api/v1/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59175 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59176 - "GET /api/v1/tags HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59181 - "GET /api/v1/campaigns/mailchimp/templates HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:59178 - "GET /api/v1/templates HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59180 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59173 - "GET /api/v1/segments HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59187 - "GET /api/v1/campaigns/mailchimp/templates HTTP/1.1" 503 Service Unavailable
+INFO:     127.0.0.1:59190 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59191 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59391 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59393 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59396 - "GET /api/v1/campaign-stats/summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59397 - "GET /api/v1/campaign-stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59399 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59401 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59967 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59968 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:59972 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59970 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59976 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59975 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59978 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59980 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59982 - "GET /api/v1/sales-campaigns?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59984 - "GET /api/v1/sales-campaigns/dbf879b0-27ba-4d76-bf3f-869de7736e2b/contacts?per_page=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59986 - "GET /api/v1/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59990 - "GET /api/v1/google-ads/conversions?per_page=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59988 - "GET /api/v1/google-ads/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59992 - "GET /api/v1/companies?page=1&per_page=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59994 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59997 - "GET /api/v1/campaign-stats/summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59998 - "GET /api/v1/campaign-stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60000 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60002 - "GET /api/v1/audit?page=1&per_page=50 HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/main.py", line 88, in dispatch
+    response = await call_next(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 119, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 105, in app
+    response = await f(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 431, in app
+    raw_response = await run_endpoint_function(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 315, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/routers/audit.py", line 148, in list_audit_logs
+    user_name=log.user.full_name if log.user else None,
+AttributeError: 'User' object has no attribute 'full_name'
+INFO:     127.0.0.1:60004 - "GET /api/v1/audit?page=1&per_page=50 HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/main.py", line 88, in dispatch
+    response = await call_next(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 119, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 105, in app
+    response = await f(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 431, in app
+    raw_response = await run_endpoint_function(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 315, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/routers/audit.py", line 148, in list_audit_logs
+    user_name=log.user.full_name if log.user else None,
+AttributeError: 'User' object has no attribute 'full_name'
+INFO:     127.0.0.1:60006 - "GET /api/v1/tags?with_counts=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60008 - "GET /api/v1/audit?page=1&per_page=50 HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/main.py", line 88, in dispatch
+    response = await call_next(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 119, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 105, in app
+    response = await f(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 431, in app
+    raw_response = await run_endpoint_function(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 315, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/routers/audit.py", line 148, in list_audit_logs
+    user_name=log.user.full_name if log.user else None,
+AttributeError: 'User' object has no attribute 'full_name'
+INFO:     127.0.0.1:60010 - "GET /api/v1/audit?page=1&per_page=50 HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/protocols/http/httptools_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 87, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 191, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "/opt/homebrew/Cellar/python@3.10/3.10.20/Frameworks/Python.framework/Versions/3.10/lib/python3.10/contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 193, in __call__
+    response = await self.dispatch_func(request, call_next)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/main.py", line 88, in dispatch
+    response = await call_next(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 168, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 119, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 105, in app
+    response = await f(request)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 431, in app
+    raw_response = await run_endpoint_function(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 315, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/starlette/concurrency.py", line 32, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+  File "/Users/agentstevesmith/sarson-crm/backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "/Users/agentstevesmith/sarson-crm/backend/app/routers/audit.py", line 148, in list_audit_logs
+    user_name=log.user.full_name if log.user else None,
+AttributeError: 'User' object has no attribute 'full_name'
+INFO:     127.0.0.1:60014 - "GET /api/v1/imports HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60017 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60019 - "GET /api/v1/lists HTTP/1.1" 200 OK
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+INFO:     127.0.0.1:60022 - "GET /api/v1/api-controls/providers HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60024 - "GET /api/v1/admin/changelog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60026 - "GET /api/v1/admin/changelog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60028 - "GET /api/v1/lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60030 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60032 - "GET /api/v1/admin/changelog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60034 - "GET /api/v1/admin/changelog HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60036 - "GET /api/v1/invites/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60079 - "GET /api/v1/invites/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60083 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60087 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60090 - "GET /api/v1/lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60091 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60094 - "GET /api/v1/sheets/exports HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60095 - "GET /api/v1/sheets/imports HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60183 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60185 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60187 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60189 - "GET /api/v1/lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60299 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60301 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60303 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60305 - "GET /api/v1/lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60307 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60309 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60311 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60313 - "GET /api/v1/lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60452 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60454 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60456 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60458 - "GET /api/v1/lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60416 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60419 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:60420 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60422 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60424 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60426 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60428 - "GET /api/v1/sheets/config HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60430 - "GET /api/v1/lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60637 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60639 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61112 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61115 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:61116 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61118 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61120 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61122 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61124 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61126 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61128 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61132 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61134 - "GET /api/v1/companies?page=1&per_page=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61139 - "GET /api/v1/companies/ca36e9c2-5752-430f-ace3-be4141d3c082/contacts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61136 - "GET /api/v1/companies/ca36e9c2-5752-430f-ace3-be4141d3c082 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61140 - "GET /api/v1/companies/ca36e9c2-5752-430f-ace3-be4141d3c082/poc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61144 - "GET /api/v1/google-ads/conversions?per_page=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61143 - "GET /api/v1/google-ads/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61146 - "GET /api/v1/google-ads/conversions?page=1&per_page=25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61148 - "GET /api/v1/google-ads/contacts?expired=false&page=1&per_page=25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61153 - "GET /api/v1/google-ads/auth/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61154 - "GET /api/v1/google-ads/snippet?hidden_field_id=gclid_field&cookie_name=_sarson_gclid HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61151 - "GET /api/v1/google-ads/conversion-actions HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61157 - "GET /api/v1/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61160 - "GET /api/v1/campaign-stats/summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61161 - "GET /api/v1/campaign-stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61163 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61165 - "GET /api/v1/tags?with_counts=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61167 - "GET /api/v1/imports HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61169 - "GET /api/v1/users/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61171 - "GET /api/v1/invites/ HTTP/1.1" 200 OK
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+INFO:     127.0.0.1:61173 - "GET /api/v1/api-controls/providers HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61176 - "GET /api-controls HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61178 - "GET /api-controls HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61182 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61184 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61186 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61188 - "GET /api/v1/companies?page=1&per_page=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61192 - "GET /api/v1/google-ads/conversions?per_page=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61191 - "GET /api/v1/google-ads/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61194 - "GET /api/v1/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61197 - "GET /api/v1/campaign-stats/summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61198 - "GET /api/v1/campaign-stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61200 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61202 - "GET /api/v1/imports HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61204 - "GET /api/v1/invites/ HTTP/1.1" 200 OK
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+Decryption failed — SECRET_KEY may have changed or value corrupted
+INFO:     127.0.0.1:61206 - "GET /api/v1/api-controls/providers HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61208 - "GET /api/v1/users/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61216 - "POST /api/v1/auth/register HTTP/1.1" 201 Created
+INFO:     127.0.0.1:61218 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61220 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61222 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61224 - "GET /api/v1/imports HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61226 - "GET /api/v1/tags?with_counts=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61228 - "GET /api/v1/campaign-lists HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61232 - "GET /api/v1/campaign-stats/summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61233 - "GET /api/v1/campaign-stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61235 - "GET /api/v1/campaigns HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61237 - "GET /api/v1/companies?page=1&per_page=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61241 - "GET /api/v1/google-ads/conversions?per_page=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61240 - "GET /api/v1/google-ads/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61243 - "GET /api/v1/google-ads/conversions?page=1&per_page=25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61245 - "GET /api/v1/google-ads/contacts?expired=false&page=1&per_page=25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62380 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62382 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62384 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62386 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62388 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62390 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+Run time of job "take_db_snapshot_sync (trigger: interval[8:00:00], next run at: 2026-03-08 16:43:10 CDT)" was missed by 0:59:59.902293
+INFO:     127.0.0.1:50926 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50928 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50930 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50932 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50934 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50936 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50844 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50846 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:50848 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50850 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50852 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50854 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51425 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51427 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51431 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51430 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51433 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51435 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62808 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62810 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:62812 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62814 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62816 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62818 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52391 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64249 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64251 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64253 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64255 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64257 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64259 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64261 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64634 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64636 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64638 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64640 - "POST /api/v1/auth/refresh HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64642 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64644 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64646 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     192.168.0.33:63870 - "GET / HTTP/1.1" 404 Not Found
+INFO:     192.168.0.33:63870 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     192.168.0.33:63870 - "GET / HTTP/1.1" 404 Not Found
+INFO:     192.168.0.45:64761 - "GET / HTTP/1.1" 404 Not Found
+INFO:     192.168.0.45:64762 - "GET /health HTTP/1.1" 200 OK
+INFO:     192.168.0.45:64763 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:64766 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64768 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64770 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64796 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64806 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64862 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64864 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64866 - "GET /api/v1/contacts?page=1&per_page=50&sort=last_name&order=asc HTTP/1.1" 200 OK

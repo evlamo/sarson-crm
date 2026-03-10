@@ -39,6 +39,7 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet';
 import { Plus, Users, Mail, BarChart3, AlertCircle, Loader2, Search, UserPlus, AlertTriangle } from 'lucide-react';
+import { RemoveContactModal } from @/components/RemoveContactModal;
 
 // TypeScript interfaces
 interface SalesCampaign {
@@ -243,6 +244,8 @@ function AddContactsDrawer({
   const [initialStatus, setInitialStatus] = useState('active');
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
+  const [removeModalContact, setRemoveModalContact] = useState<{ id: string; name: string } | null>(null);
 
   // Reset state when drawer opens/closes
   useEffect(() => {
@@ -947,6 +950,9 @@ export default function SalesCampaignsPage() {
       </div>
 
       <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ['sales-campaigns'] })} />
+      {removeModalContact && <RemoveContactModal open={removeModalOpen} onClose={() => { setRemoveModalOpen(false); setRemoveModalContact(null); }} campaignId={selectedCampaign?.id || ""} contactId={removeModalContact.id} contactName={removeModalContact.name} onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["sales-campaign-contacts", selectedCampaign?.id] }); queryClient.invalidateQueries({ queryKey: ["sales-campaigns"] }); setRemoveModalOpen(false); setRemoveModalContact(null); }} />}
     </div>
   );
 }
+
+// Add RemoveContactModal insertion after CreateCampaignModal

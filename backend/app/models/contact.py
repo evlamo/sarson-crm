@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Boolean, Integer, Numeric, DateTime, ForeignKey, Text, ARRAY, Date, event, Index, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, Integer, Numeric, DateTime, ForeignKey, Text, ARRAY, Date, event, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -14,7 +14,6 @@ class Contact(Base):
     __tablename__ = "contacts"
     __table_args__ = (
         # Partial unique index on encrypted email — allows multiple nulls, but no duplicate non-null emails
-        UniqueConstraint("_email_encrypted", name="uq_contacts_email", deferrable=True),
         # GIN index for full-text search
         Index("ix_contacts_search_vector", "search_vector", postgresql_using="gin"),
     )
@@ -110,6 +109,7 @@ class Contact(Base):
     activities = relationship("Activity", back_populates="contact", cascade="all, delete-orphan")
     deal_contacts = relationship("DealContact", back_populates="contact")
     email_sends = relationship("EmailSend", back_populates="contact")
+    campaign_removals = relationship("CampaignContactRemoval", back_populates="contact", cascade="all, delete-orphan")
 
     @hybrid_property
     def email(self):

@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.models.campaign import EmailCampaign, EmailSend
 from app.models.contact import Contact
 from app.models.segment import Segment
+from app.models.sales_campaign import SalesCampaign
+from app.models.campaign_contact_removal import CampaignContactRemoval
 from app.services.segment_service import build_segment_query
 
 
@@ -144,3 +146,41 @@ def get_campaign_stats(campaign: EmailCampaign) -> Dict[str, Any]:
         "bounce_rate": safe_rate(campaign.bounce_count or 0, sent),
         "unsubscribe_rate": safe_rate(campaign.unsubscribe_count or 0, delivered),
     }
+
+
+def remove_contact_from_campaign(
+    campaign_id: UUID,
+    contact_id: UUID,
+    reason: str,
+    user_id: UUID,
+    db: Session,
+) -> CampaignContactRemoval:
+    """
+    Remove a contact from a sales campaign.
+    
+    Creates a CampaignContactRemoval record to track the removal.
+    Validates that contact exists in the campaign.
+    """
+    # Validate campaign exists
+    campaign = db.query(SalesCampaign).filter(SalesCampaign.id == campaign_id).first()
+    if not campaign:
+        raise ValueError(f"Campaign {campaign_id} not found")
+    
+    # Validate contact exists
+    contact = db.query(Contact).filter(Contact.id == contact_id).first()
+    if not contact:
+        raise ValueError(f"Contact {contact_id} not found")
+    
+    # Create removal record
+    removal = CampaignContactRemoval(
+        contact_id=contact_id,
+        sales_campaign_id=campaign_id,
+        reason=reason,
+        removed_by=user_id,
+    )
+    
+    db.add(removal)
+    db.commit()
+    db.refresh(removal)
+    
+    return removal

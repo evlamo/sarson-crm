@@ -33,6 +33,7 @@ class SalesCampaign(Base):
     owner = relationship("User", foreign_keys=[owner_id])
     email_campaigns = relationship("EmailCampaign", back_populates="sales_campaign")
     campaign_contacts = relationship("CampaignContact", back_populates="sales_campaign", cascade="all, delete-orphan")
+    campaign_removals = relationship("CampaignContactRemoval", cascade="all, delete-orphan")
 
 
 class CampaignContact(Base):

@@ -736,3 +736,83 @@ def get_campaign_stats(
         "completion_rate": completion_rate,
         "exclusion_rate": exclusion_rate,
     }
+
+
+# ── Remove Contact from Campaign ────────────────────────────────────────────
+
+@router.post("/{campaign_id}/remove-contact", response_model=dict)
+def remove_contact_from_campaign(
+    campaign_id: UUID,
+    request: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Remove a contact from a sales campaign with a reason.
+    
+    Request body: { contact_id: UUID, reason: str, notes?: str }
+    Response: CampaignContactRemovalOut
+    """
+    from app.schemas.campaign_contact_removal import RemoveContactRequest, CampaignContactRemovalOut
+    
+    # Parse request
+    try:
+        remove_request = RemoveContactRequest(**request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+    
+    # Get campaign
+    campaign = _get_campaign_or_404(campaign_id, db)
+    
+    # Check permission (admin or campaign owner)
+    if not (current_user.is_admin or campaign.owner_id == current_user.id):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Get contact to verify it exists in the campaign
+    contact = db.query(Contact).filter(Contact.id == remove_request.contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    
+    # Check if contact is in this campaign
+    campaign_contact = db.query(CampaignContact).filter(
+        CampaignContact.contact_id == remove_request.contact_id,
+        CampaignContact.sales_campaign_id == campaign_id
+    ).first()
+    
+    if not campaign_contact:
+        raise HTTPException(
+            status_code=404,
+            detail="Contact is not part of this campaign"
+        )
+    
+    try:
+        # Call service to create removal record
+        # Create removal record
+        from app.models.campaign_contact_removal import CampaignContactRemoval as CCRemovalModel
+        removal = CCRemovalModel(
+            contact_id=remove_request.contact_id,
+            sales_campaign_id=campaign_id,
+            reason=remove_request.reason,
+            notes=remove_request.notes,
+            removed_by=current_user.id,
+        )
+        db.add(removal)
+        db.commit()
+        db.refresh(removal)
+        
+        # Log audit trail
+        audit_service.log_action(
+            db,
+            current_user.id,
+            "campaign_contact_removal",
+            str(campaign_id),
+            new_values={"contact_id": str(remove_request.contact_id), "reason": remove_request.reason},
+        )
+        
+        # Convert to schema response
+        return CampaignContactRemovalOut.model_validate(removal).model_dump()
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error removing contact: {str(e)}")
