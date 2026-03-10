@@ -83,3 +83,7 @@ app.include_router(api_controls_router)
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "Speranza CRM API"}
+
+@app.get("/pingz")
+def pingz():
+    return {"ping": "pong"}
