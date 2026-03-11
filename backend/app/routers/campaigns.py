@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
+import bleach
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user, get_admin_user
@@ -36,6 +37,16 @@ router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 limiter = Limiter(key_func=get_remote_address)
+
+# ── HTML Sanitization ─────────────────────────────────────────────────────
+ALLOWED_HTML_TAGS = ['p', 'br', 'strong', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'ul', 'ol', 'li']
+ALLOWED_HTML_ATTRS = {'a': ['href', 'target', 'rel']}
+
+def sanitize_html(html: str) -> str:
+    """Remove potentially dangerous HTML tags and attributes."""
+    if not html:
+        return html
+    return bleach.clean(html, tags=ALLOWED_HTML_TAGS, attributes=ALLOWED_HTML_ATTRS, strip=True)
 
 
 # ── List Campaigns ─────────────────────────────────────────────────────────
@@ -80,7 +91,7 @@ def create_campaign(
         name=data.name,
         subject=data.subject,
         preview_text=data.preview_text,
-        body_html=data.body_html,
+        body_html=sanitize_html(data.body_html) if data.body_html else None,
         body_text=data.body_text,
         template_id=data.template_id,
         segment_id=data.segment_id,
@@ -127,6 +138,9 @@ def update_campaign(
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
+        # Sanitize HTML body if being updated
+        if key == 'body_html' and value:
+            value = sanitize_html(value)
         setattr(campaign, key, value)
 
     campaign.updated_at = datetime.now(timezone.utc)

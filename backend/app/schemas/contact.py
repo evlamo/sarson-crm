@@ -1,8 +1,9 @@
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator, field_validator
 from typing import Optional, List, Any
 from datetime import datetime, date
 from decimal import Decimal
 import uuid
+import re
 
 from app.schemas.tag import TagResponse
 
@@ -15,6 +16,19 @@ class ContactBase(BaseModel):
     email_secondary: Optional[str] = Field(None, max_length=255)
     phone: Optional[str] = Field(None, max_length=50)
     phone_secondary: Optional[str] = Field(None, max_length=50)
+
+    @field_validator('phone', 'phone_secondary', mode='before')
+    @classmethod
+    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
+        """Validate phone format: 10-15 digits with optional + and formatting chars."""
+        if not v:
+            return v
+        # Remove common formatting characters
+        cleaned = re.sub(r'[\s\-\(\).]', '', str(v))
+        # Ensure it's a valid phone: optional +, then 10-15 digits
+        if not re.match(r'^\+?\d{10,15}$', cleaned):
+            raise ValueError('Invalid phone format. Expected 10-15 digits (with optional +)')
+        return v
     title: Optional[str] = Field(None, max_length=200)
     company: Optional[str] = Field(None, max_length=255)
     company_id: Optional[uuid.UUID] = None
