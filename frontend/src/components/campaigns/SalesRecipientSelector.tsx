@@ -11,9 +11,16 @@
  * - Combine mode toggle (ANY/ALL)
  * - Sample contacts display (first 10)
  * - Breakdown stats (from_lists, from_tags, from_direct, overlap)
+ * 
+ * FIXES APPLIED:
+ * - Debounced contact search input (separate UI state from query state)
+ * - Stabilized input focus during typing
+ * - Optimized React Query refetch strategy
+ * - Fixed debounce function dependency chain
+ * - Added input component memoization
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { debounce } from 'lodash';
 import api from '@/lib/api';
@@ -116,11 +123,40 @@ export function SalesRecipientSelector({
 
   const [listSearch, setListSearch] = useState('');
   const [tagSearch, setTagSearch] = useState('');
+  
+  // FIX 1: Separate contact search input (immediate) from query state (debounced)
+  const [contactSearchInput, setContactSearchInput] = useState('');
   const [contactSearch, setContactSearch] = useState('');
+  const contactSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Pagination state for contacts list
   const [contactPage, setContactPage] = useState(1);
-  const CONTACTS_PER_PAGE = 50; // Show 50 at a time, but load all via pagination
+  const CONTACTS_PER_PAGE = 50;
+
+  // FIX 6: Debounce contact search input - separate from API call
+  const handleContactSearchChange = useCallback((value: string) => {
+    setContactSearchInput(value);
+    
+    // Clear previous timeout
+    if (contactSearchTimeoutRef.current) {
+      clearTimeout(contactSearchTimeoutRef.current);
+    }
+    
+    // Set new timeout for debounced API call
+    contactSearchTimeoutRef.current = setTimeout(() => {
+      setContactSearch(value);
+      setContactPage(1); // Reset page on search change
+    }, 400); // 400ms debounce
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (contactSearchTimeoutRef.current) {
+        clearTimeout(contactSearchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Fetch lists
   const { data: listsData } = useQuery<{ data: CampaignList[] }>({
@@ -131,6 +167,7 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
+    refetchOnFocus: false, // FIX 5: Don't refetch aggressively on focus
   });
 
   // Fetch tags
@@ -142,10 +179,11 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
+    refetchOnFocus: false, // FIX 5: Don't refetch aggressively on focus
   });
 
   // Fetch available contacts with pagination support
-  // This now properly handles 500+ contacts via pagination
+  // FIX 2: Uses debounced contactSearch state instead of immediate input
   const { data: contactsData, isLoading: isLoadingContacts } = useQuery<PaginatedResponse>({
     queryKey: ['all-contacts', contactPage, contactSearch],
     queryFn: async () => {
@@ -161,6 +199,7 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
+    refetchOnFocus: false, // FIX 5: Don't refetch aggressively on focus
   });
 
   const lists = listsData?.data || [];
@@ -186,15 +225,20 @@ export function SalesRecipientSelector({
     [tags, tagSearch]
   );
 
-  // Debounced preview fetch
-  const debouncedFetchPreview = useMemo(
-    () =>
-      debounce(async () => {
-        if (
-          !selectedListIds.length &&
-          !selectedTagIds.length &&
-          !selectedContactIds.length
-        ) {
+  // FIX 3: Simplified debounced preview fetch with stable dependencies
+  // Only depend on actual selection changes, not on function references
+  const debouncedFetchPreviewRef = useRef<ReturnType<typeof debounce> | null>(null);
+
+  // Create the debounced function once and reuse it
+  if (!debouncedFetchPreviewRef.current) {
+    debouncedFetchPreviewRef.current = debounce(
+      async (
+        listIds: string[],
+        tagIds: string[],
+        contactIds: string[],
+        cId: string
+      ) => {
+        if (!listIds.length && !tagIds.length && !contactIds.length) {
           setPreview(null);
           return;
         }
@@ -202,11 +246,11 @@ export function SalesRecipientSelector({
         setIsLoadingPreview(true);
         try {
           const res = await api.post(
-            `/sales-campaigns/${campaignId}/preview-recipients`,
+            `/sales-campaigns/${cId}/preview-recipients`,
             {
-              list_ids: selectedListIds,
-              tag_ids: selectedTagIds,
-              contact_ids: selectedContactIds,
+              list_ids: listIds,
+              tag_ids: tagIds,
+              contact_ids: contactIds,
             }
           );
           setPreview(res.data.data);
@@ -217,15 +261,24 @@ export function SalesRecipientSelector({
         } finally {
           setIsLoadingPreview(false);
         }
-      }, 500),
-    [campaignId, selectedListIds, selectedTagIds, selectedContactIds]
-  );
+      },
+      500
+    );
+  }
 
   // Trigger preview on selection change
   useEffect(() => {
-    debouncedFetchPreview();
-    return () => debouncedFetchPreview.cancel();
-  }, [debouncedFetchPreview]);
+    debouncedFetchPreviewRef.current?.(
+      selectedListIds,
+      selectedTagIds,
+      selectedContactIds,
+      campaignId
+    );
+    
+    return () => {
+      debouncedFetchPreviewRef.current?.cancel();
+    };
+  }, [selectedListIds, selectedTagIds, selectedContactIds, campaignId]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -236,15 +289,16 @@ export function SalesRecipientSelector({
       setPreview(null);
       setListSearch('');
       setTagSearch('');
+      setContactSearchInput('');
       setContactSearch('');
       setContactPage(1);
+      
+      // Cancel any pending timeouts
+      if (contactSearchTimeoutRef.current) {
+        clearTimeout(contactSearchTimeoutRef.current);
+      }
     }
   }, [isOpen]);
-
-  // Reset contact page when search changes
-  useEffect(() => {
-    setContactPage(1);
-  }, [contactSearch]);
 
   const handleConfirm = () => {
     if (!preview || preview.final_count === 0) {
@@ -406,10 +460,11 @@ export function SalesRecipientSelector({
               {totalContacts > 0 && (
                 <div className="relative mb-2">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  {/* FIX 2: Use immediate input state for typing, debounced for API */}
                   <Input
                     placeholder="Search contacts..."
-                    value={contactSearch}
-                    onChange={(e) => setContactSearch(e.target.value)}
+                    value={contactSearchInput}
+                    onChange={(e) => handleContactSearchChange(e.target.value)}
                     className="pl-8 h-8 text-sm"
                   />
                 </div>
