@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Edit, Trash2 } from "lucide-react";
-import { apiClient } from "@/lib/api-client";
+import api from "@/lib/api";
 
 interface EmailTemplate {
   id: string;
@@ -25,7 +25,7 @@ export function EmailTemplates() {
 
   const loadTemplates = async () => {
     try {
-      const response = await apiClient.get("/email-templates");
+      const response = await api.get("/email-templates");
       setTemplates(response.data.data || []);
     } finally {
       setLoading(false);
@@ -35,7 +35,7 @@ export function EmailTemplates() {
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this template?")) return;
 
-    await apiClient.delete(`/email-templates/${id}`);
+    await api.delete(`/email-templates/${id}`);
     loadTemplates();
   };
 
@@ -43,7 +43,7 @@ export function EmailTemplates() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Email Templates</h1>
-        <Button onClick={() => navigate("/email-templates/new")}>
+        <Button onClick={() => navigate({ to: "/email-templates/new" })}>
           <Plus className="w-4 h-4 mr-2" />
           New Template
         </Button>
@@ -54,7 +54,7 @@ export function EmailTemplates() {
       ) : templates.length === 0 ? (
         <Card className="p-12 text-center">
           <p className="text-muted-foreground mb-4">No templates yet</p>
-          <Button onClick={() => navigate("/email-templates/new")}>
+          <Button onClick={() => navigate({ to: "/email-templates/new" })}>
             Create Your First Template
           </Button>
         </Card>
@@ -79,7 +79,7 @@ export function EmailTemplates() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => navigate(`/email-templates/${template.id}`)}
+                  onClick={() => navigate({ to: "/email-templates/$id", params: { id: template.id } })}
                 >
                   <Edit className="w-4 h-4" />
                 </Button>

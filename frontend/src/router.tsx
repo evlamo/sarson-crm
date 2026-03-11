@@ -22,6 +22,7 @@ import ListsPage from '@/pages/ListsPage';
 import ApiControlsPage from '@/pages/ApiControlsPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
 import VerifyEmailPage from '@/pages/VerifyEmailPage';
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import { EmailTemplates } from '@/pages/EmailTemplates';
 import { EmailTemplateEdit } from '@/pages/EmailTemplateEdit';
 import { useEffect } from 'react';

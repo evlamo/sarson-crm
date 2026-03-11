@@ -1,25 +1,25 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "@tanstack/react-router";
 import { EmailTemplateEditor } from "@/components/email-templates/EmailTemplateEditor";
-import { apiClient } from "@/lib/api-client";
+import api from "@/lib/api";
 
 export function EmailTemplateEdit() {
-  const { id } = useParams();
+  const params = useParams({ strict: false }) as { id?: string };
   const navigate = useNavigate();
   const [initialDesign, setInitialDesign] = useState<Record<string, any> | undefined>();
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
-  const [loading, setLoading] = useState(!!id);
+  const [loading, setLoading] = useState(!!params.id);
 
   useEffect(() => {
-    if (id) {
+    if (params.id) {
       loadTemplate();
     }
-  }, [id]);
+  }, [params.id]);
 
   const loadTemplate = async () => {
     try {
-      const response = await apiClient.get(`/email-templates/${id}`);
+      const response = await api.get(`/email-templates/${params.id}`);
       const template = response.data.data;
       setInitialDesign(template.design_json);
       setInitialName(template.name);
@@ -42,13 +42,13 @@ export function EmailTemplateEdit() {
       html: data.html,
     };
 
-    if (id) {
-      await apiClient.patch(`/email-templates/${id}`, payload);
+    if (params.id) {
+      await api.patch(`/email-templates/${params.id}`, payload);
     } else {
-      await apiClient.post("/email-templates", payload);
+      await api.post("/email-templates", payload);
     }
 
-    navigate("/email-templates");
+    navigate({ to: "/email-templates" });
   };
 
   if (loading) {
@@ -57,7 +57,7 @@ export function EmailTemplateEdit() {
 
   return (
     <EmailTemplateEditor
-      templateId={id}
+      templateId={params.id}
       initialDesign={initialDesign}
       initialName={initialName}
       initialDescription={initialDescription}
