@@ -272,12 +272,12 @@ export function SalesRecipientSelector({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[90vw] h-[85vh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="max-w-[95vw] h-[85vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle>Add Contacts to Campaign</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-6 flex-1 overflow-hidden px-6 py-4">
+        <div className="grid grid-cols-[40%_60%] gap-6 flex-1 overflow-hidden px-6 py-4">
           {/* Left Panel: Selection Controls */}
           <div className="space-y-4 overflow-y-auto pr-2">
             {/* Lists Multi-Select */}

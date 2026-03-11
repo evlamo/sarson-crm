@@ -1136,9 +1136,10 @@ def preview_campaign_recipients(
                 Contact.email_bounced,
                 Contact.email_valid,
                 literal("list").label("source_type"),
-                literal("List").label("source_name")
+                StaticList.name.label("source_name")
             )
             .join(StaticListMember, Contact.id == StaticListMember.c.contact_id)
+            .join(StaticList, StaticListMember.c.list_id == StaticList.id)
             .filter(StaticListMember.c.list_id.in_(body.list_ids))
             .distinct(Contact.id)
         )
@@ -1156,7 +1157,7 @@ def preview_campaign_recipients(
                 Contact.email_bounced,
                 Contact.email_valid,
                 literal("tag").label("source_type"),
-                literal("Tag").label("source_name")
+                Tag.name.label("source_name")
             )
             .join(ContactTag, Contact.id == ContactTag.c.contact_id)
             .join(Tag, ContactTag.c.tag_id == Tag.id)
@@ -1210,7 +1211,7 @@ def preview_campaign_recipients(
                     "email_valid": row[7],
                     "sources": []
                 }
-            source = source_type.title() + ": " + ("List" if source_type == "list" else "Tag" if source_type == "tag" else "Direct")
+            source = source_type.title() + ": " + row[9]
             source_map[contact_id]["sources"].append(source)
     
     total_matching = len(all_matching_ids)
