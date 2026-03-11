@@ -6,3 +6,29 @@ node_modules/
 dist/
 .DS_Store
 uploads/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+*.backup
+backups/
+dumps/
+
+# Logs
+*.log
+logs/
+
+# CSV data imports
+imports/
+exports/
+
+# Environment-specific
+.env.local
+.env.production
+
+# User uploads
+uploads/*
+!uploads/.gitkeep
