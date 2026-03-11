@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/sonner';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { router } from '@/router';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -35,11 +36,13 @@ function AuthLoader({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthLoader>
-        <RouterProvider router={router} />
-        <Toaster />
-      </AuthLoader>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthLoader>
+          <RouterProvider router={router} />
+          <Toaster />
+        </AuthLoader>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

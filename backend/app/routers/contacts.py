@@ -353,7 +353,17 @@ def patch_contact(
 
     contact.updated_at = _utcnow()
     _sync_poc_on_company(db, contact)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        # Handle POC constraint violation
+        if 'idx_one_poc_per_company' in str(e):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot set POC status: this company already has a Point of Contact."
+            )
+        raise
     return _build_response(_get_contact_or_404(contact_id, db))
 
 

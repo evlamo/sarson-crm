@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import DOMPurify from 'dompurify';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate } from '@/lib/formatDate';
@@ -874,7 +875,10 @@ function CampaignBuilder({
                   <div className="w-[600px] min-w-[600px] bg-white shadow-lg">
                     <iframe
                       title="Email Preview"
-                      srcDoc={form.body_html || '<p style="color:#999;padding:20px;">No content yet</p>'}
+                      srcDoc={DOMPurify.sanitize(form.body_html || '<p style="color:#999;padding:20px;">No content yet</p>', {
+                        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'div', 'span', 'img', 'table', 'tr', 'td', 'th', 'tbody', 'thead', 'tfoot', 'blockquote', 'pre', 'code'],
+                        ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'width', 'height', 'style', 'class', 'id', 'data-*']
+                      })}
                       className="w-full border-0"
                       style={{ height: '500px', minHeight: '500px' }}
                       sandbox="allow-same-origin"
