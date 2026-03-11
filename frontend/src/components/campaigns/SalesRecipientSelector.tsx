@@ -27,7 +27,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Input } from '@/components/ui/input';
 import { Loader2, AlertCircle, Users, Search, X } from 'lucide-react';
 
@@ -446,26 +445,48 @@ export function SalesRecipientSelector({
             {/* Combine Mode */}
             <div className="pt-4 border-t">
               <Label className="text-sm font-semibold block mb-3">Combine Mode</Label>
-              <RadioGroup value={combineMode} onValueChange={(v) => setCombineMode(v as 'any' | 'all')}>
-                <div className="flex items-start space-x-2 mb-2">
-                  <RadioGroupItem value="any" id="any" className="mt-1" />
-                  <Label htmlFor="any" className="font-normal cursor-pointer text-sm">
-                    <div>Any (OR)</div>
+              <div className="space-y-2">
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  combineMode === 'any'
+                    ? 'border-blue-600 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="combineMode"
+                    value="any"
+                    checked={combineMode === 'any'}
+                    onChange={() => setCombineMode('any')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <div>
+                    <div className="font-medium text-sm">Any (OR)</div>
                     <div className="text-xs text-muted-foreground">
                       Include contacts matching any selection
                     </div>
-                  </Label>
-                </div>
-                <div className="flex items-start space-x-2">
-                  <RadioGroupItem value="all" id="all" className="mt-1" />
-                  <Label htmlFor="all" className="font-normal cursor-pointer text-sm">
-                    <div>All (AND)</div>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  combineMode === 'all'
+                    ? 'border-blue-600 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="combineMode"
+                    value="all"
+                    checked={combineMode === 'all'}
+                    onChange={() => setCombineMode('all')}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <div>
+                    <div className="font-medium text-sm">All (AND)</div>
                     <div className="text-xs text-muted-foreground">
                       Only contacts matching all selections
                     </div>
-                  </Label>
-                </div>
-              </RadioGroup>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
 
