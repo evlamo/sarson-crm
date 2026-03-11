@@ -1,46 +1,46 @@
-import { useState, useRef, useEffect, useCallback, type RefObject } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Trash2, Tag, Search, X, Check, Loader2, UserX } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, type RefObject } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Trash2, Tag, Search, X, Check, Loader2, UserX } from "lucide-react";
 
 const TAG_PALETTE = [
-  { label: 'Gray',    hex: '#6b7280' },
-  { label: 'Red',     hex: '#ef4444' },
-  { label: 'Orange',  hex: '#f97316' },
-  { label: 'Amber',   hex: '#f59e0b' },
-  { label: 'Yellow',  hex: '#eab308' },
-  { label: 'Lime',    hex: '#84cc16' },
-  { label: 'Green',   hex: '#22c55e' },
-  { label: 'Teal',    hex: '#14b8a6' },
-  { label: 'Cyan',    hex: '#06b6d4' },
-  { label: 'Sky',     hex: '#0ea5e9' },
-  { label: 'Blue',    hex: '#3b82f6' },
-  { label: 'Indigo',  hex: '#6366f1' },
-  { label: 'Violet',  hex: '#8b5cf6' },
-  { label: 'Purple',  hex: '#a855f7' },
-  { label: 'Pink',    hex: '#ec4899' },
-  { label: 'Rose',    hex: '#f43f5e' },
-  { label: 'Navy',    hex: '#253a52' },
-  { label: 'Black',   hex: '#1a1a1a' },
+  { label: "Gray",    hex: "#6b7280" },
+  { label: "Red",     hex: "#ef4444" },
+  { label: "Orange",  hex: "#f97316" },
+  { label: "Amber",   hex: "#f59e0b" },
+  { label: "Yellow",  hex: "#eab308" },
+  { label: "Lime",    hex: "#84cc16" },
+  { label: "Green",   hex: "#22c55e" },
+  { label: "Teal",    hex: "#14b8a6" },
+  { label: "Cyan",    hex: "#06b6d4" },
+  { label: "Sky",     hex: "#0ea5e9" },
+  { label: "Blue",    hex: "#3b82f6" },
+  { label: "Indigo",  hex: "#6366f1" },
+  { label: "Violet",  hex: "#8b5cf6" },
+  { label: "Purple",  hex: "#a855f7" },
+  { label: "Pink",    hex: "#ec4899" },
+  { label: "Rose",    hex: "#f43f5e" },
+  { label: "Navy",    hex: "#253a52" },
+  { label: "Black",   hex: "#1a1a1a" },
 ];
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from '@/components/ui/sheet';
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 
 interface TagWithCount {
   id: string;
@@ -81,7 +81,7 @@ function useDebounce(value: string, delay: number) {
 }
 
 function getInitials(first: string | null, last: string | null): string {
-  return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase() || '?';
+  return ((first?.[0] || "") + (last?.[0] || "")).toUpperCase() || "?";
 }
 
 // ── Tag Contacts Drawer ───────────────────────────────────────────────────
@@ -96,8 +96,8 @@ function TagContactsDrawer({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [tagSearch, setTagSearch] = useState('');
-  const [addSearch, setAddSearch] = useState('');
+  const [tagSearch, setTagSearch] = useState("");
+  const [addSearch, setAddSearch] = useState("");
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
@@ -109,8 +109,8 @@ function TagContactsDrawer({
 
   // Reset state when tag changes or drawer closes
   useEffect(() => {
-    setTagSearch('');
-    setAddSearch('');
+    setTagSearch("");
+    setAddSearch("");
     setJustAdded(null);
     setMutationError(null);
     setRemovingIds(new Set());
@@ -119,8 +119,8 @@ function TagContactsDrawer({
 
   useEffect(() => {
     if (!open) {
-      setTagSearch('');
-      setAddSearch('');
+      setTagSearch("");
+      setAddSearch("");
       setJustAdded(null);
       setMutationError(null);
       setRemovingIds(new Set());
@@ -135,11 +135,11 @@ function TagContactsDrawer({
 
   // Contacts with this tag (H1: per_page 500)
   const { data: tagContacts, isLoading: loadingTagContacts } = useQuery<PaginatedContacts>({
-    queryKey: ['tag-contacts', tag.id, debouncedTagSearch],
+    queryKey: ["tag-contacts", tag.id, debouncedTagSearch],
     queryFn: async () => {
       const params: Record<string, string | number> = { tag_id: tag.id, per_page: 500 };
       if (debouncedTagSearch) params.search = debouncedTagSearch;
-      const res = await api.get('/contacts', { params });
+      const res = await api.get("/contacts", { params });
       return res.data;
     },
     enabled: open,
@@ -147,9 +147,9 @@ function TagContactsDrawer({
 
   // All contacts search (for adding) — always live, shows untagged contacts immediately
   const { data: searchResults, isLoading: loadingSearch } = useQuery<PaginatedContacts>({
-    queryKey: ['contact-search', debouncedAddSearch],
+    queryKey: ["contact-search", debouncedAddSearch],
     queryFn: async () => {
-      const res = await api.get('/contacts', {
+      const res = await api.get("/contacts", {
         params: { search: debouncedAddSearch || undefined, per_page: 50 },
       });
       return res.data;
@@ -173,20 +173,20 @@ function TagContactsDrawer({
   const addMutation = useMutation({
     mutationFn: async (contactId: string) => {
       setAddingIds((prev) => new Set(prev).add(contactId));
-      await api.post('/contacts/bulk', { ids: [contactId], tag_ids: [tag.id] });
+      await api.post("/contacts/bulk", { ids: [contactId], tag_ids: [tag.id] });
     },
     onSuccess: (_data, contactId) => {
       setAddingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
       setJustAdded(contactId);
-      setAddSearch('');
+      setAddSearch("");
       if (justAddedTimer.current) clearTimeout(justAddedTimer.current);
       justAddedTimer.current = setTimeout(() => setJustAdded(null), 1000);
-      queryClient.invalidateQueries({ queryKey: ['tag-contacts', tag.id] });
-      queryClient.invalidateQueries({ queryKey: ['tags', 'with-counts'] });
+      queryClient.invalidateQueries({ queryKey: ["tag-contacts", tag.id] });
+      queryClient.invalidateQueries({ queryKey: ["tags", "with-counts"] });
     },
     onError: (_err, contactId) => {
       setAddingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
-      showError('Failed to add contact. Please try again.');
+      showError("Failed to add contact. Please try again.");
     },
   });
 
@@ -198,12 +198,12 @@ function TagContactsDrawer({
     },
     onSuccess: (_data, contactId) => {
       setRemovingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
-      queryClient.invalidateQueries({ queryKey: ['tag-contacts', tag.id] });
-      queryClient.invalidateQueries({ queryKey: ['tags', 'with-counts'] });
+      queryClient.invalidateQueries({ queryKey: ["tag-contacts", tag.id] });
+      queryClient.invalidateQueries({ queryKey: ["tags", "with-counts"] });
     },
     onError: (_err, contactId) => {
       setRemovingIds((prev) => { const n = new Set(prev); n.delete(contactId); return n; });
-      showError('Failed to remove contact. Please try again.');
+      showError("Failed to remove contact. Please try again.");
     },
   });
 
@@ -216,7 +216,7 @@ function TagContactsDrawer({
         {/* Header */}
         <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0">
           <SheetTitle className="flex items-center gap-2 text-sm font-semibold">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: tag.color || '#6b7280' }} />
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: tag.color || "#6b7280" }} />
             {tag.name}
             <span className="ml-auto text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
               {tagContacts?.total ?? tag.contact_count} tagged
@@ -245,7 +245,7 @@ function TagContactsDrawer({
             </div>
           ) : contacts.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-6">
-              {debouncedTagSearch ? 'No matches' : 'Nobody tagged yet'}
+              {debouncedTagSearch ? "No matches" : "Nobody tagged yet"}
             </p>
           ) : (
             <div className="space-y-0.5">
@@ -295,7 +295,7 @@ function TagContactsDrawer({
             </div>
           ) : addCandidates.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-6">
-              {debouncedAddSearch ? 'No matches' : 'All contacts already tagged'}
+              {debouncedAddSearch ? "No matches" : "All contacts already tagged"}
             </p>
           ) : (
             <div className="space-y-0.5">
@@ -305,7 +305,7 @@ function TagContactsDrawer({
                   className="flex items-center gap-2.5 rounded-md px-2 py-1.5 group hover:bg-muted/40 transition-colors"
                   role="button"
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addMutation.mutate(contact.id); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") addMutation.mutate(contact.id); }}
                 >
                   <div className="w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-semibold shrink-0">
                     {getInitials(contact.first_name, contact.last_name)}
@@ -323,7 +323,7 @@ function TagContactsDrawer({
                       ? <Loader2 className="h-3 w-3 animate-spin" />
                       : justAdded === contact.id
                       ? <Check className="h-3 w-3 text-green-500" />
-                      : '+ Add'}
+                      : "+ Add"}
                   </button>
                 </div>
               ))}
@@ -344,31 +344,33 @@ function TagContactsDrawer({
 
 export default function TagsPage() {
   const queryClient = useQueryClient();
-  const [newTagName, setNewTagName] = useState('');
+  const [newTagName, setNewTagName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState('');
+  const [editDraft, setEditDraft] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<TagWithCount | null>(null);
   const [selectedTag, setSelectedTag] = useState<TagWithCount | null>(null);
   const [colorPopoverOpen, setColorPopoverOpen] = useState<string | null>(null);
   const editRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { document.title = 'Tags — Sarson Funds CRM'; }, []);
+  useEffect(() => { document.title = "Tags — Sarson Funds CRM"; }, []);
 
-  const { data: tags = [], isLoading } = useQuery<TagWithCount[]>({
-    queryKey: ['tags', 'with-counts'],
+  const { data: tagsData, isLoading } = useQuery<{ data: TagWithCount[] }>({
+    queryKey: ["tags", "with-counts"],
     queryFn: async () => {
-      const res = await api.get('/tags', { params: { with_counts: true } });
+      const res = await api.get("/tags", { params: { with_counts: true } });
       return res.data;
     },
   });
 
+  const tags = tagsData?.data || [];
+
   const createMutation = useMutation({
     mutationFn: async (name: string) => {
-      await api.post('/tags', { name });
+      await api.post("/tags", { name });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
-      setNewTagName('');
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+      setNewTagName("");
     },
   });
 
@@ -377,7 +379,7 @@ export default function TagsPage() {
       await api.patch(`/tags/${id}`, { name });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
       setEditingId(null);
     },
   });
@@ -387,7 +389,7 @@ export default function TagsPage() {
       await api.delete(`/tags/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
       setDeleteTarget(null);
     },
   });
@@ -397,7 +399,7 @@ export default function TagsPage() {
       await api.patch(`/tags/${id}`, { color });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
     },
   });
 
@@ -472,7 +474,7 @@ export default function TagsPage() {
                       <PopoverTrigger asChild>
                         <button
                           className="w-4 h-4 rounded-full shrink-0 ring-offset-background transition-all hover:scale-125 hover:ring-2 hover:ring-offset-2 hover:ring-[#253a52] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#253a52]"
-                          style={{ backgroundColor: tag.color || '#6b7280' }}
+                          style={{ backgroundColor: tag.color || "#6b7280" }}
                           title="Change color"
                         />
                       </PopoverTrigger>
@@ -503,8 +505,8 @@ export default function TagsPage() {
                         onChange={(e) => setEditDraft(e.target.value)}
                         onBlur={() => saveEdit(tag.id)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') saveEdit(tag.id);
-                          if (e.key === 'Escape') setEditingId(null);
+                          if (e.key === "Enter") saveEdit(tag.id);
+                          if (e.key === "Escape") setEditingId(null);
                         }}
                         className="flex-1 h-7 px-2 text-sm border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary"
                       />
@@ -522,7 +524,7 @@ export default function TagsPage() {
                       className="text-xs text-[#253a52] hover:underline font-medium cursor-pointer"
                       onClick={() => setSelectedTag(tag)}
                     >
-                      {tag.contact_count} contact{tag.contact_count !== 1 ? 's' : ''}
+                      {tag.contact_count} contact{tag.contact_count !== 1 ? "s" : ""}
                     </button>
                     <Button
                       variant="ghost"
@@ -547,7 +549,7 @@ export default function TagsPage() {
             <DialogTitle className="text-destructive">Delete tag "{deleteTarget?.name}"?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This will remove the tag from {deleteTarget?.contact_count || 0} contact{deleteTarget?.contact_count !== 1 ? 's' : ''}. This cannot be undone.
+            This will remove the tag from {deleteTarget?.contact_count || 0} contact{deleteTarget?.contact_count !== 1 ? "s" : ""}. This cannot be undone.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
@@ -556,7 +558,7 @@ export default function TagsPage() {
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
