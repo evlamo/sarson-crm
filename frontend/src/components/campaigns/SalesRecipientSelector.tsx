@@ -127,7 +127,7 @@ export function SalesRecipientSelector({
   // FIX 1: Separate contact search input (immediate) from query state (debounced)
   const [contactSearchInput, setContactSearchInput] = useState('');
   const [contactSearch, setContactSearch] = useState('');
-  const contactSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const contactSearchTimeoutRef = useRef<number | null>(null);
   
   // Pagination state for contacts list
   const [contactPage, setContactPage] = useState(1);
@@ -167,7 +167,6 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
-    refetchOnFocus: false, // FIX 5: Don't refetch aggressively on focus
   });
 
   // Fetch tags
@@ -179,7 +178,6 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
-    refetchOnFocus: false, // FIX 5: Don't refetch aggressively on focus
   });
 
   // Fetch available contacts with pagination support
@@ -199,7 +197,6 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
-    refetchOnFocus: false, // FIX 5: Don't refetch aggressively on focus
   });
 
   const lists = listsData?.data || [];
@@ -211,7 +208,7 @@ export function SalesRecipientSelector({
   // Filter lists and tags by search
   const filteredLists = useMemo(
     () =>
-      lists.filter((list) =>
+      lists.filter((list: CampaignList) =>
         list.name.toLowerCase().includes(listSearch.toLowerCase())
       ),
     [lists, listSearch]
@@ -219,7 +216,7 @@ export function SalesRecipientSelector({
 
   const filteredTags = useMemo(
     () =>
-      tags.filter((tag) =>
+      tags.filter((tag: Tag) =>
         tag.name.toLowerCase().includes(tagSearch.toLowerCase())
       ),
     [tags, tagSearch]
@@ -375,7 +372,7 @@ export function SalesRecipientSelector({
                     {listSearch ? 'No lists match' : 'No lists available'}
                   </p>
                 ) : (
-                  filteredLists.map((list) => (
+                  filteredLists.map((list: CampaignList) => (
                     <label
                       key={list.id}
                       className={`flex items-center gap-2 p-2 rounded cursor-pointer text-sm transition-colors ${
@@ -429,7 +426,7 @@ export function SalesRecipientSelector({
                     {tagSearch ? 'No tags match' : 'No tags available'}
                   </p>
                 ) : (
-                  filteredTags.map((tag) => (
+                  filteredTags.map((tag: Tag) => (
                     <button
                       key={tag.id}
                       onClick={() => toggleTag(tag.id)}
@@ -481,7 +478,7 @@ export function SalesRecipientSelector({
                     {contactSearch ? 'No contacts match' : 'No contacts available'}
                   </p>
                 ) : (
-                  contactsPage.map((contact) => (
+                  contactsPage.map((contact: AvailableContact) => (
                     <label
                       key={contact.id}
                       className={`flex items-center gap-2 p-2 rounded cursor-pointer text-sm transition-colors ${
@@ -592,7 +589,7 @@ export function SalesRecipientSelector({
                       Sample Contacts (first {preview.sample_contacts.length}):
                     </div>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {preview.sample_contacts.map((contact) => (
+                      {preview.sample_contacts.map((contact: ContactPreview) => (
                         <div
                           key={contact.id}
                           className="text-sm p-2 bg-white rounded border border-gray-200"
