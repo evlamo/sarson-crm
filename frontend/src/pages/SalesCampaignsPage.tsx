@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { SalesRecipientSelector } from "@/components/campaigns/SalesRecipientSelector";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -368,11 +368,41 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState('');
   const [addDrawerOpen, setAddDrawerOpen] = useState(false);
+  
+  // Search state with debounce
+  const [contactSearchInput, setContactSearchInput] = useState('');
+  const [contactSearch, setContactSearch] = useState('');
+  const contactSearchTimeoutRef = useRef<number | null>(null);
+
+  const handleContactSearchChange = useCallback((value: string) => {
+    setContactSearchInput(value);
+    
+    // Clear previous timeout
+    if (contactSearchTimeoutRef.current) {
+      clearTimeout(contactSearchTimeoutRef.current);
+    }
+    
+    // Set new timeout for debounced API call
+    contactSearchTimeoutRef.current = window.setTimeout(() => {
+      setContactSearch(value);
+    }, 400); // 400ms debounce
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (contactSearchTimeoutRef.current) {
+        clearTimeout(contactSearchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const { data, isLoading, isFetching } = useQuery<ContactsResponse>({
-    queryKey: ['sales-campaign-contacts', campaignId],
+    queryKey: ['sales-campaign-contacts', campaignId, contactSearch],
     queryFn: async () => {
-      const res = await api.get('/sales-campaigns/' + campaignId + '/contacts', { params: { per_page: 100 } });
+      const params: any = { per_page: 100 };
+      if (contactSearch) params.search = contactSearch;
+      const res = await api.get('/sales-campaigns/' + campaignId + '/contacts', { params });
       return res.data;
     },
   });
@@ -448,7 +478,17 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
   return (
     <div className="space-y-4">
       {/* Action bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search name, email, company..."
+            value={contactSearchInput}
+            onChange={(e) => handleContactSearchChange(e.target.value)}
+            className="pl-8"
+            disabled={contacts.length === 0}
+          />
+        </div>
         <div className="flex items-center gap-2">
           {isFetching && !isLoading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

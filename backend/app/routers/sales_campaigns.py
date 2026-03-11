@@ -9,7 +9,7 @@ import uuid as uuid_mod
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, desc, or_, literal, distinct
+from sqlalchemy import func, desc, or_, literal, distinct, case
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -424,12 +424,13 @@ def search_contacts_for_campaign(
 def list_campaign_contacts(
     campaign_id: UUID,
     status: Optional[str] = Query(None, pattern="^(active|complete|no|excluded)$"),
+    search: Optional[str] = Query(None, max_length=300),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List contacts in a sales campaign with their status."""
+    """List contacts in a sales campaign with their status, with optional search."""
     campaign = _get_campaign_or_404(campaign_id, db)
     
     query = (
@@ -441,13 +442,65 @@ def list_campaign_contacts(
     if status:
         query = query.filter(CampaignContact.status == status)
     
+    # Search support
+    relevance_score = None
+    if search:
+        search_clean = search.strip()
+        # Escape ILIKE wildcards to prevent pattern injection
+        search_escaped = search_clean.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+        
+        # Filter: must match name fields (primary), email (secondary), or company (fallback)
+        query = query.filter(
+            or_(
+                Contact.first_name.ilike(f"%{search_escaped}%"),
+                Contact.last_name.ilike(f"%{search_escaped}%"),
+                Contact.email.ilike(f"%{search_escaped}%"),
+                Contact.company.ilike(f"%{search_escaped}%"),
+            )
+        )
+        
+        # Build relevance score for sorting
+        search_lower = search_escaped.lower()
+        relevance_score = case(
+            # Exact first_name match (case-insensitive)
+            (func.lower(Contact.first_name) == search_lower, 1000),
+            # Exact last_name match
+            (func.lower(Contact.last_name) == search_lower, 900),
+            # Partial first_name match (starts with) - escape='\\' handles escaped wildcards
+            (func.lower(Contact.first_name).like(f"{search_lower}%", escape='\\'), 800),
+            # Partial last_name match (starts with) - escape='\\' handles escaped wildcards
+            (func.lower(Contact.last_name).like(f"{search_lower}%", escape='\\'), 700),
+            # Partial first_name (contains) - escape='\\' handles escaped wildcards
+            (func.lower(Contact.first_name).like(f"%{search_lower}%", escape='\\'), 600),
+            # Partial last_name (contains) - escape='\\' handles escaped wildcards
+            (func.lower(Contact.last_name).like(f"%{search_lower}%", escape='\\'), 550),
+            # Email match - escape='\\' handles escaped wildcards
+            (Contact.email.ilike(f"%{search_lower}%", escape='\\'), 100),
+            # Company match - escape='\\' handles escaped wildcards
+            (Contact.company.ilike(f"%{search_lower}%", escape='\\'), 50),
+            else_=0,
+        )
+    
     total = query.count()
-    records = (
-        query.order_by(desc(CampaignContact.added_at))
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
+    
+    # Apply pagination and ordering
+    if relevance_score is not None:
+        # When search is active, prioritize relevance, then name, then added_at
+        records = (
+            query
+            .order_by(relevance_score.desc(), Contact.last_name.asc().nullslast(), Contact.first_name.asc().nullslast(), desc(CampaignContact.added_at))
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+    else:
+        # Default: order by added_at desc
+        records = (
+            query.order_by(desc(CampaignContact.added_at))
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
     
     data = []
     for cc in records:
@@ -467,6 +520,7 @@ def list_campaign_contacts(
         ))
     
     return PaginatedCampaignContacts(data=data, total=total, page=page, per_page=per_page)
+
 
 
 # ── Add Contacts to Campaign ───────────────────────────────────────────────
