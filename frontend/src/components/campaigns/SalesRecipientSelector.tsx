@@ -4,6 +4,7 @@
  * Features:
  * - Large modal (90vw x 85vh) with split layout
  * - Multi-select for Lists, Tags, and Individual Contacts
+ * - Full pagination support for 500+ contacts
  * - 500ms debounced live preview
  * - DNC exclusion breakdown
  * - Source attribution per contact
@@ -28,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, AlertCircle, Users, Search, X } from 'lucide-react';
+import { Loader2, AlertCircle, Users, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,8 @@ interface Tag {
 
 interface AvailableContact {
   id: string;
+  first_name?: string;
+  last_name?: string;
   full_name: string;
   email: string;
   company?: string;
@@ -82,6 +85,13 @@ interface PreviewResponse {
   };
 }
 
+interface PaginatedResponse {
+  data: AvailableContact[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
 interface SalesRecipientSelectorProps {
   campaignId: string;
   isOpen: boolean;
@@ -107,20 +117,24 @@ export function SalesRecipientSelector({
   const [listSearch, setListSearch] = useState('');
   const [tagSearch, setTagSearch] = useState('');
   const [contactSearch, setContactSearch] = useState('');
+  
+  // Pagination state for contacts list
+  const [contactPage, setContactPage] = useState(1);
+  const CONTACTS_PER_PAGE = 50; // Show 50 at a time, but load all via pagination
 
   // Fetch lists
-  const { data: listsData } = useQuery<CampaignList[]>({
+  const { data: listsData } = useQuery<{ data: CampaignList[] }>({
     queryKey: ['campaign-lists'],
     queryFn: async () => {
       const res = await api.get('/lists');
-      return res.data.data || [];
+      return res.data;
     },
     staleTime: 30000,
     enabled: isOpen,
   });
 
   // Fetch tags
-  const { data: tagsData } = useQuery<Tag[]>({
+  const { data: tagsData } = useQuery<{ data: Tag[] }>({
     queryKey: ['tags'],
     queryFn: async () => {
       const res = await api.get('/tags');
@@ -130,25 +144,30 @@ export function SalesRecipientSelector({
     enabled: isOpen,
   });
 
-  // Fetch available contacts
-  const { data: contactsData } = useQuery<AvailableContact[]>({
-    queryKey: ['all-contacts'],
+  // Fetch available contacts with pagination support
+  // This now properly handles 500+ contacts via pagination
+  const { data: contactsData, isLoading: isLoadingContacts } = useQuery<PaginatedResponse>({
+    queryKey: ['all-contacts', contactPage, contactSearch],
     queryFn: async () => {
-      const res = await api.get(
-        '/contacts',
-        {
-          params: { per_page: 100 },
-        }
-      );
-      return res.data.data || [];
+      const params: Record<string, string | number> = {
+        page: contactPage,
+        per_page: CONTACTS_PER_PAGE,
+      };
+      if (contactSearch) {
+        params.search = contactSearch;
+      }
+      const res = await api.get('/contacts', { params });
+      return res.data;
     },
     staleTime: 30000,
     enabled: isOpen,
   });
 
-  const lists = listsData || [];
-  const tags = tagsData || [];
-  const contacts = contactsData || [];
+  const lists = listsData?.data || [];
+  const tags = tagsData?.data || [];
+  const contactsPage = contactsData?.data || [];
+  const totalContacts = contactsData?.total || 0;
+  const totalContactPages = Math.ceil(totalContacts / CONTACTS_PER_PAGE);
 
   // Filter lists and tags by search
   const filteredLists = useMemo(
@@ -165,16 +184,6 @@ export function SalesRecipientSelector({
         tag.name.toLowerCase().includes(tagSearch.toLowerCase())
       ),
     [tags, tagSearch]
-  );
-
-  const filteredContacts = useMemo(
-    () =>
-      contacts.filter(
-        (contact) =>
-          contact.full_name.toLowerCase().includes(contactSearch.toLowerCase()) ||
-          contact.email.toLowerCase().includes(contactSearch.toLowerCase())
-      ),
-    [contacts, contactSearch]
   );
 
   // Debounced preview fetch
@@ -198,7 +207,6 @@ export function SalesRecipientSelector({
               list_ids: selectedListIds,
               tag_ids: selectedTagIds,
               contact_ids: selectedContactIds,
-              
             }
           );
           setPreview(res.data.data);
@@ -229,8 +237,14 @@ export function SalesRecipientSelector({
       setListSearch('');
       setTagSearch('');
       setContactSearch('');
+      setContactPage(1);
     }
   }, [isOpen]);
+
+  // Reset contact page when search changes
+  useEffect(() => {
+    setContactPage(1);
+  }, [contactSearch]);
 
   const handleConfirm = () => {
     if (!preview || preview.final_count === 0) {
@@ -378,7 +392,7 @@ export function SalesRecipientSelector({
               </div>
             </div>
 
-            {/* Individual Contacts Multi-Select */}
+            {/* Individual Contacts Multi-Select with Pagination */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-sm font-semibold">Select Contacts</Label>
@@ -389,7 +403,7 @@ export function SalesRecipientSelector({
                 )}
               </div>
 
-              {contacts.length > 0 && (
+              {totalContacts > 0 && (
                 <div className="relative mb-2">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -401,17 +415,18 @@ export function SalesRecipientSelector({
                 </div>
               )}
 
-              <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2">
-                {contacts.length === 0 ? (
+              {/* Contacts List */}
+              <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2 bg-white">
+                {isLoadingContacts ? (
+                  <div className="flex items-center justify-center h-20">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : totalContacts === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-2">
-                    No contacts available
-                  </p>
-                ) : filteredContacts.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-2">
-                    No contacts match
+                    {contactSearch ? 'No contacts match' : 'No contacts available'}
                   </p>
                 ) : (
-                  filteredContacts.map((contact) => (
+                  contactsPage.map((contact) => (
                     <label
                       key={contact.id}
                       className={`flex items-center gap-2 p-2 rounded cursor-pointer text-sm transition-colors ${
@@ -438,6 +453,33 @@ export function SalesRecipientSelector({
                   ))
                 )}
               </div>
+
+              {/* Pagination Controls */}
+              {totalContactPages > 1 && (
+                <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                  <span>Page {contactPage} of {totalContactPages} ({totalContacts} total)</span>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setContactPage(Math.max(1, contactPage - 1))}
+                      disabled={contactPage <= 1 || isLoadingContacts}
+                    >
+                      <ChevronLeft className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setContactPage(Math.min(totalContactPages, contactPage + 1))}
+                      disabled={contactPage >= totalContactPages || isLoadingContacts}
+                    >
+                      <ChevronRight className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -446,6 +488,7 @@ export function SalesRecipientSelector({
             {isLoadingPreview ? (
               <div className="flex items-center justify-center h-32">
                 <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   <div className="text-sm">Loading preview...</div>
                 </div>
               </div>
@@ -493,7 +536,7 @@ export function SalesRecipientSelector({
                     <div className="text-sm font-medium mb-2 text-muted-foreground">
                       Sample Contacts (first {preview.sample_contacts.length}):
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {preview.sample_contacts.map((contact) => (
                         <div
                           key={contact.id}
