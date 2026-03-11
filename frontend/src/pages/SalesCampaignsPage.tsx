@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SalesRecipientSelector } from "@/components/campaigns/SalesRecipientSelector";
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tantml:query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -163,6 +169,7 @@ const STATUS_COLORS: Record<string, string> = {
   active: 'bg-green-100 text-green-700 border-green-200',
   paused: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   completed: 'bg-blue-100 text-blue-700 border-blue-200',
+  archived: 'bg-gray-100 text-gray-700 border-gray-200',
 };
 
 function LoadingSpinner({ text = 'Loading...' }: { text?: string }) {
@@ -179,6 +186,52 @@ function StatusBadge({ status }: { status: string }) {
     <Badge variant="outline" className={STATUS_COLORS[status] || 'bg-gray-100 text-gray-700'}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </Badge>
+  );
+}
+
+function StatusDropdown({ campaignId, currentStatus, onSuccess }: { campaignId: string; currentStatus: string; onSuccess: () => void }) {
+  const updateStatus = useMutation({
+    mutationFn: async (newStatus: string) => {
+      await api.patch(`/sales-campaigns/${campaignId}`, { status: newStatus });
+    },
+    onSuccess: () => {
+      onSuccess();
+      toast.success('Status updated');
+    },
+    onError: () => {
+      toast.error('Failed to update status');
+    }
+  });
+
+  const statuses = [
+    { value: 'active', label: 'Active' },
+    { value: 'paused', label: 'Paused' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'archived', label: 'Archived' },
+  ];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <div className="cursor-pointer">
+          <StatusBadge status={currentStatus} />
+        </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        {statuses.map((status) => (
+          <DropdownMenuItem
+            key={status.value}
+            onClick={(e) => {
+              e.stopPropagation();
+              updateStatus.mutate(status.value);
+            }}
+            disabled={status.value === currentStatus}
+          >
+            {status.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -598,8 +651,12 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
   );
 }
 
-// Add Contacts Drawer Component
+// Email Campaigns Tab with Edit Functionality
 function EmailCampaignsTab({ campaignId }: { campaignId: string }) {
+  const queryClient = useQueryClient();
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+
   const { data, isLoading, isFetching } = useQuery<EmailCampaignsResponse>({
     queryKey: ['email-campaigns-for-sales', campaignId],
     queryFn: async () => {
@@ -626,7 +683,16 @@ function EmailCampaignsTab({ campaignId }: { campaignId: string }) {
         <div className="text-center py-8 text-muted-foreground">No email campaigns linked</div>
       ) : (
         campaigns.map((ec) => (
-          <Card key={ec.id}>
+          <Card 
+            key={ec.id}
+            className={ec.status === 'draft' ? 'cursor-pointer hover:shadow-md transition-all' : ''}
+            onClick={() => {
+              if (ec.status === 'draft') {
+                setEditingCampaignId(ec.id);
+                setEditModalOpen(true);
+              }
+            }}
+          >
             <CardContent className="p-4 flex items-center justify-between">
               <div>
                 <h4 className="font-medium">{ec.name}</h4>
@@ -643,6 +709,19 @@ function EmailCampaignsTab({ campaignId }: { campaignId: string }) {
           </Card>
         ))
       )}
+      <EditCampaignModal
+        open={editModalOpen}
+        campaignId={editingCampaignId}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingCampaignId(null);
+        }}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['email-campaigns-for-sales', campaignId] });
+          setEditModalOpen(false);
+          setEditingCampaignId(null);
+        }}
+      />
     </div>
   );
 }
@@ -821,9 +900,163 @@ function StatsTab({ campaignId }: { campaignId: string }) {
   );
 }
 
+// EditCampaignModal Component
+interface EditCampaignModalProps {
+  open: boolean;
+  campaignId: string | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function EditCampaignModal({ open, campaignId, onClose, onSuccess }: EditCampaignModalProps) {
+  const [form, setForm] = useState({
+    name: '',
+    subject: '',
+    preview_text: '',
+    from_name: '',
+    from_email: '',
+    reply_to: '',
+    body_html: '',
+  });
+
+  const { data: campaignData, isLoading } = useQuery({
+    queryKey: ['campaign', campaignId],
+    queryFn: async () => {
+      if (!campaignId) return null;
+      const res = await api.get(`/campaigns/${campaignId}`);
+      return res.data.data;
+    },
+    enabled: !!campaignId && open,
+  });
+
+  useEffect(() => {
+    if (campaignData) {
+      setForm({
+        name: campaignData.name || '',
+        subject: campaignData.subject || '',
+        preview_text: campaignData.preview_text || '',
+        from_name: campaignData.from_name || '',
+        from_email: campaignData.from_email || '',
+        reply_to: campaignData.reply_to || '',
+        body_html: campaignData.body_html || '',
+      });
+    }
+  }, [campaignData]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!campaignId) throw new Error('No campaign ID');
+      await api.patch(`/campaigns/${campaignId}`, form);
+    },
+    onSuccess: () => {
+      toast.success('Campaign updated');
+      onSuccess();
+      onClose();
+    },
+    onError: () => {
+      toast.error('Failed to update campaign');
+    },
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate();
+  };
+
+  if (!open) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Email Campaign</DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="name">Campaign Name</Label>
+              <Input 
+                id="name" 
+                value={form.name} 
+                onChange={(e) => setForm({ ...form, name: e.target.value })} 
+              />
+            </div>
+            <div>
+              <Label htmlFor="subject">Subject Line</Label>
+              <Input 
+                id="subject" 
+                value={form.subject} 
+                onChange={(e) => setForm({ ...form, subject: e.target.value })} 
+              />
+            </div>
+            <div>
+              <Label htmlFor="preview">Preview Text</Label>
+              <Input 
+                id="preview" 
+                value={form.preview_text} 
+                onChange={(e) => setForm({ ...form, preview_text: e.target.value })} 
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="from_name">From Name</Label>
+                <Input 
+                  id="from_name" 
+                  value={form.from_name} 
+                  onChange={(e) => setForm({ ...form, from_name: e.target.value })} 
+                />
+              </div>
+              <div>
+                <Label htmlFor="from_email">From Email</Label>
+                <Input 
+                  id="from_email" 
+                  type="email" 
+                  value={form.from_email} 
+                  onChange={(e) => setForm({ ...form, from_email: e.target.value })} 
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="reply_to">Reply-To Email</Label>
+              <Input 
+                id="reply_to" 
+                type="email" 
+                value={form.reply_to} 
+                onChange={(e) => setForm({ ...form, reply_to: e.target.value })} 
+              />
+            </div>
+            <div>
+              <Label htmlFor="body_html">Email Body (HTML)</Label>
+              <textarea 
+                id="body_html" 
+                value={form.body_html} 
+                onChange={(e) => setForm({ ...form, body_html: e.target.value })} 
+                className="w-full min-h-[200px] p-2 border rounded-md font-mono text-sm"
+              />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button 
+            onClick={handleSave} 
+            disabled={saveMutation.isPending || isLoading}
+            className="bg-[#253a52] hover:bg-[#253a52]/90"
+          >
+            {saveMutation.isPending ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function SalesCampaignsPage() {
   const queryClient = useQueryClient();
-    const [removeModalOpen, setRemoveModalOpen] = useState(false);
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
   const [removeModalContact, setRemoveModalContact] = useState<{ id: string; name: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -887,7 +1120,11 @@ export default function SalesCampaignsPage() {
                           <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{c.email_campaign_count}</span>
                         </div>
                       </div>
-                      <StatusBadge status={c.status} />
+                      <StatusDropdown 
+                        campaignId={c.id} 
+                        currentStatus={c.status}
+                        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['sales-campaigns'] })}
+                      />
                     </div>
                   </CardContent>
                 </Card>
@@ -906,7 +1143,11 @@ export default function SalesCampaignsPage() {
                   <h1 className="text-xl font-semibold text-[#253a52]">{selectedCampaign.name}</h1>
                   {selectedCampaign.description && <p className="text-sm text-muted-foreground mt-1">{selectedCampaign.description}</p>}
                 </div>
-                <StatusBadge status={selectedCampaign.status} />
+                <StatusDropdown 
+                  campaignId={selectedCampaign.id}
+                  currentStatus={selectedCampaign.status}
+                  onSuccess={() => queryClient.invalidateQueries({ queryKey: ['sales-campaigns'] })}
+                />
               </div>
               <div className="flex gap-1 mt-4 border-b">
                 <button className={tabClass('contacts')} onClick={() => setActiveTab('contacts')}><Users className="h-4 w-4 inline mr-1.5" />Contacts</button>
@@ -934,5 +1175,3 @@ export default function SalesCampaignsPage() {
     </div>
   );
 }
-
-// Add RemoveContactModal insertion after CreateCampaignModal
