@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Boolean, Integer, Numeric, DateTime, ForeignKey, Text, ARRAY, Date, event, Index, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, Integer, Numeric, DateTime, ForeignKey, Text, ARRAY, Date, event, Index, UniqueConstraint, Enum
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.models.enums import ContactStatus
 
 def _utcnow():
     return datetime.now(timezone.utc)
@@ -47,7 +48,7 @@ class Contact(Base):
 
     # CRM
     contact_type = Column(String, default="prospect", index=True)
-    status = Column(String, default="active", index=True)
+    status = Column(Enum(ContactStatus), default=ContactStatus.PROSPECT, index=True)
     lead_source = Column(String)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True)
     assigned_to = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))

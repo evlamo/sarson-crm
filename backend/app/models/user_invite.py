@@ -5,14 +5,7 @@ from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.database import Base
-import enum
-
-
-class InviteStatus(str, enum.Enum):
-    pending = "pending"
-    accepted = "accepted"
-    revoked = "revoked"
-    expired = "expired"
+from app.models.enums import InviteStatus
 
 
 class UserInvite(Base):

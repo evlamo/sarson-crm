@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, Numeric, ARRAY
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean, Numeric, ARRAY, Enum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.models.enums import CampaignStatus
 
 
 class EmailTemplate(Base):
@@ -37,7 +38,7 @@ class EmailCampaign(Base):
     from_name = Column(String, nullable=False, default="Speranza CRM")
     from_email = Column(String, nullable=False, server_default="info@sarsonfunds.com")
     reply_to = Column(String)
-    status = Column(String, default="draft", index=True)
+    status = Column(Enum(CampaignStatus), default=CampaignStatus.DRAFT, index=True)
     scheduled_at = Column(DateTime(timezone=True))
     sent_at = Column(DateTime(timezone=True))
     sendgrid_batch_id = Column(String)
