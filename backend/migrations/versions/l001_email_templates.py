@@ -1,11 +1,23 @@
-"""Email templates table for visual editor."""
+"""Email templates table for visual editor.
+
+Revision ID: l001_email_templates
+Revises: k001_nested_campaigns
+Create Date: 2026-03-11 22:00:00.000000
+
+"""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 
+# revision identifiers, used by Alembic.
+revision = 'l001_email_templates'
+down_revision = 'k001_nested_campaigns'
+branch_labels = None
+depends_on = None
 
-def upgrade():
+
+def upgrade() -> None:
     op.create_table(
         'email_templates',
         sa.Column('id', UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
@@ -25,7 +37,7 @@ def upgrade():
     op.create_index('ix_email_templates_created_by', 'email_templates', ['created_by'])
 
 
-def downgrade():
+def downgrade() -> None:
     op.drop_index('ix_email_templates_created_by')
     op.drop_index('ix_email_templates_name')
     op.drop_table('email_templates')
