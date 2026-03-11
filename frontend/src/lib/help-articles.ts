@@ -810,7 +810,7 @@ Audit logs are retained for 2 years. Contact admin for older records or exports.
 - Use for compliance audits
 - Investigate issues by tracing actions
 - Export logs for external analysis`
-  }
+  },
   // Version History
   {
     id: 'contacts-version-history',

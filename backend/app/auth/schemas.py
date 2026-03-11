@@ -2,6 +2,22 @@ from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
 import uuid
+import string
+
+# Helper for password validation
+def validate_password_strength(password: str) -> str:
+    """Validate password meets security requirements."""
+    if len(password) < 12:
+        raise ValueError('Password must be at least 12 characters')
+    if not any(c.isupper() for c in password):
+        raise ValueError('Password must contain at least one uppercase letter')
+    if not any(c.islower() for c in password):
+        raise ValueError('Password must contain at least one lowercase letter')
+    if not any(c.isdigit() for c in password):
+        raise ValueError('Password must contain at least one number')
+    if not any(c in string.punctuation for c in password):
+        raise ValueError('Password must contain at least one special character (!@#$%^&*etc.)')
+    return password
 
 class LoginRequest(BaseModel):
     email: str
@@ -47,23 +63,15 @@ class UserCreate(BaseModel):
     @field_validator('password')
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters')
-        if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one number')
-        return v
+        return validate_password_strength(v)
 
 class PasswordResetRequest(BaseModel):
     new_password: str
 
     @field_validator("new_password")
     @classmethod
-    def password_min_length(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        return v
+    def password_strength(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -83,13 +91,7 @@ class ResetPasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one number")
-        return v
+        return validate_password_strength(v)
 
 class VerifyEmailRequest(BaseModel):
     token: str
@@ -116,12 +118,4 @@ class ChangePasswordRequest(BaseModel):
     @field_validator('new_password')
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters')
-        if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not any(c.islower() for c in v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one number')
-        return v
+        return validate_password_strength(v)
