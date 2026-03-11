@@ -114,7 +114,7 @@ export function SalesRecipientSelector({
     queryKey: ['campaign-lists'],
     queryFn: async () => {
       const res = await api.get('/api/v1/lists');
-      return res.data;
+      return res.data.data || [];
     },
     staleTime: 30000,
     enabled: isOpen,
@@ -141,7 +141,7 @@ export function SalesRecipientSelector({
           params: { per_page: 100 },
         }
       );
-      return res.data?.data || [];
+      return res.data.data?.contacts || [];
     },
     staleTime: 30000,
     enabled: isOpen && !!campaignId,
