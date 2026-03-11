@@ -29,7 +29,7 @@ def list_tags(
             .order_by(Tag.name)
             .all()
         )
-        return [
+        tags_list = [
             {
                 "id": str(tag.id),
                 "name": tag.name,
@@ -39,7 +39,10 @@ def list_tags(
             }
             for tag, count in results
         ]
-    return db.query(Tag).order_by(Tag.name).all()
+        return {"data": tags_list}
+    
+    tags = db.query(Tag).order_by(Tag.name).all()
+    return {"data": tags}
 
 
 @router.post("/tags", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
