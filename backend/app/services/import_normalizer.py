@@ -32,11 +32,11 @@ HEADER_ALIASES: Dict[str, str] = {
     "last_name": "last_name", "surname": "last_name", "family name": "last_name",
     # email
     "email": "email", "email address": "email", "e-mail": "email",
-    "email_address": "email", "e_mail": "email",
+    "email_address": "email", "e_mail": "email", "e-mail address": "email",
     # phone
     "phone": "phone", "phone number": "phone", "telephone": "phone",
     "mobile": "phone", "cell": "phone", "cell phone": "phone",
-    "phone_number": "phone", "mobile phone": "phone",
+    "phone_number": "phone", "mobile phone": "phone", "telephone number": "phone",
     # title
     "title": "title", "job title": "title", "position": "title",
     "job_title": "title", "role": "title",
