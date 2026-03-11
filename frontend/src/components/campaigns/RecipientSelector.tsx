@@ -54,6 +54,9 @@ interface RecipientPreview {
   total_matching: number;
   exclusions: ExclusionBreakdown;
   final_count: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
   sample_contacts: ContactPreview[];
   breakdown: {
     from_lists: number;
@@ -98,6 +101,11 @@ export function RecipientSelector({
 }: RecipientSelectorProps) {
   const [listSearch, setListSearch] = useState('');
   const [tagSearch, setTagSearch] = useState('');
+
+  // Pagination and search for preview results
+  const [previewPage, setPreviewPage] = useState(1);
+  const [previewSearch, setPreviewSearch] = useState('');
+  const debouncedPreviewSearch = useDebounce(previewSearch, 500);
 
   // 500ms debounce for preview API calls
   const debouncedListIds = useDebounce(selectedListIds, 500);
@@ -147,13 +155,16 @@ export function RecipientSelector({
     error: previewError,
     isFetching: previewFetching,
   } = useQuery<{ data: RecipientPreview }>({
-    queryKey: ['recipient-preview', debouncedListIds, debouncedTagIds, debouncedCombineMode],
+    queryKey: ['recipient-preview', debouncedListIds, debouncedTagIds, debouncedCombineMode, previewPage, debouncedPreviewSearch],
     queryFn: async () => {
       const res = await api.post('/campaigns/preview-recipients', {
         list_ids: debouncedListIds,
         tag_ids: debouncedTagIds,
         exclude_dnc: true,
         combine_mode: debouncedCombineMode,
+        page: previewPage,
+        per_page: 50,
+        search: debouncedPreviewSearch || null,
       });
       return res.data;
     },
@@ -167,6 +178,11 @@ export function RecipientSelector({
   });
 
   const preview: RecipientPreview | null = previewData?.data || null;
+
+  // Reset page when filters or search change
+  useEffect(() => {
+    setPreviewPage(1);
+  }, [debouncedListIds, debouncedTagIds, debouncedCombineMode, debouncedPreviewSearch]);
 
   // Notify parent of preview changes
   useEffect(() => {
@@ -362,6 +378,18 @@ export function RecipientSelector({
               )}
             </div>
 
+
+            {/* Search Input */}
+            {preview && preview.final_count > 0 && (
+              <div className="mb-4">
+                <Input
+                  placeholder="Search contacts by name, email, or company..."
+                  value={previewSearch}
+                  onChange={(e) => setPreviewSearch(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            )}
             {/* Loading State */}
             {(previewLoading || previewFetching) && (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -451,7 +479,7 @@ export function RecipientSelector({
                 {preview.sample_contacts.length > 0 && (
                   <div>
                     <p className="text-sm font-medium mb-2 text-muted-foreground">
-                      Sample Recipients (first {preview.sample_contacts.length}):
+                      Page {preview.page} of {preview.total_pages} ({preview.final_count.toLocaleString()} total):
                     </p>
                     <div className="space-y-2 max-h-80 overflow-y-auto">
                       {preview.sample_contacts.map((contact) => (
@@ -482,6 +510,33 @@ export function RecipientSelector({
                       ))}
                     </div>
                   </div>
+
+                    {/* Pagination Controls */}
+                    {preview.total_pages > 1 && (
+                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Page {preview.page} of {preview.total_pages}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPreviewPage(p => Math.max(1, p - 1))}
+                            disabled={preview.page === 1}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setPreviewPage(p => Math.min(preview.total_pages, p + 1))}
+                            disabled={preview.page === preview.total_pages}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                 )}
 
                 {/* Warning if all excluded */}

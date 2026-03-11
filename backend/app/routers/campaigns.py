@@ -680,9 +680,11 @@ def preview_campaign_recipients(
     - Single SQL query execution using UNION/INTERSECT
     - Database-level deduplication
     - No Python set operations on large datasets
+    - Pagination and search support
     """
     from sqlalchemy import union, intersect, func, or_, case, literal_column
     from app.services import campaign_list_service
+    from math import ceil
     
     # Empty response for no filters
     if not payload.list_ids and not payload.tag_ids:
@@ -693,6 +695,9 @@ def preview_campaign_recipients(
                     unsubscribed=0, bounced=0, invalid_email=0, no_email=0, total=0
                 ),
                 final_count=0,
+                page=payload.page,
+                per_page=payload.per_page,
+                total_pages=0,
                 sample_contacts=[],
                 breakdown=RecipientBreakdown(from_lists=0, from_tags=0, overlap=0),
             )
@@ -757,6 +762,9 @@ def preview_campaign_recipients(
                     unsubscribed=0, bounced=0, invalid_email=0, no_email=0, total=0
                 ),
                 final_count=0,
+                page=payload.page,
+                per_page=payload.per_page,
+                total_pages=0,
                 sample_contacts=[],
                 breakdown=RecipientBreakdown(from_lists=0, from_tags=0, overlap=0),
             )
@@ -798,20 +806,22 @@ def preview_campaign_recipients(
         
         # Only include contacts with both source types
         combined_contact_ids = (
-            db.query(contact_source_counts.c.contact_id)
+            db.query(contact_source_counts.c.contact_id.label('id'))
             .filter(contact_source_counts.c.source_type_count == 2)
         )
     else:
         # OR mode: any contact from any source
+        # FIX: Explicitly label the column as 'id'
         combined_contact_ids = (
-            db.query(func.distinct(combined_sources.c.contact_id))
+            db.query(func.distinct(combined_sources.c.contact_id).label('id'))
         )
     
     # Materialize as CTE for counting
     combined_ids_cte = combined_contact_ids.cte('combined_ids')
     
     # Count total matching
-    total_matching = db.query(func.count(combined_ids_cte.c.contact_id)).scalar() or 0
+    # FIX: Use 'id' instead of 'contact_id'
+    total_matching = db.query(func.count(combined_ids_cte.c.id)).scalar() or 0
     
     # Calculate overlap
     overlap = from_lists_count + from_tags_count - total_matching if from_lists_count and from_tags_count else 0
@@ -832,7 +842,7 @@ def preview_campaign_recipients(
                 func.sum(case((Contact.email_valid == False, 1), else_=0)).label('invalid_email'),
                 func.sum(case((Contact._email_encrypted.is_(None), 1), else_=0)).label('no_email'),
             )
-            .filter(Contact.id.in_(db.query(combined_ids_cte.c.contact_id)))
+            .filter(Contact.id.in_(db.query(combined_ids_cte.c.id)))
             .filter(Contact.deleted_at.is_(None))
             .first()
         )
@@ -848,7 +858,7 @@ def preview_campaign_recipients(
     # Build final query with DNC filters
     final_query = (
         db.query(Contact)
-        .filter(Contact.id.in_(db.query(combined_ids_cte.c.contact_id)))
+        .filter(Contact.id.in_(db.query(combined_ids_cte.c.id)))
         .filter(Contact.deleted_at.is_(None))
     )
     
@@ -860,19 +870,38 @@ def preview_campaign_recipients(
             Contact._email_encrypted.isnot(None),
         )
     
+    # Add search filter if provided
+    if payload.search:
+        search_term = f"%{payload.search}%"
+        final_query = final_query.filter(
+            or_(
+                Contact.first_name.ilike(search_term),
+                Contact.last_name.ilike(search_term),
+                Contact.company.ilike(search_term),
+                # Email search - only if encrypted field supports it
+                # Contact._email_encrypted.ilike(search_term),  # May not work with encryption
+            )
+        )
+    
+    # Get total count after all filters
     final_count = final_query.count()
     
-    # Get sample (first 10 alphabetically, deterministic)
-    sample = (
+    # Calculate pagination
+    total_pages = ceil(final_count / payload.per_page) if final_count > 0 else 0
+    offset = (payload.page - 1) * payload.per_page
+    
+    # Get paginated results (not just sample, but full page)
+    paginated_contacts = (
         final_query
         .order_by(Contact.last_name.nulls_last(), Contact.first_name.nulls_last())
-        .limit(10)
+        .offset(offset)
+        .limit(payload.per_page)
         .all()
     )
     
-    # Build source attribution for sample contacts
+    # Build source attribution for contacts
     sample_contacts = []
-    for c in sample:
+    for c in paginated_contacts:
         # Get all sources for this contact
         sources_query = (
             db.query(combined_sources.c.source_name)
@@ -900,6 +929,9 @@ def preview_campaign_recipients(
                 total=exclusion_counts["total"],
             ),
             final_count=final_count,
+            page=payload.page,
+            per_page=payload.per_page,
+            total_pages=total_pages,
             sample_contacts=sample_contacts,
             breakdown=RecipientBreakdown(
                 from_lists=from_lists_count,

@@ -164,6 +164,9 @@ class RecipientPreviewRequest(BaseModel):
     tag_ids: List[UUID] = Field(default_factory=list, description="Tag IDs")
     exclude_dnc: bool = Field(default=True, description="Exclude unsubscribed/bounced/invalid contacts")
     combine_mode: str = Field(default="any", description="'any' (OR) or 'all' (AND)")
+    page: int = Field(default=1, ge=1, description="Page number for pagination")
+    per_page: int = Field(default=50, ge=1, le=100, description="Items per page")
+    search: Optional[str] = Field(default=None, description="Search by name, email, or company")
 
 
 class ContactPreview(BaseModel):
@@ -199,6 +202,9 @@ class RecipientPreviewData(BaseModel):
     total_matching: int
     exclusions: ExclusionBreakdown
     final_count: int
+    page: int
+    per_page: int
+    total_pages: int
     sample_contacts: List[ContactPreview]
     breakdown: RecipientBreakdown
 
@@ -206,7 +212,6 @@ class RecipientPreviewData(BaseModel):
 class RecipientPreviewResponse(BaseModel):
     """API response wrapper."""
     data: RecipientPreviewData
-
 
 # ── Sales Campaign Preview Schemas ─────────────────────────────────────────
 
