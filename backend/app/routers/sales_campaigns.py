@@ -16,7 +16,7 @@ from app.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models.user import User
 from app.models.contact import Contact
-from app.models.tag import Tag
+from app.models.tag import Tag, ContactTag
 from app.models.static_list import StaticListMember
 from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.campaign_segment import CampaignSegment
@@ -1157,7 +1157,8 @@ def preview_campaign_recipients(
                 literal("tag").label("source_type"),
                 literal("Tag").label("source_name")
             )
-            .join(Tag, Contact.tags.contains(Tag))
+            .join(ContactTag, Contact.id == ContactTag.c.contact_id)
+            .join(Tag, ContactTag.c.tag_id == Tag.id)
             .filter(Tag.id.in_(body.tag_ids))
             .distinct(Contact.id)
         )
