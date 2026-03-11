@@ -128,7 +128,7 @@ def _build_response(contact: Contact) -> ContactResponse:
     return data
 
 
-def _build_search_relevance_score(search_term: str):
+def _build_search_relevance_score(search_escaped: str, search_clean: str):
     """
     Build a CASE expression for relevance scoring.
     Higher scores = more relevant results.
@@ -139,27 +139,31 @@ def _build_search_relevance_score(search_term: str):
     - Partial last_name match: 700
     - Email match: 100
     - Company match: 50
+    
+    Args:
+        search_escaped: LIKE-escaped search term (for pattern matching with proper escaping)
+        search_clean: Original search term (for full-text search)
     """
-    search_lower = search_term.lower()
+    search_lower = search_escaped.lower()
     return case(
         # Exact first_name match (case-insensitive)
         (func.lower(Contact.first_name) == search_lower, 1000),
         # Exact last_name match
         (func.lower(Contact.last_name) == search_lower, 900),
-        # Partial first_name match (starts with)
-        (func.lower(Contact.first_name).like(f"{search_lower}%"), 800),
-        # Partial last_name match (starts with)
-        (func.lower(Contact.last_name).like(f"{search_lower}%"), 700),
-        # Partial first_name (contains)
-        (func.lower(Contact.first_name).like(f"%{search_lower}%"), 600),
-        # Partial last_name (contains)
-        (func.lower(Contact.last_name).like(f"%{search_lower}%"), 550),
-        # Email match
-        (Contact.email.ilike(f"%{search_lower}%"), 100),
-        # Company match
-        (Contact.company.ilike(f"%{search_lower}%"), 50),
+        # Partial first_name match (starts with) - escape='\' handles escaped wildcards
+        (func.lower(Contact.first_name).like(f"{search_lower}%", escape='\\'), 800),
+        # Partial last_name match (starts with) - escape='\' handles escaped wildcards
+        (func.lower(Contact.last_name).like(f"{search_lower}%", escape='\\'), 700),
+        # Partial first_name (contains) - escape='\' handles escaped wildcards
+        (func.lower(Contact.first_name).like(f"%{search_lower}%", escape='\\'), 600),
+        # Partial last_name (contains) - escape='\' handles escaped wildcards
+        (func.lower(Contact.last_name).like(f"%{search_lower}%", escape='\\'), 550),
+        # Email match - escape='\' handles escaped wildcards
+        (Contact.email.ilike(f"%{search_lower}%", escape='\\'), 100),
+        # Company match - escape='\' handles escaped wildcards
+        (Contact.company.ilike(f"%{search_lower}%", escape='\\'), 50),
         # Full-text search match
-        (Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_term)), 200),
+        (Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_clean)), 200),
         else_=0,
     )
 
@@ -232,7 +236,7 @@ def list_contacts(
         )
         
         # Build relevance score for sorting
-        relevance_score = _build_search_relevance_score(search_clean)
+        relevance_score = _build_search_relevance_score(search_escaped, search_clean)
 
     if status:
         query = query.filter(Contact.status == status)
@@ -263,22 +267,18 @@ def list_contacts(
     # Determine sort order: if search is active, use relevance first; otherwise use requested sort
     if relevance_score is not None:
         # When search is active, prioritize relevance, then name
-        query = query.add_columns(relevance_score.label("relevance"))
+        # OPTIMIZATION: Fetch contacts directly with relevance scoring in single query
+        # to avoid re-querying pattern that added latency
         sort_expr = relevance_score.desc()
         secondary = Contact.last_name.asc().nullslast()
         tertiary = Contact.first_name.asc().nullslast()
-        query = query.order_by(sort_expr, secondary, tertiary)
-        
-        # Re-query without relevance column for the actual result
-        contact_ids = [row[0].id for row in query.offset((page - 1) * per_page).limit(per_page).all()]
-        contacts = db.query(Contact).options(
-            joinedload(Contact.tags), 
-            joinedload(Contact.company_obj)
-        ).filter(Contact.id.in_(contact_ids)).all() if contact_ids else []
-        
-        # Sort results by relevance order
-        relevance_dict = {cid: idx for idx, cid in enumerate(contact_ids)}
-        contacts = sorted(contacts, key=lambda c: relevance_dict.get(c.id, float('inf')))
+        contacts = (
+            query
+            .order_by(sort_expr, secondary, tertiary)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
     else:
         # No search: use standard sorting
         sort_col = SORTABLE.get(sort, Contact.last_name)
