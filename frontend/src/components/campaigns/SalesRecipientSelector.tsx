@@ -272,7 +272,7 @@ export function SalesRecipientSelector({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="!w-[2400px] !max-w-[2400px] h-[80vh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="!w-[1440px] !max-w-[1440px] h-[80vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle>Add Contacts to Campaign</DialogTitle>
         </DialogHeader>
