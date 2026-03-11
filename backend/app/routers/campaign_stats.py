@@ -19,6 +19,7 @@ from app.auth.dependencies import get_current_user
 from app.config import settings as app_settings
 from app.models.user import User
 from app.models.campaign import EmailCampaign
+from app.models.sales_campaign import SalesCampaign
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,9 @@ class CampaignStat(BaseModel):
     unsubscribe_rate: float = 0.0
     bounce_rate: float = 0.0
     status: str = "sent"
+    # Sales campaign attribution
+    sales_campaign_id: Optional[str] = None
+    sales_campaign_name: Optional[str] = None
 
 
 class CampaignSummary(BaseModel):
@@ -182,12 +186,20 @@ async def _fetch_mailchimp_cached(cache_key: str) -> Optional[List[CampaignStat]
 
 
 def _fetch_campaigns_from_db(db: Session) -> List[CampaignStat]:
-    """Fetch campaign stats from local database."""
+    """Fetch campaign stats from local database with sales campaign attribution."""
+    # Query campaigns with sales campaign JOIN
     campaigns = db.query(EmailCampaign).filter(EmailCampaign.status == "sent").all()
     results = []
     for c in campaigns:
         delivered = c.delivered_count or 0
         recipients = c.recipient_count or 0
+        # Get sales campaign name if this campaign belongs to one
+        sales_campaign_name = None
+        sales_campaign_id = None
+        if c.sales_campaign and c.sales_campaign_id:
+            sales_campaign_id = str(c.sales_campaign_id)
+            sales_campaign_name = c.sales_campaign.name
+        
         results.append(CampaignStat(
             id=str(c.id),
             name=c.name,
@@ -203,6 +215,8 @@ def _fetch_campaigns_from_db(db: Session) -> List[CampaignStat]:
             unsubscribe_rate=round(c.unsubscribe_count / delivered * 100, 2) if delivered > 0 else 0,
             bounce_rate=round(c.bounce_count / recipients * 100, 2) if recipients > 0 else 0,
             status=c.status,
+            sales_campaign_id=sales_campaign_id,
+            sales_campaign_name=sales_campaign_name,
         ))
     return results
 

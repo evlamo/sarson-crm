@@ -1,9 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { formatDate } from '@/lib/formatDate';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -28,6 +35,13 @@ interface CampaignStat {
   unsubscribe_rate: number;
   bounce_rate: number;
   status: string;
+  sales_campaign_id?: string | null;
+  sales_campaign_name?: string | null;
+}
+
+interface SalesCampaign {
+  id: string;
+  name: string;
 }
 
 interface CampaignSummary {
@@ -67,7 +81,18 @@ function KPICard({ label, value, suffix }: { label: string; value: string | numb
 }
 
 export default function CampaignStatsPage() {
+  const [selectedSalesCampaignId, setSelectedSalesCampaignId] = useState<string>('all');
+  
   useEffect(() => { document.title = 'Campaign Stats — Sarson Funds CRM'; }, []);
+
+  // Fetch sales campaigns for filter dropdown
+  const { data: salesCampaigns = [] } = useQuery<SalesCampaign[]>({
+    queryKey: ['sales-campaigns-filter-stats'],
+    queryFn: async () => {
+      const res = await api.get('/sales-campaigns', { params: { per_page: 100 } });
+      return res.data.data || [];
+    },
+  });
 
   const { data: summary, isLoading: summaryLoading, isError: summaryError } = useQuery<CampaignSummary>({
     queryKey: ['campaign-stats-summary'],
@@ -86,15 +111,33 @@ export default function CampaignStatsPage() {
   });
 
   const source = summary?.source || statsData?.source || 'demo';
-  const campaigns = statsData?.campaigns || [];
+  const allCampaigns = statsData?.campaigns || [];
   const isDemo = source === 'demo';
+  
+  // Filter campaigns by selected sales campaign
+  const campaigns = selectedSalesCampaignId === 'all'
+    ? allCampaigns
+    : allCampaigns.filter(c => c.sales_campaign_id === selectedSalesCampaignId);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">📊 Campaign Stats</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Email campaign performance overview</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">📊 Campaign Stats</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Email campaign performance overview</p>
+          </div>
+          <Select value={selectedSalesCampaignId} onValueChange={setSelectedSalesCampaignId}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Filter by Sales Campaign" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Campaigns</SelectItem>
+              {salesCampaigns.map((sc) => (
+                <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <Badge variant={isDemo ? 'secondary' : 'default'} className="text-xs">
           {isDemo ? '🧪 Demo Data' : '🟢 Live (Mailchimp)'}
@@ -155,6 +198,7 @@ export default function CampaignStatsPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/40">
                     <TableHead className="text-xs font-semibold uppercase">Campaign</TableHead>
+                    <TableHead className="text-xs font-semibold uppercase">Sales Campaign</TableHead>
                     <TableHead className="text-xs font-semibold uppercase">Send Date</TableHead>
                     <TableHead className="text-xs font-semibold uppercase text-right">Recipients</TableHead>
                     <TableHead className="text-xs font-semibold uppercase text-right">Open Rate</TableHead>
@@ -169,6 +213,15 @@ export default function CampaignStatsPage() {
                     return (
                       <TableRow key={c.id}>
                         <TableCell className="font-medium max-w-[280px] truncate">{c.name}</TableCell>
+                        <TableCell>
+                          {c.sales_campaign_name ? (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200 text-xs">
+                              {c.sales_campaign_name}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-gray-500 text-xs">Independent</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {c.send_date ? formatDate(c.send_date + 'T00:00:00') : '—'}
                         </TableCell>
