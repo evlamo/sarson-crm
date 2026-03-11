@@ -113,7 +113,7 @@ export function SalesRecipientSelector({
   const { data: listsData } = useQuery<CampaignList[]>({
     queryKey: ['campaign-lists'],
     queryFn: async () => {
-      const res = await api.get('/campaign-lists');
+      const res = await api.get('/api/v1/lists');
       return res.data;
     },
     staleTime: 30000,
@@ -124,7 +124,7 @@ export function SalesRecipientSelector({
   const { data: tagsData } = useQuery<Tag[]>({
     queryKey: ['tags'],
     queryFn: async () => {
-      const res = await api.get('/tags');
+      const res = await api.get('/api/v1/tags');
       return res.data;
     },
     staleTime: 30000,
