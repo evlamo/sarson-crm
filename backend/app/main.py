@@ -15,7 +15,6 @@ from app.routers.segments import router as segments_router
 from app.routers.lists import router as lists_router
 from app.routers.campaigns import router as campaigns_router
 from app.routers.webhooks import router as webhooks_router
-from app.routers.templates import router as templates_router
 from app.routers.deals import router as deals_router
 from app.routers.campaign_stats import router as campaign_stats_router
 from app.routers.invites import router as invites_router
@@ -76,7 +75,6 @@ app.include_router(segments_router)
 app.include_router(lists_router)
 app.include_router(campaigns_router)
 app.include_router(webhooks_router)
-app.include_router(templates_router)
 app.include_router(deals_router)
 app.include_router(campaign_stats_router)
 app.include_router(invites_router, prefix="/api/v1")

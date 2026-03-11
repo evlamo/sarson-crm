@@ -14,7 +14,7 @@ from app.schemas.email_template import (
 from app.services import email_template_service
 from app.auth.dependencies import get_current_user
 
-router = APIRouter(prefix="/email-templates", tags=["email-templates"])
+router = APIRouter(prefix="/api/v1/email-templates", tags=["email-templates"])
 
 
 @router.get("")

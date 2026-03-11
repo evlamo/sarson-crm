@@ -6,20 +6,6 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class EmailTemplate(Base):
-    __tablename__ = "email_templates"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String, nullable=False)
-    subject = Column(String)
-    body_html = Column(Text, nullable=False)
-    body_text = Column(Text)
-    category = Column(String)
-    thumbnail = Column(String)
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-
 
 class EmailCampaign(Base):
     __tablename__ = "email_campaigns"
