@@ -923,6 +923,14 @@ def create_campaign_for_sales_campaign(
     if current_user.role != "admin" and sales_campaign.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to create campaign in this sales campaign")
 
+    # Validate required fields
+    if not data.get("name"):
+        raise HTTPException(status_code=400, detail="Campaign name is required")
+    if not data.get("subject"):
+        raise HTTPException(status_code=400, detail="Email subject is required")
+    if not data.get("from_email"):
+        raise HTTPException(status_code=400, detail="From email is required")
+
     # Validate segment if provided
     if data.get("segment_id"):
         from app.models.segment import Segment
@@ -935,7 +943,7 @@ def create_campaign_for_sales_campaign(
         name=data.get("name"),
         subject=data.get("subject"),
         preview_text=data.get("preview_text"),
-        body_html=data.get("body_html"),
+        body_html=data.get("body_html") or "<p>Email campaign content</p>",  # Default HTML
         body_text=data.get("body_text"),
         template_id=data.get("template_id"),
         segment_id=data.get("segment_id"),
