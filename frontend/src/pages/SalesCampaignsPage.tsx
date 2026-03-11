@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SalesRecipientSelector } from "@/components/campaigns/SalesRecipientSelector";
-import { useQuery, useMutation, useQueryClient } from '@tantml:query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
