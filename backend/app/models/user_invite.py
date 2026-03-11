@@ -15,7 +15,7 @@ class UserInvite(Base):
     email = Column(String, nullable=False, index=True)
     invited_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     token = Column(String, unique=True, nullable=False, default=lambda: secrets.token_hex(32))
-    status = Column(SAEnum(InviteStatus, name="invite_status", create_type=True), default=InviteStatus.pending, nullable=False)
+    status = Column(SAEnum(InviteStatus, name="invite_status", create_type=True), default=InviteStatus.PENDING, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     expires_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc) + timedelta(hours=72), nullable=False)
     accepted_at = Column(DateTime(timezone=True), nullable=True)
