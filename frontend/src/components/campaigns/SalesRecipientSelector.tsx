@@ -113,7 +113,7 @@ export function SalesRecipientSelector({
   const { data: listsData } = useQuery<CampaignList[]>({
     queryKey: ['campaign-lists'],
     queryFn: async () => {
-      const res = await api.get('/api/v1/lists');
+      const res = await api.get('/lists');
       return res.data.data || [];
     },
     staleTime: 30000,
@@ -124,7 +124,7 @@ export function SalesRecipientSelector({
   const { data: tagsData } = useQuery<Tag[]>({
     queryKey: ['tags'],
     queryFn: async () => {
-      const res = await api.get('/api/v1/tags');
+      const res = await api.get('/tags');
       return res.data;
     },
     staleTime: 30000,
@@ -136,7 +136,7 @@ export function SalesRecipientSelector({
     queryKey: ['campaign-available-contacts', campaignId],
     queryFn: async () => {
       const res = await api.get(
-        `/api/v1/sales-campaigns/${campaignId}/available-contacts`,
+        `/sales-campaigns/${campaignId}/available-contacts`,
         {
           params: { per_page: 100 },
         }
@@ -194,7 +194,7 @@ export function SalesRecipientSelector({
         setIsLoadingPreview(true);
         try {
           const res = await api.post(
-            `/api/v1/sales-campaigns/${campaignId}/preview-recipients`,
+            `/sales-campaigns/${campaignId}/preview-recipients`,
             {
               list_ids: selectedListIds,
               tag_ids: selectedTagIds,
