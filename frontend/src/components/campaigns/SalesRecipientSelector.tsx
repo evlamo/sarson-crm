@@ -440,6 +440,14 @@ export function SalesRecipientSelector({
               </div>
             </div>
 
+          {/* Right Panel: Live Preview */}
+          <div className=border rounded-lg p-4 overflow-y-auto bg-slate-50>
+            {isLoadingPreview ? (
+              <div className=flex items-center justify-center h-32>
+                <div className=flex items-center gap-2 text-muted-foreground>
+                  <div className=text-sm>Loading preview...</div>
+                </div>
+              </div>
             ) : preview ? (
               <div className="space-y-4">
                 {/* Header */}
