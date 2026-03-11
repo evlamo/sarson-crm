@@ -64,7 +64,7 @@ def _build_invite_url(token: str) -> str:
     return f"{base}/register?token={token}"
 
 
-def _serialize_invite(invite: UserInvite, include_token: bool = False) -> dict:
+def _serialize_invite(invite: UserInvite, include_token: bool = False, include_url: bool = False) -> dict:
     data = {
         "id": invite.id,
         "email": invite.email,
@@ -77,6 +77,7 @@ def _serialize_invite(invite: UserInvite, include_token: bool = False) -> dict:
     }
     if include_token:
         data["token"] = invite.token
+    if include_url:
         data["invite_url"] = _build_invite_url(invite.token)
     return data
 
@@ -133,7 +134,7 @@ def create_invite(
     db.commit()
     db.refresh(invite)
 
-    result = _serialize_invite(invite, include_token=True)
+    result = _serialize_invite(invite, include_token=True, include_url=True)
     return result
 
 
@@ -143,7 +144,8 @@ def list_invites(
     admin: User = Depends(get_admin_user),
 ):
     invites = db.query(UserInvite).order_by(UserInvite.created_at.desc()).all()
-    return [_serialize_invite(inv) for inv in invites]
+    # Never include token or URL in list responses
+    return [_serialize_invite(inv, include_token=False, include_url=False) for inv in invites]
 
 
 @router.delete("/{invite_id}")
