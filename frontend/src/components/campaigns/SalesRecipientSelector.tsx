@@ -140,7 +140,7 @@ export function SalesRecipientSelector({
           params: { per_page: 100 },
         }
       );
-      return res.data.data?.contacts || [];
+      return res.data.data || [];
     },
     staleTime: 30000,
     enabled: isOpen,
