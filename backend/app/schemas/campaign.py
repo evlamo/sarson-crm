@@ -206,3 +206,54 @@ class RecipientPreviewData(BaseModel):
 class RecipientPreviewResponse(BaseModel):
     """API response wrapper."""
     data: RecipientPreviewData
+
+
+# ── Sales Campaign Preview Schemas ─────────────────────────────────────────
+
+class PreviewRecipientsRequest(BaseModel):
+    """Request body for sales campaign preview-recipients endpoint."""
+    list_ids: list[UUID] = Field(default_factory=list, description="Static List IDs")
+    tag_ids: list[UUID] = Field(default_factory=list, description="Tag IDs")
+    contact_ids: list[UUID] = Field(default_factory=list, description="Direct Contact IDs")
+    combine_mode: str = Field(default="any", description="any (OR) or all (AND)")
+
+    def validate_combine_mode(self) -> None:
+        """Validate combine_mode values."""
+        if self.combine_mode not in ["any", "all"]:
+            raise ValueError("combine_mode must be 'any' or 'all'")
+
+
+class PreviewExclusionBreakdown(BaseModel):
+    """Breakdown of excluded contacts for preview."""
+    unsubscribed: int = 0
+    bounced: int = 0
+    invalid_email: int = 0
+    no_email: int = 0
+    already_in_campaign: int = 0
+    total: int = 0
+
+
+class PreviewSourceBreakdown(BaseModel):
+    """Source breakdown for preview."""
+    from_lists: int = 0
+    from_tags: int = 0
+    from_direct: int = 0
+    overlap: int = 0
+
+
+class PreviewContactInfo(BaseModel):
+    """Contact info for preview sample."""
+    id: str
+    full_name: Optional[str]
+    email: Optional[str]
+    company: Optional[str]
+    sources: List[str] = Field(default_factory=list)
+
+
+class PreviewRecipientsData(BaseModel):
+    """Response data for preview."""
+    total_matching: int
+    exclusions: PreviewExclusionBreakdown
+    final_count: int
+    sample_contacts: List[PreviewContactInfo]
+    breakdown: PreviewSourceBreakdown

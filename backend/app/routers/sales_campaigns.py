@@ -9,7 +9,7 @@ import uuid as uuid_mod
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, desc, or_
+from sqlalchemy import func, desc, or_, literal, distinct
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -22,6 +22,7 @@ from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.campaign_segment import CampaignSegment
 from app.models.campaign import EmailCampaign
 from app.services import audit_service
+from app.schemas.campaign import PreviewRecipientsRequest
 
 router = APIRouter(prefix="/api/v1/sales-campaigns", tags=["sales-campaigns"])
 
@@ -1106,3 +1107,179 @@ def get_available_contacts_for_campaign(
             }
         }
     }
+
+# -- Preview Campaign Recipients
+
+@router.post("/{campaign_id}/preview-recipients", response_model=dict)
+def preview_campaign_recipients(
+    campaign_id: UUID,
+    body: PreviewRecipientsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Preview contacts that will be added to campaign."""
+    body.validate_combine_mode()
+    campaign = _get_campaign_or_404(campaign_id, db)
+    
+    queries = []
+    
+    if body.list_ids:
+        list_q = (
+            db.query(
+                Contact.id,
+                Contact.full_name,
+                Contact.email,
+                Contact._email_encrypted,
+                Contact.company,
+                Contact.email_unsubscribed,
+                Contact.email_bounced,
+                Contact.email_valid,
+                literal("list").label("source_type"),
+                literal("List").label("source_name")
+            )
+            .join(StaticListMember, Contact.id == StaticListMember.c.contact_id)
+            .filter(StaticListMember.c.list_id.in_(body.list_ids))
+            .distinct(Contact.id)
+        )
+        queries.append(("list", list_q))
+    
+    if body.tag_ids:
+        tag_q = (
+            db.query(
+                Contact.id,
+                Contact.full_name,
+                Contact.email,
+                Contact._email_encrypted,
+                Contact.company,
+                Contact.email_unsubscribed,
+                Contact.email_bounced,
+                Contact.email_valid,
+                literal("tag").label("source_type"),
+                literal("Tag").label("source_name")
+            )
+            .join(Tag, Contact.tags.contains(Tag))
+            .filter(Tag.id.in_(body.tag_ids))
+            .distinct(Contact.id)
+        )
+        queries.append(("tag", tag_q))
+    
+    if body.contact_ids:
+        direct_q = (
+            db.query(
+                Contact.id,
+                Contact.full_name,
+                Contact.email,
+                Contact._email_encrypted,
+                Contact.company,
+                Contact.email_unsubscribed,
+                Contact.email_bounced,
+                Contact.email_valid,
+                literal("direct").label("source_type"),
+                literal("Direct").label("source_name")
+            )
+            .filter(Contact.id.in_(body.contact_ids))
+        )
+        queries.append(("direct", direct_q))
+    
+    if not queries:
+        return {"data": {
+            "total_matching": 0,
+            "exclusions": {"unsubscribed": 0, "bounced": 0, "invalid_email": 0, "no_email": 0, "already_in_campaign": 0, "total": 0},
+            "final_count": 0,
+            "sample_contacts": [],
+            "breakdown": {"from_lists": 0, "from_tags": 0, "from_direct": 0, "overlap": 0}
+        }}
+    
+    all_matching_ids = set()
+    source_map = {}
+    
+    for source_type, query in queries:
+        results = query.all()
+        for row in results:
+            contact_id = row[0]
+            all_matching_ids.add(contact_id)
+            if contact_id not in source_map:
+                source_map[contact_id] = {
+                    "full_name": row[1],
+                    "email": row[2],
+                    "company": row[4],
+                    "email_unsubscribed": row[5],
+                    "email_bounced": row[6],
+                    "email_valid": row[7],
+                    "sources": []
+                }
+            source = source_type.title() + ": " + ("List" if source_type == "list" else "Tag" if source_type == "tag" else "Direct")
+            source_map[contact_id]["sources"].append(source)
+    
+    total_matching = len(all_matching_ids)
+    
+    if body.combine_mode == "all" and len(queries) > 1:
+        filtered_ids = set(row[0] for row in queries[0][1].all())
+        for source_type, query in queries[1:]:
+            filtered_ids = filtered_ids.intersection(set(row[0] for row in query.all()))
+        final_ids = filtered_ids
+    else:
+        final_ids = all_matching_ids
+    
+    exclusions = {
+        "unsubscribed": 0,
+        "bounced": 0,
+        "invalid_email": 0,
+        "no_email": 0,
+        "already_in_campaign": 0
+    }
+    
+    valid_ids = set()
+    for contact_id in final_ids:
+        info = source_map[contact_id]
+        if info["email_unsubscribed"]:
+            exclusions["unsubscribed"] += 1
+        elif info["email_bounced"]:
+            exclusions["bounced"] += 1
+        elif not info["email_valid"]:
+            exclusions["invalid_email"] += 1
+        elif not info.get("email"):
+            exclusions["no_email"] += 1
+        else:
+            valid_ids.add(contact_id)
+    
+    existing_ids = set()
+    if valid_ids:
+        existing_ids = set(
+            row[0] for row in db.query(CampaignContact.contact_id)
+            .filter(CampaignContact.contact_id.in_(valid_ids))
+            .filter(CampaignContact.sales_campaign_id == campaign_id)
+            .filter(CampaignContact.status.in_(["no", "complete", "excluded"]))
+            .all()
+        )
+    
+    exclusions["already_in_campaign"] = len(existing_ids)
+    final_valid_ids = valid_ids - existing_ids
+    final_count = len(final_valid_ids)
+    
+    exclusions["total"] = sum(exclusions.values())
+    
+    sample_contacts = []
+    for i, contact_id in enumerate(sorted(final_valid_ids)):
+        if i >= 10:
+            break
+        info = source_map[contact_id]
+        sample_contacts.append({
+            "id": str(contact_id),
+            "full_name": info.get("full_name"),
+            "email": info.get("email"),
+            "company": info.get("company") or "",
+            "sources": info.get("sources", [])
+        })
+    
+    from_lists = sum(1 for cid in final_valid_ids if any("list" in s.lower() for s in source_map[cid]["sources"]))
+    from_tags = sum(1 for cid in final_valid_ids if any("tag" in s.lower() for s in source_map[cid]["sources"]))
+    from_direct = sum(1 for cid in final_valid_ids if any("direct" in s.lower() for s in source_map[cid]["sources"]))
+    
+    return {"data": {
+        "total_matching": total_matching,
+        "exclusions": exclusions,
+        "final_count": final_count,
+        "sample_contacts": sample_contacts,
+        "breakdown": {"from_lists": from_lists, "from_tags": from_tags, "from_direct": from_direct, "overlap": 0}
+    }}
