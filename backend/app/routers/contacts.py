@@ -3,7 +3,7 @@ from slowapi.util import get_remote_address
 from fastapi import Request
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, text, or_, select
+from sqlalchemy import func, text, or_, select, case
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, date, timezone
 from typing import Optional, List
@@ -128,6 +128,42 @@ def _build_response(contact: Contact) -> ContactResponse:
     return data
 
 
+def _build_search_relevance_score(search_term: str):
+    """
+    Build a CASE expression for relevance scoring.
+    Higher scores = more relevant results.
+    Scoring:
+    - Exact first_name match: 1000
+    - Exact last_name match: 900
+    - Partial first_name match: 800
+    - Partial last_name match: 700
+    - Email match: 100
+    - Company match: 50
+    """
+    search_lower = search_term.lower()
+    return case(
+        # Exact first_name match (case-insensitive)
+        (func.lower(Contact.first_name) == search_lower, 1000),
+        # Exact last_name match
+        (func.lower(Contact.last_name) == search_lower, 900),
+        # Partial first_name match (starts with)
+        (func.lower(Contact.first_name).like(f"{search_lower}%"), 800),
+        # Partial last_name match (starts with)
+        (func.lower(Contact.last_name).like(f"{search_lower}%"), 700),
+        # Partial first_name (contains)
+        (func.lower(Contact.first_name).like(f"%{search_lower}%"), 600),
+        # Partial last_name (contains)
+        (func.lower(Contact.last_name).like(f"%{search_lower}%"), 550),
+        # Email match
+        (Contact.email.ilike(f"%{search_lower}%"), 100),
+        # Company match
+        (Contact.company.ilike(f"%{search_lower}%"), 50),
+        # Full-text search match
+        (Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_term)), 200),
+        else_=0,
+    )
+
+
 # ── List / Search ──────────────────────────────────────────────────────────
 
 @router.get("", response_model=PaginatedContacts)
@@ -147,9 +183,10 @@ def list_contacts(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Paginated contact list with filters:
-    - search: full-text via tsvector (falls back to ILIKE on name/email)
+    Paginated contact list with refined search:
+    - search: name-focused with relevance ranking (exact > partial > email > company)
     - status, contacted, assigned_to, sarson_rep, tag_id filters
+    - When search is active, results ranked by relevance then name
     """
 
     # Authorization check for list_id
@@ -160,6 +197,7 @@ def list_contacts(
         ).first()
         if not list_obj:
             raise HTTPException(status_code=403, detail="Unauthorized access to this list")
+    
     query = (
         db.query(Contact)
         .options(joinedload(Contact.tags), joinedload(Contact.company_obj))
@@ -174,20 +212,27 @@ def list_contacts(
     if list_id:
         query = query.join(StaticListMember, Contact.id == StaticListMember.c.contact_id).filter(StaticListMember.c.list_id == list_id).distinct()
 
-    # Full-text search
+    # Refined search with relevance scoring
+    relevance_score = None
     if search:
         search_clean = search.strip()
         # Escape ILIKE wildcards to prevent pattern injection
-        search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', '_')
+        search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', '\_')
+        
+        # Filter: must match name fields (primary), email (secondary), or company (fallback)
+        # This ensures we don't get completely unrelated results
         query = query.filter(
             or_(
-                Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_clean)),
                 Contact.first_name.ilike(f"%{search_escaped}%"),
                 Contact.last_name.ilike(f"%{search_escaped}%"),
                 Contact.email.ilike(f"%{search_escaped}%"),
                 Contact.company.ilike(f"%{search_escaped}%"),
+                Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_clean)),
             )
         )
+        
+        # Build relevance score for sorting
+        relevance_score = _build_search_relevance_score(search_clean)
 
     if status:
         query = query.filter(Contact.status == status)
@@ -214,62 +259,80 @@ def list_contacts(
         "created_at":       Contact.created_at,
         "updated_at":       Contact.updated_at,
     }
-    sort_col = SORTABLE.get(sort, Contact.last_name)
-    sort_expr = sort_col.desc().nullslast() if order == "desc" else sort_col.asc().nullslast()
-
-    # Always add tiebreaker secondary sorts for stable, predictable ordering
-    if sort == "last_name":
-        secondary = Contact.first_name.asc().nullslast()
-    elif sort == "first_name":
+    
+    # Determine sort order: if search is active, use relevance first; otherwise use requested sort
+    if relevance_score is not None:
+        # When search is active, prioritize relevance, then name
+        query = query.add_columns(relevance_score.label("relevance"))
+        sort_expr = relevance_score.desc()
         secondary = Contact.last_name.asc().nullslast()
+        tertiary = Contact.first_name.asc().nullslast()
+        query = query.order_by(sort_expr, secondary, tertiary)
+        
+        # Re-query without relevance column for the actual result
+        contact_ids = [row[0].id for row in query.offset((page - 1) * per_page).limit(per_page).all()]
+        contacts = db.query(Contact).options(
+            joinedload(Contact.tags), 
+            joinedload(Contact.company_obj)
+        ).filter(Contact.id.in_(contact_ids)).all() if contact_ids else []
+        
+        # Sort results by relevance order
+        relevance_dict = {cid: idx for idx, cid in enumerate(contact_ids)}
+        contacts = sorted(contacts, key=lambda c: relevance_dict.get(c.id, float('inf')))
     else:
-        # For all other sorts, tiebreak by last_name then first_name
-        secondary = Contact.last_name.asc().nullslast()
+        # No search: use standard sorting
+        sort_col = SORTABLE.get(sort, Contact.last_name)
+        sort_expr = sort_col.desc().nullslast() if order == "desc" else sort_col.asc().nullslast()
+        
+        # Always add tiebreaker secondary sorts for stable, predictable ordering
+        if sort == "last_name":
+            secondary = Contact.first_name.asc().nullslast()
+        elif sort == "first_name":
+            secondary = Contact.last_name.asc().nullslast()
+        else:
+            secondary = Contact.last_name.asc().nullslast()
+        
+        contacts = (
+            query.order_by(sort_expr, secondary)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
 
-    # Efficient count
+    # Efficient count (same filter conditions as main query)
+    count_query = db.query(func.count(Contact.id.distinct())) if list_id else db.query(func.count(Contact.id))
+    
+    count_query = count_query.filter(Contact.deleted_at.is_(None))
+    
+    if tag_id:
+        count_query = count_query.filter(Contact.tags.any(Tag.id == tag_id))
+    
     if list_id:
-        # Need join for list filter
-        total = db.query(func.count(Contact.id.distinct())).join(
-            StaticListMember, Contact.id == StaticListMember.c.contact_id
-        ).filter(
-            Contact.deleted_at.is_(None),
-            StaticListMember.c.list_id == list_id,
-            *([Contact.status == status] if status else []),
-            *([Contact.contacted == contacted] if contacted is not None else []),
-            *([Contact.assigned_to == assigned_to] if assigned_to else []),
-            *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
-            *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
-            *([or_(
-                Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
-                Contact.first_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-                Contact.last_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-                Contact.email.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-                Contact.company.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-            )] if search else []),
-        ).scalar()
-    else:
-        # No join needed
-        total = db.query(func.count(Contact.id)).filter(
-            Contact.deleted_at.is_(None),
-            *([Contact.status == status] if status else []),
-            *([Contact.contacted == contacted] if contacted is not None else []),
-            *([Contact.assigned_to == assigned_to] if assigned_to else []),
-            *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
-            *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
-            *([or_(
-                Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
-                Contact.first_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-                Contact.last_name.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-                Contact.email.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-                Contact.company.ilike(f"%{search.strip().replace('%', '%').replace('_', '_')}%"),
-            )] if search else []),
-        ).scalar()
-    contacts = (
-        query.order_by(sort_expr, secondary)
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
+        count_query = count_query.join(StaticListMember, Contact.id == StaticListMember.c.contact_id).filter(StaticListMember.c.list_id == list_id)
+    
+    if search:
+        search_clean = search.strip()
+        search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', '\_')
+        count_query = count_query.filter(
+            or_(
+                Contact.first_name.ilike(f"%{search_escaped}%"),
+                Contact.last_name.ilike(f"%{search_escaped}%"),
+                Contact.email.ilike(f"%{search_escaped}%"),
+                Contact.company.ilike(f"%{search_escaped}%"),
+                Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_clean)),
+            )
+        )
+    
+    if status:
+        count_query = count_query.filter(Contact.status == status)
+    if contacted is not None:
+        count_query = count_query.filter(Contact.contacted == contacted)
+    if assigned_to:
+        count_query = count_query.filter(Contact.assigned_to == assigned_to)
+    if sarson_rep:
+        count_query = count_query.filter(Contact.sarson_rep.ilike(f"%{sarson_rep}%"))
+    
+    total = count_query.scalar()
 
     return PaginatedContacts(
         data=[_build_response(c) for c in contacts],
