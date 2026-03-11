@@ -1,4 +1,12 @@
-export type ContactStatus = "poc" | "lead" | "customer" | "prospect" | "inactive";
+export enum ContactStatusEnum {
+  POC = "poc",
+  LEAD = "lead",
+  CUSTOMER = "customer",
+  PROSPECT = "prospect",
+  INACTIVE = "inactive",
+}
+
+export type ContactStatus = ContactStatusEnum | "poc" | "lead" | "customer" | "prospect" | "inactive";
 
 export interface Tag {
   id: string;

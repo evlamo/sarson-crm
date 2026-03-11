@@ -1,4 +1,19 @@
-export type UserRole = "admin" | "user" | "restricted";
+export enum UserRoleEnum {
+  ADMIN = "admin",
+  USER = "user",
+  RESTRICTED = "restricted",
+}
+
+export type UserRole = UserRoleEnum | "admin" | "user" | "restricted";
+
+export enum InviteStatusEnum {
+  PENDING = "pending",
+  ACCEPTED = "accepted",
+  REVOKED = "revoked",
+  EXPIRED = "expired",
+}
+
+export type InviteStatus = InviteStatusEnum | "pending" | "accepted" | "revoked" | "expired";
 
 export interface User {
   id: string;
@@ -16,7 +31,7 @@ export interface UserInvite {
   id: string;
   email: string;
   invited_by: string;
-  status: "pending" | "accepted" | "revoked" | "expired";
+  status: InviteStatus;
   created_at: string;
   expires_at: string;
   accepted_at?: string;

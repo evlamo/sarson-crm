@@ -15,6 +15,7 @@ from app.auth.dependencies import get_current_user, get_admin_user
 from app.models.user import User
 from app.models.campaign import EmailCampaign, EmailSend
 from app.models.segment import Segment
+from app.models.enums import CampaignStatus
 from app.schemas.campaign import (
     CampaignCreate,
     CampaignUpdate,
@@ -98,7 +99,7 @@ def create_campaign(
         from_name=data.from_name,
         from_email=data.from_email,
         reply_to=data.reply_to,
-        status="draft",
+        status=CampaignStatus.DRAFT,
         created_by=current_user.id,
     )
     db.add(campaign)
@@ -133,7 +134,7 @@ def update_campaign(
     campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    if campaign.status != "draft":
+    if campaign.status != CampaignStatus.DRAFT:
         raise HTTPException(status_code=400, detail="Can only edit draft campaigns")
 
     update_data = data.model_dump(exclude_unset=True)
@@ -160,7 +161,7 @@ def delete_campaign(
     campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    if campaign.status != "draft":
+    if campaign.status != CampaignStatus.DRAFT:
         raise HTTPException(status_code=400, detail="Can only delete draft campaigns")
 
     db.delete(campaign)
@@ -178,7 +179,7 @@ def send_campaign(
     campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    if campaign.status not in ("draft", "scheduled"):
+    if campaign.status not in (CampaignStatus.DRAFT, CampaignStatus.SCHEDULED):
         raise HTTPException(
             status_code=400,
             detail=f"Campaign status is '{campaign.status}', must be draft or scheduled to send",
@@ -208,13 +209,13 @@ def schedule_campaign(
     campaign = db.query(EmailCampaign).filter(EmailCampaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    if campaign.status != "draft":
+    if campaign.status != CampaignStatus.DRAFT:
         raise HTTPException(status_code=400, detail="Can only schedule draft campaigns")
     if data.scheduled_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Scheduled time must be in the future")
 
     campaign.scheduled_at = data.scheduled_at
-    campaign.status = "scheduled"
+    campaign.status = CampaignStatus.SCHEDULED
     db.commit()
 
     # Schedule Celery task with ETA
@@ -314,7 +315,7 @@ def duplicate_campaign(
         from_name=original.from_name,
         from_email=original.from_email,
         reply_to=original.reply_to,
-        status="draft",
+        status=CampaignStatus.DRAFT,
         created_by=current_user.id,
     )
     db.add(clone)
@@ -467,7 +468,7 @@ async def sync_to_mailchimp(
     # Step 6: Update our record
     campaign.mailchimp_campaign_id = mc_campaign_id
     campaign.mailchimp_audience_id = audience_id
-    campaign.mailchimp_status = "draft"
+    campaign.mailchimp_status = CampaignStatus.DRAFT.value
     campaign.recipient_count = len(eligible)
     if mc_segment_id:
         campaign.mc_segment_id_combined = mc_segment_id
@@ -537,8 +538,8 @@ async def send_via_mailchimp(
         raise HTTPException(status_code=400, detail="Campaign has not been synced to Mailchimp yet.")
 
     await mailchimp_service.send_mc_campaign(campaign.mailchimp_campaign_id)
-    campaign.mailchimp_status = "sending"
-    campaign.status = "sending"
+    campaign.mailchimp_status = CampaignStatus.SENDING.value
+    campaign.status = CampaignStatus.SENDING
     campaign.sent_at = datetime.now(timezone.utc)
     db.commit()
 
@@ -563,9 +564,9 @@ async def schedule_via_mailchimp(
         mc_campaign_id=campaign.mailchimp_campaign_id,
         schedule_time=data.schedule_time,
     )
-    campaign.mailchimp_status = "scheduled"
+    campaign.mailchimp_status = CampaignStatus.SCHEDULED.value
     campaign.scheduled_at = datetime.fromisoformat(data.schedule_time)
-    campaign.status = "scheduled"
+    campaign.status = CampaignStatus.SCHEDULED
     db.commit()
     return {"scheduled": True, "schedule_time": data.schedule_time}
 

@@ -1,4 +1,13 @@
-export type CampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "paused" | "cancelled";
+export enum CampaignStatusEnum {
+  DRAFT = "draft",
+  SCHEDULED = "scheduled",
+  SENDING = "sending",
+  SENT = "sent",
+  PAUSED = "paused",
+  CANCELLED = "cancelled",
+}
+
+export type CampaignStatus = CampaignStatusEnum | "draft" | "scheduled" | "sending" | "sent" | "paused" | "cancelled";
 
 export interface Campaign {
   id: string;
