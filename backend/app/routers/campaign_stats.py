@@ -6,13 +6,14 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
 import redis
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
@@ -185,20 +186,32 @@ async def _fetch_mailchimp_cached(cache_key: str) -> Optional[List[CampaignStat]
     return campaigns
 
 
-def _fetch_campaigns_from_db(db: Session) -> List[CampaignStat]:
+def _fetch_campaigns_from_db(db: Session, sales_campaign_id: Optional[str] = None) -> List[CampaignStat]:
     """Fetch campaign stats from local database with sales campaign attribution."""
-    # Query campaigns with sales campaign JOIN
-    campaigns = db.query(EmailCampaign).filter(EmailCampaign.status == "sent").all()
+    # Query campaigns with eager loading to prevent N+1 queries
+    query = db.query(EmailCampaign)\
+        .options(joinedload(EmailCampaign.sales_campaign))\
+        .filter(EmailCampaign.status == "sent")
+    
+    # Add sales_campaign_id filter if provided
+    if sales_campaign_id:
+        try:
+            sales_id = uuid.UUID(sales_campaign_id)
+            query = query.filter(EmailCampaign.sales_campaign_id == sales_id)
+        except ValueError:
+            pass  # Invalid UUID, skip filter
+    
+    campaigns = query.all()
     results = []
     for c in campaigns:
         delivered = c.delivered_count or 0
         recipients = c.recipient_count or 0
         # Get sales campaign name if this campaign belongs to one
+        sales_campaign_id_str = None
         sales_campaign_name = None
-        sales_campaign_id = None
-        if c.sales_campaign and c.sales_campaign_id:
-            sales_campaign_id = str(c.sales_campaign_id)
-            sales_campaign_name = c.sales_campaign.name
+        if c.sales_campaign_id:
+            sales_campaign_id_str = str(c.sales_campaign_id)
+            sales_campaign_name = c.sales_campaign.name if c.sales_campaign else None
         
         results.append(CampaignStat(
             id=str(c.id),
@@ -215,7 +228,7 @@ def _fetch_campaigns_from_db(db: Session) -> List[CampaignStat]:
             unsubscribe_rate=round(c.unsubscribe_count / delivered * 100, 2) if delivered > 0 else 0,
             bounce_rate=round(c.bounce_count / recipients * 100, 2) if recipients > 0 else 0,
             status=c.status,
-            sales_campaign_id=sales_campaign_id,
+            sales_campaign_id=sales_campaign_id_str,
             sales_campaign_name=sales_campaign_name,
         ))
     return results
@@ -225,13 +238,14 @@ def _fetch_campaigns_from_db(db: Session) -> List[CampaignStat]:
 
 @router.get("", response_model=CampaignStatsResponse)
 async def get_campaign_stats(
+    sales_campaign_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get campaign stats from database (preferred), Mailchimp, or demo."""
     # Try to get real data from database first
     try:
-        campaigns = _fetch_campaigns_from_db(db)
+        campaigns = _fetch_campaigns_from_db(db, sales_campaign_id)
         if campaigns:
             return CampaignStatsResponse(campaigns=campaigns, source="database")
     except Exception as exc:
@@ -241,23 +255,30 @@ async def get_campaign_stats(
     if _mailchimp_configured():
         try:
             campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
+            # Filter by sales_campaign_id if provided
+            if sales_campaign_id:
+                campaigns = [c for c in campaigns if c.sales_campaign_id == sales_campaign_id]
             return CampaignStatsResponse(campaigns=campaigns, source="mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign stats from Mailchimp: %s", exc)
     
     # Fall back to demo data
-    return CampaignStatsResponse(campaigns=DEMO_CAMPAIGNS, source="demo")
+    campaigns = DEMO_CAMPAIGNS
+    if sales_campaign_id:
+        campaigns = [c for c in campaigns if c.sales_campaign_id == sales_campaign_id]
+    return CampaignStatsResponse(campaigns=campaigns, source="demo")
 
 
 @router.get("/summary", response_model=CampaignSummary)
 async def get_campaign_summary(
+    sales_campaign_id: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get campaign summary from database (preferred), Mailchimp, or demo."""
     # Try to get real data from database first
     try:
-        campaigns = _fetch_campaigns_from_db(db)
+        campaigns = _fetch_campaigns_from_db(db, sales_campaign_id)
         if campaigns:
             return _compute_summary(campaigns, "database")
     except Exception as exc:
@@ -267,9 +288,15 @@ async def get_campaign_summary(
     if _mailchimp_configured():
         try:
             campaigns = await _fetch_mailchimp_cached("campaign_stats:list")
+            # Filter by sales_campaign_id if provided
+            if sales_campaign_id:
+                campaigns = [c for c in campaigns if c.sales_campaign_id == sales_campaign_id]
             return _compute_summary(campaigns, "mailchimp")
         except Exception as exc:
             logger.error("Failed to fetch campaign summary from Mailchimp: %s", exc)
     
     # Fall back to demo data
-    return _compute_summary(DEMO_CAMPAIGNS, "demo")
+    campaigns = DEMO_CAMPAIGNS
+    if sales_campaign_id:
+        campaigns = [c for c in campaigns if c.sales_campaign_id == sales_campaign_id]
+    return _compute_summary(campaigns, "demo")

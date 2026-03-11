@@ -95,29 +95,32 @@ export default function CampaignStatsPage() {
   });
 
   const { data: summary, isLoading: summaryLoading, isError: summaryError } = useQuery<CampaignSummary>({
-    queryKey: ['campaign-stats-summary'],
+    queryKey: ['campaign-stats-summary', selectedSalesCampaignId],  // Add sales_campaign_id to query key
     queryFn: async () => {
-      const res = await api.get<CampaignSummary>('/campaign-stats/summary');
+      const params: Record<string, string> = {};
+      if (selectedSalesCampaignId !== 'all') {
+        params.sales_campaign_id = selectedSalesCampaignId;  // Server-side filter
+      }
+      const res = await api.get<CampaignSummary>('/campaign-stats/summary', { params });
       return res.data;
     },
   });
 
   const { data: statsData, isLoading: statsLoading, isError: statsError } = useQuery<CampaignStatsResponse>({
-    queryKey: ['campaign-stats'],
+    queryKey: ['campaign-stats', selectedSalesCampaignId],  // Add sales_campaign_id to query key
     queryFn: async () => {
-      const res = await api.get<CampaignStatsResponse>('/campaign-stats');
+      const params: Record<string, string> = {};
+      if (selectedSalesCampaignId !== 'all') {
+        params.sales_campaign_id = selectedSalesCampaignId;  // Server-side filter
+      }
+      const res = await api.get<CampaignStatsResponse>('/campaign-stats', { params });
       return res.data;
     },
   });
 
   const source = summary?.source || statsData?.source || 'demo';
-  const allCampaigns = statsData?.campaigns || [];
+  const campaigns = statsData?.campaigns || [];  // No client-side filtering needed - server already filtered
   const isDemo = source === 'demo';
-  
-  // Filter campaigns by selected sales campaign
-  const campaigns = selectedSalesCampaignId === 'all'
-    ? allCampaigns
-    : allCampaigns.filter(c => c.sales_campaign_id === selectedSalesCampaignId);
 
   return (
     <div className="space-y-6">
