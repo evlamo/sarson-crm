@@ -192,7 +192,7 @@ function StatusBadge({ status }: { status: string }) {
 function StatusDropdown({ campaignId, currentStatus, onSuccess }: { campaignId: string; currentStatus: string; onSuccess: () => void }) {
   const updateStatus = useMutation({
     mutationFn: async (newStatus: string) => {
-      await api.patch(`/sales-campaigns/${campaignId}`, { status: newStatus });
+      await api.put(`/sales-campaigns/${campaignId}`, { status: newStatus });
     },
     onSuccess: () => {
       onSuccess();
@@ -729,6 +729,8 @@ function EmailCampaignsTab({ campaignId }: { campaignId: string }) {
 function CampaignsTab({ campaignId }: { campaignId: string }) {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
 
   const { data, isLoading, isFetching } = useQuery<CampaignsResponse>({
     queryKey: ['sales-campaign-campaigns', campaignId],
@@ -782,7 +784,16 @@ function CampaignsTab({ campaignId }: { campaignId: string }) {
       ) : (
         <div className="space-y-2">
           {campaigns.map((campaign) => (
-            <Card key={campaign.id} className="hover:shadow-md transition-all">
+            <Card 
+              key={campaign.id} 
+              className={`transition-all ${campaign.status === 'draft' ? 'cursor-pointer hover:shadow-lg' : 'hover:shadow-md'}`}
+              onClick={() => {
+                if (campaign.status === 'draft') {
+                  setEditingCampaignId(campaign.id);
+                  setEditModalOpen(true);
+                }
+              }}
+            >
               <CardContent className="p-4 flex items-center justify-between">
                 <div className="flex-1">
                   <h4 className="font-medium">{campaign.name}</h4>
@@ -800,7 +811,10 @@ function CampaignsTab({ campaignId }: { campaignId: string }) {
                     variant="ghost"
                     size="sm"
                     className="text-red-600 hover:text-red-700"
-                    onClick={() => deleteCampaign.mutate(campaign.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCampaign.mutate(campaign.id);
+                    }}
                     disabled={deleteCampaign.isPending}
                   >
                     {deleteCampaign.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
@@ -818,6 +832,22 @@ function CampaignsTab({ campaignId }: { campaignId: string }) {
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['sales-campaign-campaigns', campaignId] })}
         salesCampaignId={campaignId}
       />
+
+      {editingCampaignId && (
+        <EditCampaignModal
+          open={editModalOpen}
+          onClose={() => {
+            setEditModalOpen(false);
+            setEditingCampaignId(null);
+          }}
+          campaignId={editingCampaignId}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["sales-campaign-campaigns", campaignId] });
+            setEditModalOpen(false);
+            setEditingCampaignId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
