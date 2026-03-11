@@ -46,13 +46,13 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
         logger.warning("Failed login attempt for user: %s", req.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Check if email is verified
-    email_verify = db.query(EmailVerificationToken).filter(
-        EmailVerificationToken.user_id == user.id,
-        EmailVerificationToken.is_verified == False
-    ).first()
-    if email_verify:
-        raise HTTPException(status_code=403, detail="Please verify your email before logging in")
+#     # Check if email is verified
+#     email_verify = db.query(EmailVerificationToken).filter(
+#         EmailVerificationToken.user_id == user.id,
+#         EmailVerificationToken.is_verified == False
+#     ).first()
+#     if email_verify:
+#         raise HTTPException(status_code=403, detail="Please verify your email before logging in")
 
     # Check if MFA is enabled
     mfa = db.query(MFASecret).filter(MFASecret.user_id == user.id, MFASecret.is_enabled == True).first()

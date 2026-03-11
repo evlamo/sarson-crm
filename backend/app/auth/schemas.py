@@ -2,21 +2,12 @@ from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
 import uuid
-import string
 
-# Helper for password validation
+# Simplified password validation - minimum length only
 def validate_password_strength(password: str) -> str:
-    """Validate password meets security requirements."""
-    if len(password) < 12:
-        raise ValueError('Password must be at least 12 characters')
-    if not any(c.isupper() for c in password):
-        raise ValueError('Password must contain at least one uppercase letter')
-    if not any(c.islower() for c in password):
-        raise ValueError('Password must contain at least one lowercase letter')
-    if not any(c.isdigit() for c in password):
-        raise ValueError('Password must contain at least one number')
-    if not any(c in string.punctuation for c in password):
-        raise ValueError('Password must contain at least one special character (!@#$%^&*etc.)')
+    """Validate password meets basic requirements."""
+    if len(password) < 6:
+        raise ValueError('Password must be at least 6 characters')
     return password
 
 class LoginRequest(BaseModel):
