@@ -23,6 +23,7 @@ from app.routers.campaign_lists import router as campaign_lists_router
 from app.routers.google_ads import router as google_ads_router
 from app.routers.api_controls import router as api_controls_router
 from app.routers.sales_campaigns import router as sales_campaigns_router
+from app.routers.email_templates import router as email_templates_router
 from app.models import google_ads as _google_ads_models  # noqa
 from app.models import api_credentials as _api_credentials_models  # noqa
 
@@ -83,6 +84,7 @@ app.include_router(campaign_lists_router)
 app.include_router(google_ads_router)
 app.include_router(api_controls_router)
 app.include_router(sales_campaigns_router)
+app.include_router(email_templates_router)
 
 @app.get("/health")
 def health():

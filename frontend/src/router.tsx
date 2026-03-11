@@ -21,9 +21,9 @@ import CompaniesPage from '@/pages/CompaniesPage';
 import ListsPage from '@/pages/ListsPage';
 import ApiControlsPage from '@/pages/ApiControlsPage';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
-import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import VerifyEmailPage from '@/pages/VerifyEmailPage';
-
+import { EmailTemplates } from '@/pages/EmailTemplates';
+import { EmailTemplateEdit } from '@/pages/EmailTemplateEdit';
 import { useEffect } from 'react';
 
 // Placeholder pages for routes without dedicated pages yet
@@ -208,6 +208,24 @@ const apiControlsRoute = createRoute({
   component: ApiControlsPage,
 });
 
+const emailTemplatesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/email-templates',
+  component: EmailTemplates,
+});
+
+const emailTemplateEditRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/email-templates/new',
+  component: EmailTemplateEdit,
+});
+
+const emailTemplateDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/email-templates/$id',
+  component: EmailTemplateEdit,
+});
+
 // Build route tree
 const routeTree = rootRoute.addChildren([
   loginRoute,
@@ -231,6 +249,9 @@ const routeTree = rootRoute.addChildren([
     usersRoute,
     invitesRoute,
     apiControlsRoute,
+    emailTemplatesRoute,
+    emailTemplateEditRoute,
+    emailTemplateDetailRoute,
   ]),
 ]);
 
