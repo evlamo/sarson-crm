@@ -148,22 +148,19 @@ def list_contacts(
     - search: full-text via tsvector (falls back to ILIKE on name/email)
     - status, contacted, assigned_to, sarson_rep, tag_id filters
     """
-    query = (
-        db.query(Contact)
-        .options(joinedload(Contact.tags), joinedload(Contact.company_obj))
-        .filter(Contact.deleted_at.is_(None))
-    )
-
+    # Build filter conditions once, reuse for both count and query
+    filters = [Contact.deleted_at.is_(None)]
+    
     # Filter by tag
     if tag_id:
-        query = query.filter(Contact.tags.any(Tag.id == tag_id))
+        filters.append(Contact.tags.any(Tag.id == tag_id))
 
     # Full-text search
     if search:
         search_clean = search.strip()
         # Escape ILIKE wildcards to prevent pattern injection
         search_escaped = search_clean.replace('\\', '\\\\').replace('%', r'\%').replace('_', r'\_')
-        query = query.filter(
+        filters.append(
             or_(
                 Contact.search_vector.op("@@")(func.plainto_tsquery("english", search_clean)),
                 Contact.first_name.ilike(f"%{search_escaped}%"),
@@ -174,13 +171,20 @@ def list_contacts(
         )
 
     if status:
-        query = query.filter(Contact.status == status)
+        filters.append(Contact.status == status)
     if contacted is not None:
-        query = query.filter(Contact.contacted == contacted)
+        filters.append(Contact.contacted == contacted)
     if assigned_to:
-        query = query.filter(Contact.assigned_to == assigned_to)
+        filters.append(Contact.assigned_to == assigned_to)
     if sarson_rep:
-        query = query.filter(Contact.sarson_rep.ilike(f"%{sarson_rep}%"))
+        filters.append(Contact.sarson_rep.ilike(f"%{sarson_rep}%"))
+    
+    # Build query with filters
+    query = (
+        db.query(Contact)
+        .options(joinedload(Contact.tags), joinedload(Contact.company_obj))
+        .filter(*filters)
+    )
 
     # Whitelist of sortable fields → Contact column
     SORTABLE = {
@@ -210,22 +214,8 @@ def list_contacts(
         # For all other sorts, tiebreak by last_name then first_name
         secondary = Contact.last_name.asc().nullslast()
 
-    # Efficient count — no joins, just filter the base query
-    total = db.query(func.count(Contact.id)).filter(
-        Contact.deleted_at.is_(None),
-        *([Contact.status == status] if status else []),
-        *([Contact.contacted == contacted] if contacted is not None else []),
-        *([Contact.assigned_to == assigned_to] if assigned_to else []),
-        *([Contact.sarson_rep.ilike(f"%{sarson_rep}%")] if sarson_rep else []),
-        *([Contact.tags.any(Tag.id == tag_id)] if tag_id else []),
-        *([or_(
-            Contact.search_vector.op("@@")(func.plainto_tsquery("english", search.strip())),
-            Contact.first_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.last_name.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.email.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-            Contact.company.ilike(f"%{search.strip().replace('%', r'%').replace('_', r'\_')}%"),
-        )] if search else []),
-    ).scalar()
+    # Efficient count — reuse filter conditions from above
+    total = db.query(func.count(Contact.id)).filter(*filters).scalar()
     contacts = (
         query.order_by(sort_expr, secondary)
         .offset((page - 1) * per_page)
