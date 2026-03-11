@@ -439,6 +439,7 @@ export function SalesRecipientSelector({
                 )}
               </div>
             </div>
+          </div>
 
           {/* Right Panel: Live Preview */}
           <div className="border rounded-lg p-4 overflow-y-auto bg-slate-50">
