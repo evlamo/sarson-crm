@@ -954,7 +954,7 @@ function EditCampaignModal({ open, campaignId, onClose, onSuccess }: EditCampaig
     queryFn: async () => {
       if (!campaignId) return null;
       const res = await api.get(`/campaigns/${campaignId}`);
-      return res.data.data;
+      return res.data;
     },
     enabled: !!campaignId && open,
   });
