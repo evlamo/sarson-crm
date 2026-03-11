@@ -198,7 +198,7 @@ const usersRoute = createRoute({
 
 const invitesRoute = createRoute({
   getParentRoute: () => layoutRoute,
-  path: '/admin/invites',
+  path: '/invites',
   component: InvitesPage,
 });
 

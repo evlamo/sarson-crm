@@ -56,14 +56,6 @@ export default function InvitesPage() {
   const [email, setEmail] = useState('');
   const [lastInviteUrl, setLastInviteUrl] = useState('');
 
-  if (!isAdmin) {
-    return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <p className="text-lg">Admin access required.</p>
-      </div>
-    );
-  }
-
   const { data: invites = [], isLoading } = useQuery<Invite[]>({
     queryKey: ['invites'],
     queryFn: async () => {
@@ -121,7 +113,12 @@ export default function InvitesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Team & Invites</h1>
+      <div>
+        <h1 className="text-2xl font-bold">Team & Invites</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {isAdmin ? "Viewing all team invites." : "You can invite team members. You'll only see invites you created."}
+        </p>
+      </div>
 
       {/* Create invite */}
       <Card>

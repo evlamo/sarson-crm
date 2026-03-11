@@ -691,7 +691,7 @@ Deactivated users:
     title: 'Inviting New Users',
     category: 'Admin',
     keywords: ['invite', 'new', 'user', 'add', 'team'],
-    relevantPaths: ['/admin/invites'],
+    relevantPaths: ['/invites'],
     content: `# Inviting New Users
 
 Add team members to your CRM.

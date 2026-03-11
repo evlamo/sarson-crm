@@ -30,11 +30,11 @@ const navItems = [
   { to: '/tags', label: 'Tags', icon: Tag },
   { to: '/import', label: 'Import', icon: Upload },
   { to: '/imports', label: 'Import History', icon: History },
+  { to: '/invites', label: 'Team & Invites', icon: UserPlus },
 ];
 
 const adminItems = [
   { to: '/admin/users', label: 'Users', icon: Shield },
-  { to: '/admin/invites', label: 'Team & Invites', icon: UserPlus },
   { to: '/api-controls', label: 'API Controls', icon: KeyRound },
 ];
 
