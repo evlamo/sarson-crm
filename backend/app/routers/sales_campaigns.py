@@ -22,6 +22,7 @@ from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.campaign_segment import CampaignSegment
 from app.models.campaign import EmailCampaign
 from app.services import audit_service
+from app.services.encryption_service import decrypt_email
 from app.schemas.campaign import PreviewRecipientsRequest
 
 router = APIRouter(prefix="/api/v1/sales-campaigns", tags=["sales-campaigns"])
@@ -1127,8 +1128,8 @@ def preview_campaign_recipients(
         list_q = (
             db.query(
                 Contact.id,
-                Contact.full_name,
-                Contact.email,
+                Contact.first_name,
+                Contact.last_name,
                 Contact._email_encrypted,
                 Contact.company,
                 Contact.email_unsubscribed,
@@ -1147,8 +1148,8 @@ def preview_campaign_recipients(
         tag_q = (
             db.query(
                 Contact.id,
-                Contact.full_name,
-                Contact.email,
+                Contact.first_name,
+                Contact.last_name,
                 Contact._email_encrypted,
                 Contact.company,
                 Contact.email_unsubscribed,
@@ -1168,8 +1169,8 @@ def preview_campaign_recipients(
         direct_q = (
             db.query(
                 Contact.id,
-                Contact.full_name,
-                Contact.email,
+                Contact.first_name,
+                Contact.last_name,
                 Contact._email_encrypted,
                 Contact.company,
                 Contact.email_unsubscribed,
