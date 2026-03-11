@@ -909,3 +909,200 @@ def create_campaign_for_sales_campaign(
 
     from app.schemas.campaign import CampaignOut
     return {"data": CampaignOut.model_validate(campaign)}
+
+
+# ── Available Contacts (With DNC + Campaign Exclusions) ────────────────────
+
+class AvailableContactOut(BaseModel):
+    id: UUID
+    full_name: str
+    email: Optional[str]
+    company: Optional[str]
+    tags: List[dict] = []
+    already_in_campaign: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class ExclusionCounts(BaseModel):
+    dnc: int
+    already_in_campaign: int
+    completed_or_rejected: int
+    total: int
+
+
+class AvailableContactsResponse(BaseModel):
+    contacts: List[AvailableContactOut]
+    total: int
+    page: int
+    per_page: int
+    excluded_counts: ExclusionCounts
+
+
+@router.get("/{campaign_id}/available-contacts", response_model=dict)
+def get_available_contacts_for_campaign(
+    campaign_id: UUID,
+    search: Optional[str] = Query(None, max_length=300),
+    tag_ids: Optional[str] = Query(None, description="Comma-separated tag UUIDs"),
+    list_ids: Optional[str] = Query(None, description="Comma-separated list UUIDs"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get contacts available to add to a campaign.
+    Auto-excludes:
+    - DNC contacts (unsubscribed, bounced, invalid email)
+    - Contacts already in campaign with status no/complete/excluded
+    
+    Returns exclusion counts for UI display.
+    """
+    # Verify campaign exists
+    _get_campaign_or_404(campaign_id, db)
+    
+    # Parse filter IDs
+    tag_id_list = []
+    if tag_ids:
+        try:
+            tag_id_list = [uuid_mod.UUID(tid.strip()) for tid in tag_ids.split(",") if tid.strip()]
+        except ValueError:
+            pass
+    
+    list_id_list = []
+    if list_ids:
+        try:
+            list_id_list = [uuid_mod.UUID(lid.strip()) for lid in list_ids.split(",") if lid.strip()]
+        except ValueError:
+            pass
+    
+    # ── Calculate exclusion counts ──
+    
+    # DNC count: unsubscribed OR bounced OR invalid email OR no email
+    dnc_count = db.query(func.count(Contact.id)).filter(
+        Contact.deleted_at.is_(None),
+        or_(
+            Contact.email_unsubscribed == True,
+            Contact.email_bounced == True,
+            Contact.email_valid == False,
+            Contact._email_encrypted.is_(None),
+        )
+    ).scalar() or 0
+    
+    # Already in campaign (any status - for awareness)
+    already_in_campaign = db.query(func.count(CampaignContact.id)).filter(
+        CampaignContact.sales_campaign_id == campaign_id
+    ).scalar() or 0
+    
+    # Completed or rejected in this campaign
+    completed_or_rejected = db.query(func.count(CampaignContact.id)).filter(
+        CampaignContact.sales_campaign_id == campaign_id,
+        CampaignContact.status.in_(["no", "complete", "excluded"])
+    ).scalar() or 0
+    
+    # ── Build main query ──
+    
+    # Subquery: contact IDs already in this campaign with excluded statuses
+    excluded_contact_ids = db.query(CampaignContact.contact_id).filter(
+        CampaignContact.sales_campaign_id == campaign_id,
+        CampaignContact.status.in_(["no", "complete", "excluded"])
+    ).subquery()
+    
+    # Subquery: contact IDs already in this campaign (any status)
+    all_campaign_contact_ids = db.query(CampaignContact.contact_id).filter(
+        CampaignContact.sales_campaign_id == campaign_id
+    ).subquery()
+    
+    # Base query: valid, non-DNC contacts not excluded from this campaign
+    query = (
+        db.query(Contact)
+        .options(joinedload(Contact.tags))
+        .filter(
+            Contact.deleted_at.is_(None),
+            Contact.email_unsubscribed != True,
+            Contact.email_bounced != True,
+            Contact.email_valid == True,
+            Contact._email_encrypted.isnot(None),
+            ~Contact.id.in_(excluded_contact_ids),
+        )
+    )
+    
+    # Apply search filter
+    if search:
+        search_clean = search.strip()
+        search_escaped = search_clean.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+        query = query.filter(
+            or_(
+                Contact.first_name.ilike(f"%{search_escaped}%"),
+                Contact.last_name.ilike(f"%{search_escaped}%"),
+                Contact._email_encrypted.ilike(f"%{search_escaped}%"),
+                Contact.company.ilike(f"%{search_escaped}%"),
+            )
+        )
+    
+    # Apply tag filter (OR logic)
+    if tag_id_list:
+        query = query.filter(Contact.tags.any(Tag.id.in_(tag_id_list)))
+    
+    # Apply list filter (OR logic)
+    if list_id_list:
+        # Get contact IDs from static list members
+        list_contact_ids = db.query(StaticListMember.c.contact_id).filter(
+            StaticListMember.c.list_id.in_(list_id_list)
+        ).subquery()
+        query = query.filter(Contact.id.in_(list_contact_ids))
+    
+    # Get total count
+    total = query.count()
+    
+    # Apply pagination
+    contacts = (
+        query.order_by(Contact.last_name.asc().nullslast(), Contact.first_name.asc().nullslast())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    
+    # Check which contacts are already in campaign (active status)
+    already_in_ids = set(
+        row[0] for row in db.query(CampaignContact.contact_id)
+        .filter(
+            CampaignContact.sales_campaign_id == campaign_id,
+            CampaignContact.status == "active"
+        )
+        .all()
+    )
+    
+    # Build response
+    contact_data = []
+    for contact in contacts:
+        name_parts = []
+        if contact.first_name:
+            name_parts.append(contact.first_name)
+        if contact.last_name:
+            name_parts.append(contact.last_name)
+        full_name = contact.full_name or " ".join(name_parts) or "Unknown"
+        
+        contact_data.append(AvailableContactOut(
+            id=contact.id,
+            full_name=full_name,
+            email=contact.email,
+            company=contact.company,
+            tags=[{"id": str(t.id), "name": t.name} for t in (contact.tags or [])],
+            already_in_campaign=contact.id in already_in_ids,
+        ))
+    
+    return {
+        "data": {
+            "contacts": [c.model_dump() for c in contact_data],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "excluded_counts": {
+                "dnc": dnc_count,
+                "already_in_campaign": already_in_campaign,
+                "completed_or_rejected": completed_or_rejected,
+                "total": dnc_count + completed_or_rejected,
+            }
+        }
+    }

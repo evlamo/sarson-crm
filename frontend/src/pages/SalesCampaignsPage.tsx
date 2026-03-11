@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AddContactsDialog } from '@/components/contacts/AddContactsDialog';
+import { AddContactsModal } from "@/components/campaigns/AddContactsModal";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -547,10 +547,10 @@ function ContactsTab({ campaignId }: { campaignId: string }) {
         </Table>
       )}
 
-      <AddContactsDialog 
+      <AddContactsModal 
         isOpen={addDrawerOpen} 
         onClose={() => setAddDrawerOpen(false)} 
-        onAddContacts={handleAddContacts}
+        onAddContacts={handleAddContacts} campaignId={campaignId}
       />
     </div>
   );
