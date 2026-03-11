@@ -1,239 +1,196 @@
-# Sarson Funds CRM
+# Sarson CRM
 
-A production-grade CRM built to replace Zoho + Mailchimp for Sarson Funds. Designed for ~30,000 contacts and 5 internal users.
-
-**Stack:** FastAPI · PostgreSQL 16 · React · shadcn/ui · Celery · Redis · Docker
-
----
+A production-grade Customer Relationship Management system built for Sarson Funds, designed to replace Zoho + Mailchimp for managing ~30,000 contacts and running email campaigns.
 
 ## Features
 
-- **Contacts** — Full contact management with search, sorting, filtering, inline editing
-- **Companies** — Company records linked to contacts
-- **Pipeline** — 8-stage Kanban deal pipeline
-- **Campaigns** — Email campaign builder with SendGrid batch sending (1,000/call)
-- **CSV Import** — Bulk import with deduplication, tag mapping, and async processing
-- **Segments** — Dynamic segments (filter-rule based) and static lists
-- **Tags** — Flexible tagging system across contacts
-- **Auth** — JWT-based auth with refresh tokens, role-based access
+### Contact Management
+- ✅ Create, edit, delete contacts
+- ✅ CSV import with chunked processing (1000 rows/batch)
+- ✅ Advanced search with debounced input
+- ✅ Tag-based organization
+- ✅ Static lists for segmentation
+- ✅ Company associations
+- ✅ Bulk operations (update, delete, add to list)
+- ✅ Do Not Contact (DNC) list enforcement
 
----
+### Campaign Management
+- ✅ Email campaign creation wizard (5 steps)
+- ✅ Sales vs Marketing campaign types
+- ✅ Rich text email editor
+- ✅ Variable interpolation (`{{first_name}}`, `{{company}}`)
+- ✅ Contact selection with search/filter
+- ✅ Automatic DNC and duplicate exclusion
+- ✅ UTM tracking parameters
+- ✅ Campaign scheduling
 
-## Quick Start (Docker)
+### User Management
+- ✅ Role-based access control (Admin/User)
+- ✅ JWT authentication with token blacklisting
+- ✅ Multi-factor authentication (TOTP)
+- ✅ Password reset flow
+- ✅ User invitations
+- ✅ Encrypted service account storage
 
-### Prerequisites
+### Security
+- ✅ Token blacklist on logout
+- ✅ Rate limiting (5/min auth, 100/hr contacts)
+- ✅ CSRF protection
+- ✅ Fernet encryption for sensitive data
+- ✅ Audit trail for all operations
+- ✅ Security headers (X-Content-Type-Options, X-Frame-Options, etc.)
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- Git installed
+### Integrations
+- ✅ SendGrid email delivery
+- ✅ Google Sheets sync
+- ✅ Google OAuth
 
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/evlamo/sarson-crm.git
-cd sarson-crm
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Open `.env` and update:
-
-| Variable | Description |
-|---|---|
-| `SECRET_KEY` | Random 64-character string — change this before use |
-| `SENDGRID_API_KEY` | Your SendGrid API key (optional — only needed for email campaigns) |
-| `FROM_EMAIL` | Verified sender email address in SendGrid |
-| `POSTGRES_PASSWORD` | Database password — change from default |
-
-Everything else works out of the box for local development.
-
-### 3. Start the stack
-
-```bash
-docker-compose up --build
-```
-
-This spins up 6 services: API, frontend, PostgreSQL, Redis, Celery worker, and Nginx. First run takes a few minutes to build images.
-
-### 4. Open the app
-
-- **CRM:** http://localhost:3000
-- **API docs:** http://localhost:8000/docs
-
-### Default login
-
-| Field | Value |
-|---|---|
-| Email | `ev@speranza.local` |
-| Password | `speranza2026` |
-
-> ⚠️ Change the default password after first login.
-
----
-
-## Running Without Docker (Development)
-
-If you prefer to run services individually:
+## Tech Stack
 
 ### Backend
-
-```bash
-cd backend
-
-# Create a virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set environment variables (or create a .env in /backend)
-export DATABASE_URL=postgresql://agentstevesmith@localhost:5432/crm_dev
-export SECRET_KEY=your-secret-key
-export REDIS_URL=redis://localhost:6379/0
-
-# Run migrations
-alembic upgrade head
-
-# Seed the database
-python scripts/seed.py
-
-# Start the API
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+- **Framework:** FastAPI (Python 3.10+)
+- **Database:** PostgreSQL 16
+- **Cache:** Redis
+- **Queue:** Celery
+- **Email:** SendGrid
+- **Auth:** JWT + MFA (TOTP)
 
 ### Frontend
+- **Framework:** React 18 + TypeScript
+- **UI:** shadcn/ui + Tailwind CSS
+- **Router:** TanStack Router
+- **State:** TanStack Query (React Query)
+- **HTTP:** Axios
 
+### Infrastructure
+- **Reverse Proxy:** Caddy (auto-HTTPS)
+- **Deployment:** systemd services
+- **Backups:** Automated PostgreSQL dumps
+
+## Quick Start
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for complete production deployment instructions.
+
+### Development Setup
+
+**Backend:**
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # Configure database and keys
+python -m alembic upgrade head  # Run migrations
+uvicorn app.main:app --reload
+```
+
+**Frontend:**
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start dev server
 npm run dev
 ```
 
-Open http://localhost:3000. The Vite dev server proxies `/api` → `localhost:8000` automatically.
+Access:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-### Celery Worker (for CSV imports + email campaigns)
+## Documentation
+
+- **[USER_GUIDE.md](USER_GUIDE.md)** - End-user documentation for CMO
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Fresh database setup for production
+- **[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md)** - Complete deployment checklist
+
+## Scripts
+
+- **`backup-sarson-crm.sh`** - Automated daily database backup (30-day retention)
+- **`restore-sarson-crm.sh`** - Safe database restore with confirmation
+
+## Database Migrations
 
 ```bash
 cd backend
-celery -A app.worker worker --loglevel=info
+source venv/bin/activate
+
+# Create new migration
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback one migration
+alembic downgrade -1
 ```
 
----
-
-## Project Structure
+## Architecture
 
 ```
-sarson-crm/
-├── backend/
-│   ├── app/
-│   │   ├── models/         # SQLAlchemy ORM models
-│   │   ├── routers/        # API route handlers
-│   │   ├── schemas/        # Pydantic request/response schemas
-│   │   ├── services/       # Business logic (campaigns, imports, segments)
-│   │   ├── auth/           # JWT auth, dependencies
-│   │   └── tasks/          # Celery async tasks
-│   ├── migrations/         # Alembic DB migrations
-│   └── scripts/            # Seed script
-├── frontend/
-│   └── src/
-│       ├── pages/          # Route-level components
-│       ├── components/     # Shared UI components (shadcn/ui)
-│       ├── hooks/          # Auth hook
-│       └── lib/            # API client, types, utils
-├── docker-compose.yml
-├── nginx.conf
-└── .env.example
+Frontend (React SPA)
+    ↓ HTTPS
+Caddy (Reverse Proxy)
+    ↓
+FastAPI Backend (Port 8000)
+    ↓
+PostgreSQL (Database)
+    ↓
+Redis (Cache & Sessions)
+    ↓
+Celery (Background Tasks)
+    ↓
+SendGrid (Email Delivery)
 ```
 
----
+## Key Decisions
 
-## Database Schema
+- **All API responses:** `{data: {...}}` format (no exceptions)
+- **Chunked CSV import:** 1000 rows per batch for stability
+- **Password requirements:** 6+ characters (internal CRM, usability priority)
+- **Email verification:** Disabled (internal users, immediate access)
+- **Collaborative lists:** All users share lists (no per-user authorization)
+- **DNC enforcement:** Automatic exclusion at campaign level
 
-15 tables covering the full CRM data model:
+## Security Notes
 
-| Table | Description |
-|---|---|
-| `users` | Internal CRM users (up to 5) |
-| `contacts` | Primary contact records (~30k expected) |
-| `companies` | Company records |
-| `tags` | Tag definitions |
-| `contact_tags` | Contact ↔ tag join |
-| `deals` | Pipeline deals |
-| `campaigns` | Email campaigns |
-| `campaign_contacts` | Campaign send tracking |
-| `templates` | Email templates with merge fields |
-| `segments` | Dynamic filter-rule segments |
-| `static_lists` | Manually curated contact lists |
-| `static_list_contacts` | List ↔ contact join |
-| `import_jobs` | CSV import job tracking |
-| `activity_log` | Contact activity history |
-| `custom_fields` | Extensible contact fields |
+- Never commit `.env` files (excluded in `.gitignore`)
+- Database files excluded from Git (deploy with blank database)
+- Generate new `SECRET_KEY` and `ENCRYPTION_KEY` for production
+- Use HTTPS in production (Caddy handles this automatically)
+- Enable firewall (allow 443/80, block 8000 externally)
 
-Full-text search is powered by a PostgreSQL `tsvector` + GIN index on contacts for sub-200ms search across 30k records.
+## Data Privacy
 
----
+**Important:** This repository does NOT contain any contact data, user data, or database files. Every deployment starts with a clean database. Contact lists must be imported via CSV after deployment.
 
-## CSV Import
+## Production Deployment
 
-The import wizard supports bulk contact uploads:
+Checklist:
+- [ ] Generate new SECRET_KEY and ENCRYPTION_KEY
+- [ ] Configure `.env` with production values
+- [ ] Run database migrations
+- [ ] Build frontend (`npm run build`)
+- [ ] Configure Caddy reverse proxy
+- [ ] Set up systemd services (backend + Celery)
+- [ ] Schedule daily backups (cron)
+- [ ] Test backup/restore procedure
+- [ ] Enable firewall
+- [ ] Create first admin user
 
-- Upload via **Contacts → Import** in the UI, or `POST /api/v1/imports/upload`
-- Processes in async batches of 500 rows (won't timeout on large files)
-- Deduplicates by email address
-- Maps `Sheet` and `Tab` columns from CSV → contact tags automatically
-- Resolves company names to company records
+See **[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md)** for complete step-by-step instructions.
 
----
+## Support
 
-## Email Campaigns
-
-Campaigns use SendGrid's v3 personalizations API — batches of 1,000 recipients per API call.
-
-To enable:
-1. Add your `SENDGRID_API_KEY` to `.env`
-2. Add a verified `FROM_EMAIL` (must be verified in your SendGrid account)
-3. Configure a webhook endpoint in SendGrid → point to `POST /api/v1/webhooks/sendgrid` for open/click tracking
-
----
-
-## API Reference
-
-Interactive API docs available at http://localhost:8000/docs (Swagger UI) when the backend is running.
-
-Key endpoints:
-
-```
-POST   /api/v1/auth/login
-GET    /api/v1/contacts
-POST   /api/v1/contacts
-PATCH  /api/v1/contacts/{id}
-DELETE /api/v1/contacts/{id}
-POST   /api/v1/imports/upload
-GET    /api/v1/campaigns
-POST   /api/v1/campaigns/{id}/send
-GET    /api/v1/segments
-GET    /api/v1/tags
-```
-
----
-
-## Notes
-
-- **Soft deletes** — contacts are never hard-deleted; `deleted_at` timestamp is set instead
-- **Server-side sorting + pagination** — all data operations are server-side, critical for performance at 30k+ contacts
-- **Sarson rep vs Sales rep** — `sarson_rep` stores the SF team member from CSV import; `sales_rep` is an external sales partner field
-- SendGrid is optional — the app runs fully without it, email sending will just fail gracefully
-
----
+For issues or questions:
+- Check **[USER_GUIDE.md](USER_GUIDE.md)** for common problems
+- Review logs: `sudo journalctl -u sarson-backend -n 100`
+- Email: support@sarsonfunds.com
 
 ## License
 
-Private — Sarson Funds internal use only.
+Proprietary - Sarson Funds Internal Use Only
+
+---
+
+**Version:** 1.0  
+**Last Updated:** March 2026  
+**Repository:** github.com/evlamo/sarson-crm
