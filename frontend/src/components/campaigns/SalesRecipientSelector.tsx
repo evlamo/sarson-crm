@@ -167,6 +167,7 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
+    placeholderData: (previousData) => previousData,
   });
 
   // Fetch tags
@@ -197,6 +198,7 @@ export function SalesRecipientSelector({
     },
     staleTime: 30000,
     enabled: isOpen,
+    placeholderData: (previousData) => previousData,
   });
 
   const lists = listsData?.data || [];
@@ -468,12 +470,14 @@ export function SalesRecipientSelector({
               )}
 
               {/* Contacts List */}
-              <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2 bg-white">
-                {isLoadingContacts ? (
-                  <div className="flex items-center justify-center h-20">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <div className="space-y-1 max-h-32 overflow-y-auto border rounded p-2 bg-white relative">
+                {/* Subtle loading overlay */}
+                {isLoadingContacts && contactsPage.length > 0 && (
+                  <div className="absolute top-1 right-1 z-10">
+                    <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
                   </div>
-                ) : totalContacts === 0 ? (
+                )}
+                {totalContacts === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-2">
                     {contactSearch ? 'No contacts match' : 'No contacts available'}
                   </p>
