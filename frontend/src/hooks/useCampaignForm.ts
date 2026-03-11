@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { CampaignFormState } from '@/types/components';
+import type { CampaignFormState } from '@/types/components';
 
 interface CampaignFormErrors {
   name?: string;

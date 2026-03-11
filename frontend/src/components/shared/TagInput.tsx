@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
-import { TagInputProps } from '@/types/components';
+import type { TagInputProps } from '@/types/components';
 import { Button } from '@/components/ui/button';
 
 /**

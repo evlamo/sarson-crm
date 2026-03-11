@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, X } from 'lucide-react';
-import { FilterDropdownProps } from '@/types/components';
+import type { FilterDropdownProps } from '@/types/components';
 import { Button } from '@/components/ui/button';
 
 /**

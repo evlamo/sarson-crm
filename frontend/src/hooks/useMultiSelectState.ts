@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { MultiSelectState } from '@/types/components';
+import type { MultiSelectState } from '@/types/components';
 
 /**
  * useMultiSelectState hook - manage multi-select state for arrays

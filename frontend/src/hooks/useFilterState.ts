@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { FilterState } from '@/types/components';
+import type { FilterState } from '@/types/components';
 
 /**
  * useFilterState hook - manage filter state for lists and tables

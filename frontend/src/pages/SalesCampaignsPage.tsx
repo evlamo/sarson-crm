@@ -69,6 +69,7 @@ interface EmailCampaign {
   subject: string;
   status: string;
   sent_count: number;
+  unique_clicks: number;
   unique_opens: number;
 }
 
@@ -362,7 +363,7 @@ function CreateEmailCampaignModal({
 }
 
 function ContactsTab({ campaignId }: { campaignId: string }) {
-  const isRestricted = useAuth((s) => s.isRestricted);
+  const isRestricted = !useAuth((s) => s.isAdmin);
   const queryClient = useQueryClient();
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState('');

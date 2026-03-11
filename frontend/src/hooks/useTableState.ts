@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { TableState } from '@/types/components';
+import type { TableState } from '@/types/components';
 
 /**
  * useTableState hook - manage table pagination, sorting, and selection

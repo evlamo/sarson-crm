@@ -1,6 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import { ModalTemplateProps } from '@/types/components';
+import type { ModalTemplateProps } from '@/types/components';
 import {
   Dialog,
   DialogContent,

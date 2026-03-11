@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowUpDown, ArrowUp, ArrowDown, Minus } from 'lucide-react';
-import { DataTableHeaderProps } from '@/types/components';
+import type { DataTableHeaderProps } from '@/types/components';
 
 /**
  * DataTableHeader component - table header with sorting and selection

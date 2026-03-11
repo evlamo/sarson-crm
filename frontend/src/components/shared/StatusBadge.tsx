@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatusBadgeProps } from '@/types/components';
+import type { StatusBadgeProps } from '@/types/components';
 
 const statusColors: Record<string, { bg: string; text: string; border: string }> = {
   active: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },

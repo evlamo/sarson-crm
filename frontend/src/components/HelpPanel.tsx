@@ -78,7 +78,7 @@ export default function HelpPanel({ onClose }: HelpPanelProps) {
     const lines = content.split('\n');
     const elements: React.ReactNode[] = [];
     let inList = false;
-    let listItems: string[] = [];
+    let listItems: React.ReactNode[] = [];
 
     const flushList = () => {
       if (listItems.length > 0) {

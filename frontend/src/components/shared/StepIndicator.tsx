@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, AlertCircle } from 'lucide-react';
-import { StepIndicatorProps } from '@/types/components';
+import type { StepIndicatorProps } from '@/types/components';
 
 /**
  * StepIndicator component - multi-step form step navigator

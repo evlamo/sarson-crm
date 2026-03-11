@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle, AlertCircle, Info, XCircle } from 'lucide-react';
-import { EmbeddedChecklistDisplayProps } from '@/types/components';
+import type { EmbeddedChecklistDisplayProps } from '@/types/components';
 
 const typeIcons = {
   success: <CheckCircle className="w-5 h-5 text-green-600" />,

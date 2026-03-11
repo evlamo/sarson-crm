@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { ModalState } from '@/types/components';
+import type { ModalState } from '@/types/components';
 
 /**
  * useModalState hook - manage modal open/close state with optional data

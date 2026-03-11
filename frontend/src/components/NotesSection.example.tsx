@@ -6,13 +6,14 @@
  */
 
 import { NotesSection } from '@/components/NotesSection';
+import { useParams } from '@tanstack/react-router';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Example Integration in ContactDetailPage.tsx
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ContactDetailPageExample() {
-  const { contactId } = useParams({ from: '/contacts/$contactId' });
+  const { contactId } = useParams({ strict: false }) as { contactId: string };
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">

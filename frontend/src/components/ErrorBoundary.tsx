@@ -1,4 +1,5 @@
-import React, { ReactNode, ErrorInfo } from 'react';
+import React, { Component } from 'react';
+import type { ReactNode, ErrorInfo } from 'react';
 import { AlertCircle, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -64,7 +65,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
               We're sorry, but something unexpected happened. Please try again.
             </p>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.MODE === 'development' && this.state.error && (
               <div className="bg-red-50 border border-red-200 rounded p-4 mb-4">
                 <p className="text-sm font-mono text-red-800 break-words">
                   {this.state.error.message}
