@@ -60,7 +60,8 @@ def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.post("/register", response_model=UserOut, status_code=201)
-def register(req: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/hour")
+def register(request: Request, req: UserCreate, db: Session = Depends(get_db)):
     """Public self-registration endpoint. Respects ENFORCE_DOMAIN_RESTRICTION setting."""
     email_lower = req.email.lower().strip()
 

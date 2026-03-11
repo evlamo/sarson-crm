@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, text, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -6,6 +6,8 @@ from datetime import datetime, date, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field
 import uuid
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.auth.dependencies import get_current_user
@@ -26,6 +28,7 @@ from app.models.user import User
 from app.services.company_service import get_or_create_company
 
 router = APIRouter(prefix="/api/v1/contacts", tags=["contacts"])
+limiter = Limiter(key_func=get_remote_address)
 
 # ── Inline schemas ─────────────────────────────────────────────────────────
 
@@ -253,7 +256,9 @@ def get_contact(
 # ── Create ─────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=ContactResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("100/hour")
 def create_contact(
+    request: Request,
     payload: ContactCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
