@@ -17,7 +17,7 @@ from app.auth.dependencies import get_current_user
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.tag import Tag, ContactTag
-from app.models.static_list import StaticListMember
+from app.models.static_list import StaticList, StaticListMember
 from app.models.sales_campaign import SalesCampaign, CampaignContact
 from app.models.campaign_segment import CampaignSegment
 from app.models.campaign import EmailCampaign
