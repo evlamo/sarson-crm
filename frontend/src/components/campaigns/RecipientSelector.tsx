@@ -510,34 +510,34 @@ export function RecipientSelector({
                       ))}
                     </div>
                   </div>
+                )}
 
-                    {/* Pagination Controls */}
-                    {preview.total_pages > 1 && (
-                      <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                        <div className="text-sm text-muted-foreground">
-                          Page {preview.page} of {preview.total_pages}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setPreviewPage(p => Math.max(1, p - 1))}
-                            disabled={preview.page === 1}
-                          >
-                            Previous
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setPreviewPage(p => Math.min(preview.total_pages, p + 1))}
-                            disabled={preview.page === preview.total_pages}
-                          >
+                {/* Pagination Controls */}
+                {preview.total_pages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                    <div className="text-sm text-muted-foreground">
+                      Page {preview.page} of {preview.total_pages}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPreviewPage(p => Math.max(1, p - 1))}
+                        disabled={preview.page === 1}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setPreviewPage(p => Math.min(preview.total_pages, p + 1))}
+                        disabled={preview.page === preview.total_pages}
+                      >
                             Next
                           </Button>
                         </div>
                       </div>
                     )}
-                )}
 
                 {/* Warning if all excluded */}
                 {preview.final_count === 0 && preview.total_matching > 0 && (
