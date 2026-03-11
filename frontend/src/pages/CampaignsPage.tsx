@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { RecipientSelector } from "@/components/campaigns/RecipientSelector";
 import { Switch } from '@/components/ui/switch';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -335,6 +336,7 @@ function CampaignBuilder({
     segment_id: editCampaign?.segment_id || '',
     tag_ids: [] as string[],
     campaign_list_ids: [] as string[],
+    combine_mode: "any" as "any" | "all",
     body_html: editCampaign?.body_html || '',
     body_text: editCampaign?.body_text || '',
     template_id: editCampaign?.template_id || '',
@@ -662,134 +664,25 @@ function CampaignBuilder({
 
       {/* ── Step 2: Recipients ─────────────────────────────────────── */}
       {step === 2 && (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            {/* Campaign Lists (primary method) */}
-            <div>
-              <Label className="text-base font-semibold">Select Lists</Label>
-              <p className="text-xs text-muted-foreground mt-0.5 mb-2">
-                Choose one or more Lists to send to. Multiple lists will be combined automatically.
-              </p>
-              {campaignLists.length > 0 ? (
-                <div className="space-y-1.5">
-                  {campaignLists.map(list => (
-                    <label
-                      key={list.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        form.campaign_list_ids.includes(list.id)
-                          ? 'border-[#253a52] bg-[#253a52]/5'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.campaign_list_ids.includes(list.id)}
-                        onChange={() => {
-                          setForm(f => ({
-                            ...f,
-                            campaign_list_ids: f.campaign_list_ids.includes(list.id)
-                              ? f.campaign_list_ids.filter(x => x !== list.id)
-                              : [...f.campaign_list_ids, list.id],
-                          }));
-                        }}
-                        className="w-4 h-4 rounded"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm font-medium">{list.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">
-                          ({list.member_count.toLocaleString()} contacts)
-                        </span>
-                      </div>
-                      {!list.mc_synced_at && (
-                        <span className="text-xs text-yellow-600">Not synced</span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-gray-50 text-muted-foreground p-4 rounded-lg text-sm text-center">
-                  No lists created yet.{' '}
-                  <Link to="/lists" className="text-[#253a52] underline">Create a List</Link>
-                </div>
-              )}
-
-              {form.campaign_list_ids.length > 0 && combinedCount != null && (
-                <div className="bg-blue-50 text-blue-700 p-3 rounded-lg text-sm mt-2">
-                  Combined: ~<strong>{combinedCount.toLocaleString()}</strong> contacts (deduplicated)
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Legacy: Segment or Tags */}
-            <details className="group">
-              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                Advanced: Use dynamic segment or individual tags
-              </summary>
-              <div className="mt-3 space-y-3">
-                <div>
-                  <Label>Dynamic Segment</Label>
-                  <Select value={form.segment_id} onValueChange={(v) => setForm({ ...form, segment_id: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a segment..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {segments.map((seg) => (
-                        <SelectItem key={seg.id} value={seg.id}>
-                          {seg.name} {seg.contact_count != null ? `(${seg.contact_count.toLocaleString()})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {tags.length > 0 && (
-                  <div>
-                    <Label>Or select specific tags</Label>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {tags.map((tag) => (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          onClick={() => {
-                            setForm(f => ({
-                              ...f,
-                              tag_ids: f.tag_ids.includes(tag.id)
-                                ? f.tag_ids.filter(t => t !== tag.id)
-                                : [...f.tag_ids, tag.id],
-                            }));
-                          }}
-                          className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                            form.tag_ids.includes(tag.id)
-                              ? 'bg-[#253a52] text-white border-[#253a52]'
-                              : 'border-gray-300 hover:border-[#253a52]/50'
-                          }`}
-                        >
-                          {tag.name} {tag.contact_count != null ? `(${tag.contact_count})` : ''}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+        <div className="space-y-4">
+          <RecipientSelector
+            selectedListIds={form.campaign_list_ids}
+            selectedTagIds={form.tag_ids}
+            combineMode={form.combine_mode}
+            onListsChange={(ids) => setForm(f => ({ ...f, campaign_list_ids: ids }))}
+            onTagsChange={(ids) => setForm(f => ({ ...f, tag_ids: ids }))}
+            onCombineModeChange={(mode) => setForm(f => ({ ...f, combine_mode: mode }))}
+          />
+          
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep(1)}>← Setup</Button>
+                <Button onClick={() => goToStep(3)} disabled={!canProceedStep2}>Next: Content →</Button>
               </div>
-            </details>
-
-            {!form.segment_id && form.tag_ids.length === 0 && form.campaign_list_ids.length === 0 && (
-              <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg text-sm">
-                Select at least one list, segment, or tag to define your audience
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Contacts will be synced to your Mailchimp audience before sending
-            </p>
-
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep(1)}>← Setup</Button>
-              <Button onClick={() => goToStep(3)} disabled={!canProceedStep2}>Next: Content →</Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* ── Step 3: Content Editor ─────────────────────────────────── */}

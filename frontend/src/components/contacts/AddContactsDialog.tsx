@@ -37,8 +37,8 @@ export function AddContactsDialog({ isOpen, onClose, onAddContacts }: AddContact
   const [lists, setLists] = useState<StaticList[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTag, setSelectedTag] = useState<string>('');
-  const [selectedList, setSelectedList] = useState<string>('');
+  const [selectedTag, setSelectedTag] = useState<string>('all-tags');
+  const [selectedList, setSelectedList] = useState<string>('all-lists');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -66,8 +66,8 @@ export function AddContactsDialog({ isOpen, onClose, onAddContacts }: AddContact
       setContacts([]);
       setSelectedContacts(new Set());
       setSearchQuery('');
-      setSelectedTag('');
-      setSelectedList('');
+      setSelectedTag('all-tags');
+      setSelectedList('all-lists');
       setPage(1);
       setError(null);
     }
@@ -101,28 +101,21 @@ export function AddContactsDialog({ isOpen, onClose, onAddContacts }: AddContact
     setError(null);
 
     try {
-      const params = new URLSearchParams({
+      const params: Record<string, any> = {
         page: pageNum.toString(),
         per_page: '50',
-      });
+      };
 
-      if (searchQuery) params.append('search', searchQuery);
-      if (selectedTag) params.append('tag_id', selectedTag);
-      if (selectedList) params.append('list_id', selectedList);
+      if (searchQuery) params.search = searchQuery;
+      if (selectedTag && selectedTag !== 'all-tags') params.tag_id = selectedTag;
+      if (selectedList && selectedList !== 'all-lists') params.list_id = selectedList;
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/contacts?${params.toString()}`, {
+      const response = await api.get('/contacts', {
+        params,
         signal: controller.signal,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
       });
 
-      if (!response.ok) {
-        setError(`Failed to load contacts (${response.status})`);
-        return;
-      }
-
-      const data = await response.json();
+      const data = response.data;
       setContacts(data.data || []);
       setTotal(data.total || 0);
       setPage(pageNum);
@@ -181,7 +174,7 @@ export function AddContactsDialog({ isOpen, onClose, onAddContacts }: AddContact
                 <SelectValue placeholder="All Tags" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Tags</SelectItem>
+                <SelectItem value="all-tags">All Tags</SelectItem>
                 {tags.map(tag => (
                   <SelectItem key={tag.id} value={tag.id}>{tag.name}</SelectItem>
                 ))}
@@ -192,7 +185,7 @@ export function AddContactsDialog({ isOpen, onClose, onAddContacts }: AddContact
                 <SelectValue placeholder="All Lists" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Lists</SelectItem>
+                <SelectItem value="all-lists">All Lists</SelectItem>
                 {lists.map(list => (
                   <SelectItem key={list.id} value={list.id}>
                     {list.name} ({list.member_count})

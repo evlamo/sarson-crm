@@ -154,3 +154,55 @@ class MailchimpSyncRequest(BaseModel):
     tracking_html_clicks: bool = True
     google_analytics_tag: str = ""
     timewarp: bool = False
+
+
+# ── Recipient Preview Schemas ──────────────────────────────────────────────
+
+class RecipientPreviewRequest(BaseModel):
+    """Request body for preview-recipients endpoint."""
+    list_ids: List[UUID] = Field(default_factory=list, description="CampaignSegment (List) IDs")
+    tag_ids: List[UUID] = Field(default_factory=list, description="Tag IDs")
+    exclude_dnc: bool = Field(default=True, description="Exclude unsubscribed/bounced/invalid contacts")
+    combine_mode: str = Field(default="any", description="'any' (OR) or 'all' (AND)")
+
+
+class ContactPreview(BaseModel):
+    """Minimal contact info for preview."""
+    id: UUID
+    full_name: str
+    email: Optional[str] = None
+    company: Optional[str] = None
+    sources: List[str] = Field(default_factory=list, description="Which Lists/Tags this contact came from")
+
+    class Config:
+        from_attributes = True
+
+
+class ExclusionBreakdown(BaseModel):
+    """Breakdown of why contacts were excluded."""
+    unsubscribed: int
+    bounced: int
+    invalid_email: int
+    no_email: int
+    total: int
+
+
+class RecipientBreakdown(BaseModel):
+    """Source breakdown."""
+    from_lists: int
+    from_tags: int
+    overlap: int
+
+
+class RecipientPreviewData(BaseModel):
+    """Preview data."""
+    total_matching: int
+    exclusions: ExclusionBreakdown
+    final_count: int
+    sample_contacts: List[ContactPreview]
+    breakdown: RecipientBreakdown
+
+
+class RecipientPreviewResponse(BaseModel):
+    """API response wrapper."""
+    data: RecipientPreviewData

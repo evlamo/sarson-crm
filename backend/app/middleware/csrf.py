@@ -53,8 +53,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             csrf_token,
             max_age=3600,  # 1 hour
             httponly=False,  # Must be accessible to JavaScript
-            secure=True,  # Only send over HTTPS
-            samesite="strict"
+            secure=False,  # Allow HTTP in development
+            samesite="lax"
         )
         
         # Add CSRF token to response headers

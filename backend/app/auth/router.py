@@ -20,7 +20,7 @@ from app.auth.security import (
 from app.auth.schemas import (
     LoginRequest, TokenResponse, RefreshRequest, UserOut, UserSummary, UserCreate, 
     UserUpdate, PasswordResetRequest, ForgotPasswordRequest, ResetPasswordRequest,
-    VerifyEmailRequest, LogoutRequest, MFASetupResponse, MFAVerifyRequest, MFAEnableRequest
+    VerifyEmailRequest, LogoutRequest, MFASetupResponse, MFAVerifyRequest, MFAEnableRequest, ChangePasswordRequest
 )
 from app.auth.dependencies import get_current_user, get_admin_user
 from app.config import settings
