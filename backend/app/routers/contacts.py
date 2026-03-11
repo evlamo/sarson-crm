@@ -30,6 +30,11 @@ from app.services.company_service import get_or_create_company
 router = APIRouter(prefix="/api/v1/contacts", tags=["contacts"])
 limiter = Limiter(key_func=get_remote_address)
 
+# ── SECURITY: Logging Policy ──────────────────────────────────────────────
+# NEVER log: passwords, tokens, SSNs, credit card numbers, or PII in debug mode
+# OK to log: contact_id, email (for context), status changes, error descriptions
+# ────────────────────────────────────────────────────────────────────────────
+
 # ── Inline schemas ─────────────────────────────────────────────────────────
 
 class ActivityCreate(BaseModel):

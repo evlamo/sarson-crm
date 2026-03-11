@@ -19,6 +19,11 @@ limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
+# ── SECURITY: Logging Policy ──────────────────────────────────────────────
+# NEVER log: passwords, tokens, refresh_tokens, hashed_passwords, or any secrets
+# OK to log: email, user_id, endpoint, status_code, error descriptions (without payload)
+# ────────────────────────────────────────────────────────────────────────────
+
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
