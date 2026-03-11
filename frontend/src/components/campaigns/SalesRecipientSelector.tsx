@@ -101,7 +101,6 @@ export function SalesRecipientSelector({
   const [selectedListIds, setSelectedListIds] = useState<string[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
-  const [combineMode, setCombineMode] = useState<'any' | 'all'>('any');
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
@@ -133,10 +132,10 @@ export function SalesRecipientSelector({
 
   // Fetch available contacts
   const { data: contactsData } = useQuery<AvailableContact[]>({
-    queryKey: ['campaign-available-contacts', campaignId],
+    queryKey: ['all-contacts'],
     queryFn: async () => {
       const res = await api.get(
-        `/sales-campaigns/${campaignId}/available-contacts`,
+        '/contacts',
         {
           params: { per_page: 100 },
         }
@@ -144,7 +143,7 @@ export function SalesRecipientSelector({
       return res.data.data?.contacts || [];
     },
     staleTime: 30000,
-    enabled: isOpen && !!campaignId,
+    enabled: isOpen,
   });
 
   const lists = listsData || [];
@@ -199,7 +198,7 @@ export function SalesRecipientSelector({
               list_ids: selectedListIds,
               tag_ids: selectedTagIds,
               contact_ids: selectedContactIds,
-              combine_mode: combineMode,
+              
             }
           );
           setPreview(res.data.data);
@@ -211,7 +210,7 @@ export function SalesRecipientSelector({
           setIsLoadingPreview(false);
         }
       }, 500),
-    [campaignId, selectedListIds, selectedTagIds, selectedContactIds, combineMode]
+    [campaignId, selectedListIds, selectedTagIds, selectedContactIds]
   );
 
   // Trigger preview on selection change
@@ -226,7 +225,6 @@ export function SalesRecipientSelector({
       setSelectedListIds([]);
       setSelectedTagIds([]);
       setSelectedContactIds([]);
-      setCombineMode('any');
       setPreview(null);
       setListSearch('');
       setTagSearch('');
@@ -442,63 +440,6 @@ export function SalesRecipientSelector({
               </div>
             </div>
 
-            {/* Combine Mode */}
-            <div className="pt-4 border-t">
-              <Label className="text-sm font-semibold block mb-3">Combine Mode</Label>
-              <div className="space-y-2">
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  combineMode === 'any'
-                    ? 'border-blue-600 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}>
-                  <input
-                    type="radio"
-                    name="combineMode"
-                    value="any"
-                    checked={combineMode === 'any'}
-                    onChange={() => setCombineMode('any')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <div>
-                    <div className="font-medium text-sm">Any (OR)</div>
-                    <div className="text-xs text-muted-foreground">
-                      Include contacts matching any selection
-                    </div>
-                  </div>
-                </label>
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  combineMode === 'all'
-                    ? 'border-blue-600 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}>
-                  <input
-                    type="radio"
-                    name="combineMode"
-                    value="all"
-                    checked={combineMode === 'all'}
-                    onChange={() => setCombineMode('all')}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <div>
-                    <div className="font-medium text-sm">All (AND)</div>
-                    <div className="text-xs text-muted-foreground">
-                      Only contacts matching all selections
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Panel: Live Preview */}
-          <div className="border rounded-lg p-4 overflow-y-auto bg-slate-50">
-            {isLoadingPreview ? (
-              <div className="flex items-center justify-center h-32">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Loading preview...</span>
-                </div>
-              </div>
             ) : preview ? (
               <div className="space-y-4">
                 {/* Header */}

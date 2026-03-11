@@ -1119,7 +1119,6 @@ def preview_campaign_recipients(
     current_user: User = Depends(get_current_user),
 ):
     """Preview contacts that will be added to campaign."""
-    body.validate_combine_mode()
     campaign = _get_campaign_or_404(campaign_id, db)
     
     queries = []
@@ -1216,13 +1215,8 @@ def preview_campaign_recipients(
     
     total_matching = len(all_matching_ids)
     
-    if body.combine_mode == "all" and len(queries) > 1:
-        filtered_ids = set(row[0] for row in queries[0][1].all())
-        for source_type, query in queries[1:]:
-            filtered_ids = filtered_ids.intersection(set(row[0] for row in query.all()))
-        final_ids = filtered_ids
-    else:
-        final_ids = all_matching_ids
+    # Always use OR (union) - combine all selected lists, tags, and contacts
+    final_ids = all_matching_ids
     
     exclusions = {
         "unsubscribed": 0,

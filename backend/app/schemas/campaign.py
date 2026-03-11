@@ -215,12 +215,6 @@ class PreviewRecipientsRequest(BaseModel):
     list_ids: list[UUID] = Field(default_factory=list, description="Static List IDs")
     tag_ids: list[UUID] = Field(default_factory=list, description="Tag IDs")
     contact_ids: list[UUID] = Field(default_factory=list, description="Direct Contact IDs")
-    combine_mode: str = Field(default="any", description="any (OR) or all (AND)")
-
-    def validate_combine_mode(self) -> None:
-        """Validate combine_mode values."""
-        if self.combine_mode not in ["any", "all"]:
-            raise ValueError("combine_mode must be 'any' or 'all'")
 
 
 class PreviewExclusionBreakdown(BaseModel):
